@@ -1,0 +1,9 @@
+services:
+  video-engine:
+    build: .
+    ports: ["3000:3000"]
+    env_file: .env
+    volumes:
+      - video_engine_data:/app/data
+volumes:
+  video_engine_data:
