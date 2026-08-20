@@ -1,2 +1,28 @@
+import * as React from "react";
 import { cn } from "@/lib/utils";
-export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) { return <div className={cn("rounded-2xl border border-slate-800 bg-slate-950/60 shadow-2xl shadow-black/10 backdrop-blur", className)} {...props} />; }
+
+type CardProps = React.HTMLAttributes<HTMLDivElement> & {
+  title?: React.ReactNode;
+  actions?: React.ReactNode;
+};
+
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, title, actions, children, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={cn("rounded-2xl border border-slate-800 bg-slate-950/60 p-5", className)}
+        {...props}
+      >
+        {(title || actions) && (
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="font-medium">{title}</div>
+            {actions && <div className="flex items-center gap-2">{actions}</div>}
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
+);
+Card.displayName = "Card";

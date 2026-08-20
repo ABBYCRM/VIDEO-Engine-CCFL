@@ -1,0 +1,26 @@
+[
+  {
+    "id": "newsroom-classic",
+    "name": "Classic Newsroom",
+    "mode": "green_screen_newsroom",
+    "description": "Anchor desk, monitors, subtle blue newsroom lighting. Supports inset video on TV wall."
+  },
+  {
+    "id": "newsroom-tv-wall",
+    "name": "TV Wall",
+    "mode": "tv_wall",
+    "description": "Large newsroom screen where up to three incident clips can play behind the avatar."
+  },
+  {
+    "id": "split-screen-multi",
+    "name": "Split Screen",
+    "mode": "split_screen",
+    "description": "Avatar on one side, supporting accident video on the other side."
+  },
+  {
+    "id": "courthouse-exterior",
+    "name": "Courthouse Exterior",
+    "mode": "full_scene",
+    "description": "Outdoor legal authority backdrop for firm-branded statements."
+  }
+]

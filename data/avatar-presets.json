@@ -1,0 +1,30 @@
+[
+  {
+    "id": "female-anchor-01",
+    "name": "Female Anchor 01",
+    "gender": "female",
+    "archetype": "newsroom spokesperson",
+    "wardrobeStandard": "tailored blazer, blouse, slacks; never beachwear",
+    "notes": "Use the same identity across PI categories. Generate a 4-view turnaround before first campaign.",
+    "views": {
+      "front": null,
+      "left": null,
+      "right": null,
+      "back": null
+    }
+  },
+  {
+    "id": "male-attorney-01",
+    "name": "Male Attorney 01",
+    "gender": "male",
+    "archetype": "law-firm principal",
+    "wardrobeStandard": "navy suit, white shirt, muted tie",
+    "notes": "Suitable for direct-to-camera credibility spots and newsroom formats.",
+    "views": {
+      "front": null,
+      "left": null,
+      "right": null,
+      "back": null
+    }
+  }
+]

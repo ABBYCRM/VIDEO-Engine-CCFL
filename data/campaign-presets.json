@@ -1,0 +1,27 @@
+[
+  {
+    "id": "vehicle_accident",
+    "label": "Vehicle Accident",
+    "promptFocus": "general car crashes, rear-end accidents, immediate documentation, next-step legal guidance"
+  },
+  {
+    "id": "rideshare_accident",
+    "label": "Rideshare / Uber / Lyft",
+    "promptFocus": "passenger injuries, app screenshots, insurance complexity, trip details"
+  },
+  {
+    "id": "trucking_accident",
+    "label": "Truck / 18-Wheeler",
+    "promptFocus": "commercial vehicle severity, preservation of evidence, logbooks, black-box relevance"
+  },
+  {
+    "id": "slip_fall",
+    "label": "Slip & Fall",
+    "promptFocus": "unsafe premises, reporting the hazard, witness info, camera footage preservation"
+  },
+  {
+    "id": "ugc",
+    "label": "UGC Video",
+    "promptFocus": "creator-style ad with product or service proof and a natural call to action"
+  }
+]
