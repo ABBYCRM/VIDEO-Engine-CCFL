@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getGeminiApiKey } from "@/lib/settings";
+import { getProviderKey } from "@/lib/providers";
 
 export type VeoStartInput = {
   prompt: string;
@@ -17,7 +17,7 @@ async function googleFetch(url: string, init?: RequestInit) {
   const response = await fetch(url, {
     ...init,
     headers: {
-      "x-goog-api-key": getGeminiApiKey(),
+      "x-goog-api-key": getProviderKey("veo"),
       ...(init?.body ? { "content-type": "application/json" } : {}),
       ...(init?.headers || {})
     },
@@ -32,7 +32,7 @@ async function googleFetch(url: string, init?: RequestInit) {
   return response;
 }
 
-export async function startOneShot(input: VeoStartInput) {
+export async function startOneShot(input: VeoStartInput): Promise<string> {
   const instance: Record<string, unknown> = { prompt: input.prompt };
   if (input.imageBase64 && input.imageMimeType) {
     instance.image = { inlineData: { mimeType: input.imageMimeType, data: input.imageBase64 } };
@@ -44,7 +44,7 @@ export async function startOneShot(input: VeoStartInput) {
       instances: [instance],
       parameters: {
         aspectRatio: input.aspectRatio,
-        durationSeconds: 8,
+        durationSeconds: 8, // ONE CONTINUOUS SHOT ONLY
         resolution: input.resolution,
         numberOfVideos: 1,
         personGeneration: "allow_adult"
@@ -56,10 +56,10 @@ export async function startOneShot(input: VeoStartInput) {
   return operation.name;
 }
 
-export async function pollOneShot(operationName: string, jobId: string) {
+export async function pollOneShot(operationName: string, jobId: string): Promise<{ done: false } | { done: true; outputPath: string }> {
   const response = await googleFetch(`${BASE_URL}/${operationName}`);
   const operation = await response.json() as any;
-  if (!operation.done) return { done: false as const };
+  if (!operation.done) return { done: false };
   if (operation.error) throw new Error(operation.error.message || "Veo generation failed");
 
   const videoUri = operation.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
@@ -71,5 +71,5 @@ export async function pollOneShot(operationName: string, jobId: string) {
   fs.mkdirSync(outDir, { recursive: true });
   const outputPath = path.join(outDir, `${jobId}.mp4`);
   fs.writeFileSync(outputPath, bytes);
-  return { done: true as const, outputPath };
+  return { done: true, outputPath };
 }

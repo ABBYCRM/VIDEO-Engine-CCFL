@@ -8,5 +8,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params; const job = await refreshJob(id);
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ id: job.id, category: job.category, status: job.status, error: job.error, durationSeconds: 8, oneShot: true, fileUrl: job.status === "succeeded" ? `/api/v1/video/${job.id}/file` : null, createdAt: job.createdAt });
+  return NextResponse.json({
+    id: job.id,
+    category: job.category,
+    provider: job.provider,
+    model: job.model,
+    status: job.status,
+    error: job.error,
+    durationSeconds: 8,
+    oneShot: true,
+    fileUrl: job.status === "succeeded" ? `/api/v1/video/${job.id}/file` : null,
+    createdAt: job.createdAt
+  });
 }

@@ -3,10 +3,14 @@ import { db } from "@/lib/db";
 import { compileVeoPrompt } from "@/lib/prompt-compiler";
 import type { CampaignCategory } from "@/lib/prompts";
 import { getEngineSettings } from "@/lib/settings";
-import { pollOneShot, startOneShot } from "@/lib/veo";
+import { PROVIDERS, getDefaultProvider, type ProviderId } from "@/lib/providers";
+import * as veo from "@/lib/veo";
+import * as grok from "@/lib/grok";
+import * as a2e from "@/lib/a2e";
 
 export type CreateJobInput = {
   source: "admin" | "api";
+  provider?: ProviderId;
   category: CampaignCategory;
   mission?: string;
   subject?: string;
@@ -18,17 +22,35 @@ export type CreateJobInput = {
   imageMimeType?: string;
 };
 
+function modelForProvider(p: ProviderId, requested: string | undefined): string {
+  const def = PROVIDERS[p];
+  if (requested && def.modelChoices.includes(requested)) return requested;
+  // Fall back to the per-provider saved model
+  const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get(`${p}_model`) as { value: string } | undefined)?.value;
+  return raw || def.defaultModel;
+}
+
 export async function createJob(input: CreateJobInput) {
   const defaults = getEngineSettings();
+  const provider: ProviderId = input.provider || defaults.defaultProvider || getDefaultProvider();
   const id = crypto.randomUUID();
   const prompt = compileVeoPrompt(input);
-  const model = input.model || defaults.model;
+  const model = modelForProvider(provider, input.model);
   const aspect = input.aspectRatio || defaults.aspectRatio;
   const resolution = input.resolution || defaults.resolution;
-  db.prepare("INSERT INTO video_jobs(id,source,category,prompt,model,aspect_ratio,resolution,status) VALUES(?,?,?,?,?,?,?,?)")
-    .run(id, input.source, input.category, prompt, model, aspect, resolution, "starting");
+
+  db.prepare("INSERT INTO video_jobs(id,source,category,prompt,provider,model,aspect_ratio,resolution,status) VALUES(?,?,?,?,?,?,?,?,?)")
+    .run(id, input.source, input.category, prompt, provider, model, aspect, resolution, "starting");
+
   try {
-    const operation = await startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+    let operation: string;
+    if (provider === "veo") {
+      operation = await veo.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+    } else if (provider === "grok") {
+      operation = await grok.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+    } else {
+      operation = await a2e.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+    }
     db.prepare("UPDATE video_jobs SET provider_operation=?,status='running',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(operation, id);
     return getJob(id)!;
   } catch (error) {
@@ -39,7 +61,7 @@ export async function createJob(input: CreateJobInput) {
 }
 
 export function getJob(id: string) {
-  return db.prepare("SELECT id,source,category,prompt,model,aspect_ratio as aspectRatio,resolution,provider_operation as providerOperation,status,error,output_path as outputPath,created_at as createdAt,updated_at as updatedAt FROM video_jobs WHERE id=?").get(id) as any;
+  return db.prepare("SELECT id,source,category,prompt,provider,model,aspect_ratio as aspectRatio,resolution,provider_operation as providerOperation,status,error,output_path as outputPath,created_at as createdAt,updated_at as updatedAt FROM video_jobs WHERE id=?").get(id) as any;
 }
 
 export async function refreshJob(id: string) {
@@ -48,7 +70,14 @@ export async function refreshJob(id: string) {
   if (["succeeded", "failed"].includes(job.status)) return job;
   if (!job.providerOperation) return job;
   try {
-    const result = await pollOneShot(job.providerOperation, id);
+    let result: { done: false } | { done: true; outputPath: string };
+    if (job.provider === "grok") {
+      result = await grok.pollOneShot(job.providerOperation, id);
+    } else if (job.provider === "a2e") {
+      result = await a2e.pollOneShot(job.providerOperation, id, job.resolution);
+    } else {
+      result = await veo.pollOneShot(job.providerOperation, id);
+    }
     if (!result.done) return job;
     db.prepare("UPDATE video_jobs SET status='succeeded',output_path=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(result.outputPath, id);
   } catch (error) {

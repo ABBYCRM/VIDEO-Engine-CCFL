@@ -1,9 +1,14 @@
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
+import { PROVIDERS, type ProviderId } from "@/lib/providers";
 
 export type EngineSettings = {
-  geminiKeyConfigured: boolean;
-  model: string;
+  defaultProvider: ProviderId;
+  providers: {
+    veo: { keyConfigured: boolean; model: string };
+    grok: { keyConfigured: boolean; model: string };
+    a2e: { keyConfigured: boolean; model: string };
+  };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
 };
@@ -14,6 +19,11 @@ function getRaw(key: string): string | null {
 function setRaw(key: string, value: string) {
   db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run(key, value);
 }
+
+function isProviderId(v: unknown): v is ProviderId {
+  return v === "veo" || v === "grok" || v === "a2e";
+}
+
 export function getGeminiApiKey(): string {
   const encrypted = getRaw("gemini_api_key");
   if (encrypted) return decryptSecret(encrypted);
@@ -21,16 +31,44 @@ export function getGeminiApiKey(): string {
   throw new Error("Gemini API key is not configured");
 }
 export function saveGeminiApiKey(value: string) { setRaw("gemini_api_key", encryptSecret(value.trim())); }
+
+export function saveXaiApiKey(value: string) { setRaw("xai_api_key", encryptSecret(value.trim())); }
+export function saveA2eApiKey(value: string) { setRaw("a2e_api_key", encryptSecret(value.trim())); }
+
 export function getEngineSettings(): EngineSettings {
+  const providerConfigured = (p: ProviderId): boolean => {
+    const def = PROVIDERS[p];
+    return Boolean(getRaw(def.settingsKey) || process.env[def.envKey]);
+  };
   return {
-    geminiKeyConfigured: Boolean(getRaw("gemini_api_key") || process.env.GEMINI_API_KEY),
-    model: getRaw("model") || "veo-3.1-generate-preview",
-    resolution: (getRaw("resolution") as EngineSettings["resolution"]) || "1080p",
-    aspectRatio: (getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16"
+    defaultProvider: (() => {
+      const raw = getRaw("default_provider");
+      return isProviderId(raw) ? raw : "veo";
+    })(),
+    providers: {
+      veo: { keyConfigured: providerConfigured("veo"), model: getRaw("veo_model") || PROVIDERS.veo.defaultModel },
+      grok: { keyConfigured: providerConfigured("grok"), model: getRaw("grok_model") || PROVIDERS.grok.defaultModel },
+      a2e: { keyConfigured: providerConfigured("a2e"), model: getRaw("a2e_model") || PROVIDERS.a2e.defaultModel }
+    },
+    resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
+    aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")
   };
 }
-export function saveEngineSettings(input: Partial<Pick<EngineSettings, "model" | "resolution" | "aspectRatio">>) {
-  if (input.model) setRaw("model", input.model);
+
+export function saveEngineSettings(input: Partial<{
+  defaultProvider: ProviderId;
+  model: string;           // legacy: kept for backward compat
+  resolution: "720p" | "1080p" | "4k";
+  aspectRatio: "9:16" | "16:9";
+  veoModel: string;
+  grokModel: string;
+  a2eModel: string;
+}>) {
+  if (input.defaultProvider && isProviderId(input.defaultProvider)) setRaw("default_provider", input.defaultProvider);
   if (input.resolution) setRaw("resolution", input.resolution);
   if (input.aspectRatio) setRaw("aspect_ratio", input.aspectRatio);
+  if (input.model) setRaw("veo_model", input.model); // legacy default
+  if (input.veoModel) setRaw("veo_model", input.veoModel);
+  if (input.grokModel) setRaw("grok_model", input.grokModel);
+  if (input.a2eModel) setRaw("a2e_model", input.a2eModel);
 }

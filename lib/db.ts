@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS video_jobs (
   source TEXT NOT NULL,
   category TEXT NOT NULL,
   prompt TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'veo',
   model TEXT NOT NULL,
   aspect_ratio TEXT NOT NULL,
   resolution TEXT NOT NULL,
@@ -40,3 +41,12 @@ CREATE TABLE IF NOT EXISTS video_jobs (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `);
+
+// Migrations: tolerate older deployments that don't have the provider column.
+function ensureColumn(table: string, column: string, ddl: string) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+try { ensureColumn("video_jobs", "provider", "provider TEXT NOT NULL DEFAULT 'veo'"); } catch {}
