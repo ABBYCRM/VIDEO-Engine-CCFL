@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const NAV = [
+const NAV: { href: string; label: string; icon: any; exact?: boolean }[] = [
   { href: "/", label: "Generate", icon: Clapperboard, exact: true },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/avatars", label: "Avatars", icon: Users },
@@ -25,7 +25,7 @@ const NAV = [
   { href: "/podcast-interview", label: "Podcast", icon: Mic },
   { href: "/docs", label: "API", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings }
-] as const;
+];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
