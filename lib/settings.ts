@@ -3,6 +3,7 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { isNvidiaModelId } from "@/lib/nvidia";
 import { COMPOSIO_TOOLKITS, isComposioConfigured, getAuthConfigId } from "@/lib/composio/client";
+import { isImageProviderConfigured, getImageProvider, getImageModel } from "@/lib/avatar-generation/client";
 
 export type EngineSettings = {
   defaultProvider: ProviderId;
@@ -81,11 +82,10 @@ export type ImageSettings = {
   model: string;
 };
 export function getImageSettings(): ImageSettings {
-  const m = require("@/lib/avatar-generation/client") as typeof import("@/lib/avatar-generation/client");
   return {
-    configured: m.isImageProviderConfigured(),
-    provider: m.getImageProvider(),
-    model: m.getImageModel()
+    configured: isImageProviderConfigured(),
+    provider: getImageProvider(),
+    model: getImageModel()
   };
 }
 
