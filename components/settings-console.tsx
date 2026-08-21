@@ -188,7 +188,7 @@ export function SettingsConsole(){
            const dot = L ? (L.configured && L.live ? "green" : L.configured ? "red" : "amber") : "unknown";
            return (
              <button key={p} onClick={() => setDefaultProvider(p)}
-               className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-cyan-400 bg-cyan-500/10" : "border-slate-200 bg-white/80 hover:border-slate-600"}`}>
+               className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-white/80 hover:border-slate-600"}`}>
                <I className={active ? "text-cyan-700" : "text-slate-600"} />
                <div className="flex-1">
                  <div className="flex items-center gap-2">
@@ -328,7 +328,7 @@ export function SettingsConsole(){
          <Input value={name} onChange={e=>setName(e.target.value)} placeholder="Token label (e.g. n8n pipeline)"/>
          <Button onClick={createToken} disabled={!name}>Create token</Button>
        </div>
-       {newToken && <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">Copy this token now — it is shown only once. <code className="ml-2 rounded bg-slate-100 px-2 py-1 text-amber-100">{newToken}</code></div>}
+       {newToken && <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-sm text-amber-800">Copy this token now — it is shown only once. <code className="ml-2 rounded bg-slate-100 px-2 py-1 text-amber-100">{newToken}</code></div>}
        <div className="mt-4 grid gap-2">
          {tokens.length === 0 && <div className="text-sm text-slate-500">No tokens yet.</div>}
          {tokens.map(t => (

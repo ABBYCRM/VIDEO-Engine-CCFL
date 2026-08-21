@@ -243,7 +243,7 @@ function IntegrationsConsole() {
               </div>
 
               {!overview.configured && (
-                <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">
+                <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-sm text-amber-800">
                   Set your Composio API key above to enable connections.
                 </div>
               )}
@@ -273,8 +273,8 @@ function IntegrationsConsole() {
                         <div className="flex items-center gap-2">
                           <div className="font-medium">{t.label}</div>
                           <StatusDot state={state} label={stateLabel} />
-                          {t.requiresBusiness && <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-800">Business / Creator</span>}
-                          {t.publishable && <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-cyan-700">publishable</span>}
+                          {t.requiresBusiness && <span className="rounded-full border border-amber-500/40 bg-amber-50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-800">Business / Creator</span>}
+                          {t.publishable && <span className="rounded-full border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-cyan-700">publishable</span>}
                         </div>
                         {t.connectedAccountId && (
                           <div className="mt-1 text-[11px] text-slate-500">

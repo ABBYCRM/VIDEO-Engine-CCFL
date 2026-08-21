@@ -214,7 +214,7 @@ function AvatarCard({
       }
     >
       {wardrobeWarning && (
-        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800">
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-50 p-3 text-xs text-amber-800">
           <div className="flex items-start gap-2">
             <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-800" />
             <div className="flex-1">

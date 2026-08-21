@@ -3,7 +3,6 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DuckMark } from "@/components/duck-mark";
 
@@ -18,17 +17,17 @@ export default function Login() {
   }
   return (
     <main className="grid min-h-screen place-items-center px-4">
-      <Card className="w-full max-w-sm glass-card p-7">
+      <div className="soro-card w-full max-w-sm p-7">
         <div className="mb-6 grid place-items-center">
           <DuckMark size={64} />
-          <h1 className="mt-4 text-2xl font-semibold bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 bg-clip-text text-transparent">VIDEO-Engine</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">VIDEO-Engine</h1>
           <p className="mt-1 text-sm text-slate-500">Admin console</p>
         </div>
         <form onSubmit={submit} className="grid gap-3">
           <div className="relative">
-            <Lock className="absolute left-3 top-3.5 text-slate-600" size={16} />
+            <Lock className="absolute left-3 top-3.5 text-slate-400" size={16} />
             <Input
-              className="pl-9 bg-white/80 border-slate-200 focus-visible:ring-cyan-400"
+              className="soro-ring pl-9 border-slate-200 bg-white"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -37,11 +36,11 @@ export default function Login() {
             />
           </div>
           {error && <div className="text-sm text-rose-600">{error}</div>}
-          <Button type="submit" className="bg-slate-100 text-white hover:bg-slate-100">
+          <Button type="submit" className="w-full bg-violet-600 text-white hover:bg-violet-700">
             Sign in
           </Button>
         </form>
-      </Card>
+      </div>
     </main>
   );
 }

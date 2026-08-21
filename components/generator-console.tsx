@@ -48,11 +48,11 @@ export function GeneratorConsole() {
   const selectedProvider = providerPills.find(p => p.id === provider) || providerPills[0];
   const SelectedIcon = selectedProvider.icon;
 
-  return <main className="mx-auto max-w-7xl px-4 py-8">
+  return <main>
     <div className="mb-7 flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-sm text-cyan-700"><ShieldCheck size={16}/> One-shot protocol enforced · 8 seconds · no cuts, no extension, no stitching</div>
-      <h1 className="text-3xl font-semibold tracking-tight">Generate an 8-second campaign shot</h1>
-      <p className="max-w-3xl text-slate-600">Pick a campaign engine and a video provider. Each request is compiled into one continuous shot with native audio. Switch providers to compare Veo 3.1, xAI Grok Imagine, or A2E's multi-model router.</p>
+      <div className="flex items-center gap-2 text-sm text-violet-700"><ShieldCheck size={16}/> One-shot protocol enforced · 8 seconds · no cuts, no extension, no stitching</div>
+      <h1 className="text-[34px] font-semibold leading-[1.1] tracking-tight text-slate-900">Generate an 8-second campaign shot</h1>
+      <p className="max-w-2xl text-[15px] text-slate-600">Pick a campaign engine and a video provider. Each request is compiled into one continuous shot with native audio.</p>
     </div>
 
     <div className="mb-6">
@@ -64,13 +64,13 @@ export function GeneratorConsole() {
           const configured = settings?.providers?.[p.id]?.keyConfigured;
           return (
             <button key={p.id} onClick={() => setProvider(p.id as ProviderId)}
-              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-cyan-400 bg-cyan-500/10" : "border-slate-200 bg-white/80 hover:border-slate-600"}`}>
-              <I className={active ? "text-cyan-700" : "text-slate-600"} />
+              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-violet-400 bg-violet-50 ring-1 ring-violet-200" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+              <I className={active ? "text-violet-600" : "text-slate-500"} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <div className="truncate font-medium">{p.label}</div>
-                  {configured === false && <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-800">key needed</span>}
-                  {configured === true && active && <span className="shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-700">ready</span>}
+                  <div className="truncate font-medium text-slate-900">{p.label}</div>
+                  {configured === false && <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-800">key needed</span>}
+                  {configured === true && active && <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-700">ready</span>}
                 </div>
                 <div className="truncate text-xs text-slate-500">{p.sub}</div>
               </div>
@@ -81,28 +81,28 @@ export function GeneratorConsole() {
     </div>
 
     <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Campaign engine</div>
-    <div className="grid gap-4 md:grid-cols-5">{modes.map(m=>{const I=m.icon;const active=category===m.id;return <button key={m.id} onClick={()=>setCategory(m.id)} className={`rounded-2xl border p-4 text-left transition ${active?"border-cyan-400 bg-cyan-500/10":"border-slate-200 bg-white/80 hover:border-slate-600"}`}><I className={active?"text-cyan-700":"text-slate-600"}/><div className="mt-3 font-medium">{m.title}</div><div className="mt-1 text-xs text-slate-500">{m.sub}</div></button>})}</div>
+    <div className="grid gap-3 md:grid-cols-5">{modes.map(m=>{const I=m.icon;const active=category===m.id;return <button key={m.id} onClick={()=>setCategory(m.id)} className={`rounded-2xl border p-4 text-left transition ${active?"border-violet-400 bg-violet-50 ring-1 ring-violet-200":"border-slate-200 bg-white hover:border-slate-300"}`}><I className={active?"text-violet-600":"text-slate-500"}/><div className="mt-3 font-medium text-slate-900">{m.title}</div><div className="mt-1 text-xs text-slate-500">{m.sub}</div></button>})}</div>
     <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
-      <Card className="p-5"><div className="grid gap-4">
-        <label className="grid gap-2 text-sm"><span>Mission</span><Textarea value={mission} onChange={e=>setMission(e.target.value)} placeholder="Example: Make people injured in a rear-end crash understand why documenting the scene matters."/></label>
-        <label className="grid gap-2 text-sm"><span>Subject / product / spokesperson direction</span><Input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Optional subject or reference instructions"/></label>
-        <label className="grid gap-2 text-sm"><span>Exact dialogue (optional)</span><Textarea value={script} onChange={e=>setScript(e.target.value)} placeholder='Example: "I didn’t know what to document after the crash."'/></label>
-        <label className="grid gap-2 text-sm"><span>Reference / starting image (optional)</span><div className="flex items-center gap-3"><Input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>onFile(e.target.files?.[0])}/>{image&&<span className="max-w-36 truncate text-xs text-slate-600">{image.name}</span>}<Upload size={18}/></div></label>
-        <Button size="lg" disabled={busy} onClick={generate}><Play size={17} className="mr-2"/>{busy?`Starting ${selectedProvider.label}…`:"Generate one shot"}</Button>
-      </div></Card>
-      <Card className="min-h-[470px] overflow-hidden p-5">
+      <div className="soro-card p-5"><div className="grid gap-4">
+        <label className="grid gap-2 text-sm"><span className="text-slate-700">Mission</span><Textarea className="bg-white" value={mission} onChange={e=>setMission(e.target.value)} placeholder="Example: Make people injured in a rear-end crash understand why documenting the scene matters."/></label>
+        <label className="grid gap-2 text-sm"><span className="text-slate-700">Subject / product / spokesperson direction</span><Input className="bg-white" value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Optional subject or reference instructions"/></label>
+        <label className="grid gap-2 text-sm"><span className="text-slate-700">Exact dialogue (optional)</span><Textarea className="bg-white" value={script} onChange={e=>setScript(e.target.value)} placeholder='Example: "I didn’t know what to document after the crash."'/></label>
+        <label className="grid gap-2 text-sm"><span className="text-slate-700">Reference / starting image (optional)</span><div className="flex items-center gap-3"><Input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>onFile(e.target.files?.[0])}/>{image&&<span className="max-w-36 truncate text-xs text-slate-600">{image.name}</span>}<Upload size={18}/></div></label>
+        <Button size="lg" disabled={busy} onClick={generate} className="bg-violet-600 text-white hover:bg-violet-700"><Play size={17} className="mr-2"/>{busy?`Starting ${selectedProvider.label}…`:"Generate one shot"}</Button>
+      </div></div>
+      <div className="soro-card min-h-[470px] overflow-hidden p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="font-medium">Output</div>
+            <div className="font-medium text-slate-900">Output</div>
             <div className="text-xs text-slate-500">8 seconds · native audio · one continuous shot{job?.provider && ` · ${providerPills.find(p=>p.id===job.provider)?.label || job.provider}`}</div>
           </div>
-          {job && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-wide">{job.status}</span>}
+          {job && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-wide text-slate-700">{job.status}</span>}
         </div>
         {!job && <div className="grid h-[360px] place-items-center rounded-xl border border-dashed border-slate-200 text-center text-sm text-slate-500">Your generated video will appear here.</div>}
-        {job?.status==="failed" && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{job.error}</div>}
-        {job && !["succeeded","failed"].includes(job.status) && <div className="grid h-[360px] place-items-center"><div className="text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-cyan-300"/><div>{selectedProvider.label} is generating the shot…</div><div className="mt-1 text-xs text-slate-500">The console polls the provider operation every 5 seconds.</div></div></div>}
+        {job?.status==="failed" && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{job.error}</div>}
+        {job && !["succeeded","failed"].includes(job.status) && <div className="grid h-[360px] place-items-center"><div className="text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600"/><div>{selectedProvider.label} is generating the shot…</div><div className="mt-1 text-xs text-slate-500">The console polls the provider operation every 5 seconds.</div></div></div>}
         {job?.status==="succeeded" && job.fileUrl && <video src={job.fileUrl} className="max-h-[520px] w-full rounded-xl bg-black" controls autoPlay playsInline/>}
-      </Card>
+      </div>
     </div>
   </main>;
 }

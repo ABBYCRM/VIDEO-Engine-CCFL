@@ -3,134 +3,198 @@
 @tailwind utilities;
 
 /* ============================================================
- * VIDEO-Engine CCFL — Light + Glassmorphism design system
+ * VIDEO-Engine CCFL — "Soro"-style design system
  * ------------------------------------------------------------
- * Default: light theme with warm off-white base + single dark
- * accent (#0F172A slate) + a single brand accent (electric cyan).
- * Glass surfaces: white/80 + backdrop-blur for floating panels
- * (the new AppShell dropdown menu, modals, the login card).
- * Dark mode is preserved for any page that opts in with the
- * `dark` class on its body.
+ * White / off-white base · purple brand accent (#6E56CF) ·
+ * hairline slate borders · tight typographic hierarchy ·
+ * rounded-2xl cards with soft shadows. The whole app feels
+ * like a content tool: lots of whitespace, clean dividers,
+ * big readable numbers, calm.
  * ============================================================ */
 
 :root {
   /* Surfaces */
-  --background:        40 30% 98%;             /* warm off-white */
-  --foreground:        222 47% 11%;            /* near-black ink */
-  --muted:             40 20% 94%;             /* paper */
-  --muted-foreground:  222 16% 42%;            /* secondary text */
-  --border:            222 20% 86%;            /* hairline */
+  --background:        0 0% 100%;              /* pure white */
+  --foreground:        224 71% 4%;            /* near-black ink */
+  --muted:             220 20% 96%;            /* paper / gray-100 */
+  --muted-foreground:  220 14% 46%;            /* secondary text */
+  --border:            220 20% 90%;            /* hairline */
+  --border-strong:     220 20% 78%;            /* visible divider */
 
-  /* Brand */
-  --primary:           188 90% 38%;            /* deeper cyan for contrast on light */
+  /* Brand — purple */
+  --primary:           252 75% 60%;            /* #6E56CF */
   --primary-foreground: 0 0% 100%;
-
-  /* Glass surfaces — for the floating nav, modals */
-  --glass:             0 0% 100%;
-  --glass-border:      222 30% 80%;
-
-  /* Popovers / menus */
-  --popover:           0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --accent:            40 25% 95%;
-  --ring:              188 90% 50%;
+  --primary-soft:      252 100% 96%;           /* #F2EFFF */
+  --primary-soft-2:    252 80% 90%;            /* tint */
 
   /* Status */
-  --success:           152 60% 38%;
-  --warning:           32  95% 44%;
-  --danger:            0   72% 51%;
+  --success:           152 60% 40%;
+  --warning:           32  95% 50%;
+  --danger:            0   72% 55%;
+  --info:              199 89% 48%;
+
+  /* Glass / popovers */
+  --popover:           0 0% 100%;
+  --popover-foreground: 224 71% 4%;
+  --ring:              252 75% 60%;
+  --accent:            220 20% 96%;
+
+  /* App shell */
+  --sidebar:           0 0% 100%;
+  --sidebar-border:    220 20% 90%;
+  --sidebar-item:      224 71% 4%;
+  --sidebar-item-active-bg: 252 100% 97%;
+  --sidebar-item-active-fg: 252 75% 50%;
+  --sidebar-group:     220 14% 46%;
 }
 
-.dark {
-  --background:        222 47% 5%;
-  --foreground:        210 40% 98%;
-  --muted:             217 33% 12%;
-  --muted-foreground:  215 16% 65%;
-  --border:            217 33% 18%;
-  --primary:           190 95% 55%;
-  --popover:           222 47% 7%;
-  --popover-foreground: 210 40% 98%;
-  --accent:            217 33% 16%;
-  --ring:              190 95% 55%;
+/* Page bg: white with a very subtle warm wash from the top-left.
+   No more dark gradients. */
+body {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(ellipse 60% 50% at 0% 0%, hsla(252, 75%, 90%, 0.12), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 100% 0%, hsla(40, 80%, 80%, 0.10), transparent 60%);
+  background-attachment: fixed;
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Inter", sans-serif;
 }
 
 * { border-color: hsl(var(--border)); }
 
-html, body {
-  min-height: 100vh;
-  color: hsl(var(--foreground));
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-body {
-  background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, hsla(188, 90%, 70%, 0.18), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 100% 0%,  hsla(265, 80%, 70%, 0.12), transparent 55%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, hsla(40, 60%, 70%, 0.12), transparent 60%),
-    hsl(var(--background));
-  background-attachment: fixed;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-.dark body {
-  background:
-    radial-gradient(circle at 15% -10%, rgba(25, 211, 255, .16), transparent 28rem),
-    radial-gradient(circle at 100% 0%, rgba(99, 102, 241, .12), transparent 26rem),
-    hsl(var(--background));
-}
-
 input, textarea, select { color-scheme: light; }
-.dark input, .dark textarea, .dark select { color-scheme: dark; }
 
 /* ============================================================
- * Glassmorphism utility classes
- * ------------------------------------------------------------
- * Reusable: .glass-card (subtle frosted surface for floating
- * panels), .glass-pill (small chips like the brand mark in the
- * nav), .glass-divider (the hairline under the floating nav).
- * All real backdrop-blur, all low-opacity fills, all thin
- * borders — the same recipe iOS / macOS / Linear / Raycast use.
+ * Soro-style utility primitives
  * ============================================================ */
 
 @layer components {
-  .glass {
-    background-color: hsla(var(--glass) / 0.72);
-    backdrop-filter: saturate(180%) blur(20px) brightness(105%);
-    -webkit-backdrop-filter: saturate(180%) blur(20px) brightness(105%);
-    border: 1px solid hsla(var(--glass-border) / 0.6);
-  }
-  .glass-strong {
-    background-color: hsla(var(--glass) / 0.88);
-    backdrop-filter: saturate(180%) blur(28px) brightness(108%);
-    -webkit-backdrop-filter: saturate(180%) blur(28px) brightness(108%);
-    border: 1px solid hsla(var(--glass-border) / 0.7);
-  }
-  .glass-card {
-    @apply glass rounded-2xl;
+  /* The signature white card with a hairline border and a soft shadow.
+     Used for every "card" on every page. */
+  .soro-card {
+    background-color: #fff;
+    border: 1px solid hsl(var(--border));
+    border-radius: 16px;
     box-shadow:
-      0 1px 0 0 rgba(255, 255, 255, 0.7) inset,
-      0 4px 24px -8px rgba(15, 23, 42, 0.08),
-      0 8px 32px -16px rgba(15, 23, 42, 0.06);
+      0 1px 2px rgba(15, 23, 42, 0.04),
+      0 1px 0 rgba(255, 255, 255, 1) inset;
   }
-  .glass-pill {
-    @apply glass rounded-full;
+  .soro-card-pad {
+    @apply soro-card p-5;
   }
-  .glass-divider {
-    background: linear-gradient(90deg, transparent, hsla(var(--border) / 0.7), transparent);
+  /* The flat stat card (Articles / Drafts / Published style) */
+  .soro-stat {
+    background-color: #fff;
+    border: 1px solid hsl(var(--border));
+    border-radius: 16px;
+    padding: 20px;
   }
-  .dark .glass-card {
-    box-shadow:
-      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
-      0 4px 24px -8px rgba(0, 0, 0, 0.4),
-      0 8px 32px -16px rgba(0, 0, 0, 0.3);
+  /* The icon-badge (purple circle with white icon) used on stat cards */
+  .soro-icon-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background-color: hsl(var(--primary-soft));
+    color: hsl(var(--primary));
+    display: grid;
+    place-items: center;
+  }
+  /* The small count pill (the "13" on Calendar) */
+  .soro-count-pill {
+    background-color: hsl(var(--primary-soft));
+    color: hsl(var(--primary));
+    font-size: 12px;
+    font-weight: 600;
+    padding: 1px 9px;
+    border-radius: 999px;
+    line-height: 1.5;
+  }
+  .soro-new-pill {
+    background-color: hsl(20 95% 92%);
+    color: hsl(20 90% 38%);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 9px;
+    border-radius: 999px;
+    line-height: 1.5;
+    text-transform: capitalize;
+  }
+  /* Group section header (INSIGHTS / SUPPORT) */
+  .soro-group {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--sidebar-group));
+    padding: 18px 16px 8px;
+  }
+  /* The big hero number on stat cards (e.g. "1" in Total Articles) */
+  .soro-hero-number {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: hsl(var(--foreground));
+    line-height: 1;
+  }
+  /* The little helper text under the number */
+  .soro-hero-label {
+    color: hsl(var(--muted-foreground));
+    font-size: 14px;
+    font-weight: 500;
+  }
+  /* The purple focus ring used everywhere */
+  .soro-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px hsl(var(--primary-soft));
+    border-color: hsl(var(--primary));
+  }
+  /* The status dot helpers (green / amber / red / purple) */
+  .soro-dot-green  { background-color: hsl(var(--success)); }
+  .soro-dot-amber  { background-color: hsl(var(--warning)); }
+  .soro-dot-red    { background-color: hsl(var(--danger)); }
+  .soro-dot-purple { background-color: hsl(var(--primary)); }
+  .soro-dot-grey   { background-color: hsl(var(--muted-foreground)); }
+  /* The small "checked" dot for a selected tile */
+  .soro-tile-check {
+    background-color: hsl(var(--success));
+    color: white;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  /* The purple "Add" pill button */
+  .soro-add-pill {
+    background-color: #fff;
+    border: 1px solid hsl(var(--border-strong));
+    color: hsl(var(--foreground));
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 150ms, background-color 150ms;
+  }
+  .soro-add-pill:hover { border-color: hsl(var(--primary)); background-color: hsl(var(--primary-soft)); }
+  /* The "Add more websites" / "+ New" tile */
+  .soro-new-tile {
+    background-color: transparent;
+    border: 1px dashed hsl(var(--border-strong));
+    border-radius: 12px;
+    color: hsl(var(--muted-foreground));
+    display: grid;
+    place-items: center;
+    height: 100%;
+    min-height: 80px;
+    font-size: 13px;
   }
 }
 
-/* Status pill helpers (used across the app) */
-@layer components {
-  .status-dot-green  { background-color: hsl(152 60% 38%); }
-  .status-dot-amber  { background-color: hsl(32  95% 44%); }
-  .status-dot-red    { background-color: hsl(0   72% 51%); }
-  .status-dot-grey   { background-color: hsl(222 16% 65%); }
-}
+/* Smooth scrolling for in-page nav */
+html { scroll-behavior: smooth; }
