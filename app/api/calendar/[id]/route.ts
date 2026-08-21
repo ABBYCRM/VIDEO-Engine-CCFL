@@ -33,7 +33,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const title = body.title === undefined ? current.title : String(body.title).trim().slice(0, 180);
   const network = body.network === undefined ? current.network : String(body.network).toLowerCase();
   const status = body.status === undefined ? current.status : String(body.status);
-  const scheduledAt = body.scheduledAt === undefined ? current.scheduled_at : new Date(String(body.scheduledAt)).toISOString();
+  let scheduledAt = current.scheduled_at;
+  if (body.scheduledAt !== undefined) {
+    const candidate = new Date(String(body.scheduledAt));
+    if (Number.isNaN(candidate.getTime())) return NextResponse.json({ error: "Invalid scheduledAt" }, { status: 400 });
+    scheduledAt = candidate.toISOString();
+  }
   if (!title) return NextResponse.json({ error: "Title is required" }, { status: 400 });
   if (!NETWORKS.has(network)) return NextResponse.json({ error: "Invalid network" }, { status: 400 });
   if (!STATUSES.has(status)) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
