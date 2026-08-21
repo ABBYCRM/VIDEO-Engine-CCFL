@@ -5,7 +5,9 @@
     "gender": "female",
     "archetype": "newsroom spokesperson",
     "wardrobeStandard": "tailored blazer, blouse, slacks; never beachwear",
-    "notes": "Use the same identity across PI categories. Generate a 4-view turnaround before first campaign.",
+    "notes": "Use the same identity across PI categories. Generate a 4-view turnaround before first campaign. Reference identity photo must be in professional wardrobe (tailored blazer / blouse / slacks) — not beachwear, swimwear, or revealing fashion.",
+    "referenceImage": null,
+    "referenceImagePending": "Operator must supply a professional wardrobe identity photo. Per the project's avatar wardrobe rule, beach/swimwear/lifestyle shots are identity references only and must NOT be used as the canonical campaign turnaround. The frontend will display this slot as 'Missing — professional wardrobe required' until uploaded.",
     "views": {
       "front": null,
       "left": null,
@@ -19,7 +21,9 @@
     "gender": "male",
     "archetype": "law-firm principal",
     "wardrobeStandard": "navy suit, white shirt, muted tie",
-    "notes": "Suitable for direct-to-camera credibility spots and newsroom formats.",
+    "notes": "Suitable for direct-to-camera credibility spots and newsroom formats. Reference identity photo is the navy-suit portrait provided by the operator.",
+    "referenceImage": "/avatars/male-attorney-01/identity.jpg",
+    "referenceImageNote": "Use this navy-suit portrait as the canonical identity. Generate the 4-view turnaround from this reference in the same navy suit / white shirt / muted tie. Do not change wardrobe between campaign regenerations.",
     "views": {
       "front": null,
       "left": null,

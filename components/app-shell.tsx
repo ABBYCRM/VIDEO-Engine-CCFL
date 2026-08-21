@@ -11,7 +11,8 @@ import {
   Calendar,
   Plug,
   Library,
-  Mic
+  Mic,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,7 @@ const NAV: { href: string; label: string; icon: any; exact?: boolean }[] = [
   { href: "/library", label: "Library", icon: Library },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/podcast-interview", label: "Podcast", icon: Mic },
+  { href: "/components-demo", label: "Components", icon: Sparkles },
   { href: "/docs", label: "API", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
