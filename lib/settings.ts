@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { isNvidiaModelId } from "@/lib/nvidia";
+import { COMPOSIO_TOOLKITS, isComposioConfigured, getAuthConfigId } from "@/lib/composio/client";
 
 export type EngineSettings = {
   defaultProvider: ProviderId;
@@ -12,6 +13,7 @@ export type EngineSettings = {
     hedra: { keyConfigured: boolean; model: string };
   };
   nvidia: { keyConfigured: boolean; model: string };
+  composio: { keyConfigured: boolean; toolkits: Array<{ id: string; authConfigConfigured: boolean }> };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
 };
@@ -60,6 +62,10 @@ export function getEngineSettings(): EngineSettings {
     nvidia: {
       keyConfigured: Boolean(getRaw("nvidia_api_key") || process.env.NVIDIA_API_KEY),
       model: getRaw("nvidia_model") || "meta/llama-3.1-70b-instruct"
+    },
+    composio: {
+      keyConfigured: isComposioConfigured(),
+      toolkits: COMPOSIO_TOOLKITS.map(t => ({ id: t.id, authConfigConfigured: Boolean(getAuthConfigId(t.id)) }))
     },
     resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
     aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")

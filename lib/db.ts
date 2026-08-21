@@ -110,6 +110,18 @@ CREATE TABLE IF NOT EXISTS monitor_runs (
   started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS connected_accounts (
+  id TEXT PRIMARY KEY,
+  toolkit TEXT NOT NULL,             -- "instagram", "facebook", ...
+  connected_account_id TEXT NOT NULL, -- Composio's ca_xxx
+  user_id TEXT NOT NULL,              -- our internal user id
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  alias TEXT,
+  raw_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_sync_at TEXT,
+  UNIQUE(toolkit, user_id)
+);
 `);
 
 // Migrations: tolerate older deployments that don't have the provider column.

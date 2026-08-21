@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Car, Truck, Footprints, Smartphone, WandSparkles, Upload, Play, ShieldCheck, Sparkles, Atom, Cloud } from "lucide-react";
+import { Car, Truck, Footprints, Smartphone, WandSparkles, Upload, Play, ShieldCheck, Sparkles, Atom, Cloud, Bird } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,13 @@ const modes = [
 ] as const;
 
 const providerPills = [
-  { id:"veo",  label:"Google Veo 3.1",  icon:Sparkles, sub:"direct" },
-  { id:"grok", label:"xAI Grok Imagine", icon:Atom,     sub:"x.ai" },
-  { id:"a2e",  label:"A2E AI router",    icon:Cloud,    sub:"veo · wan · kling · sora" }
+  { id:"veo",   label:"Google Veo 3.1",  icon:Sparkles, sub:"direct" },
+  { id:"grok",  label:"xAI Grok Imagine", icon:Atom,     sub:"x.ai" },
+  { id:"a2e",   label:"A2E AI router",    icon:Cloud,    sub:"veo · wan · kling · sora" },
+  { id:"hedra", label:"Hedra v3",         icon:Bird,     sub:"character-3 · avatar · grok-video" }
 ] as const;
 
-type ProviderId = "veo" | "grok" | "a2e";
+type ProviderId = "veo" | "grok" | "a2e" | "hedra";
 
 type Job = { id:string; provider?:ProviderId; status:string; error?:string; fileUrl?:string|null };
 export function GeneratorConsole() {

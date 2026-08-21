@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getProviderKey, PROVIDERS, listProviderIds, type ProviderId } from "@/lib/providers";
 import { getNvidiaApiKey, isNvidiaEnabled, NVIDIA_MODELS } from "@/lib/nvidia";
+import { getComposio, isComposioConfigured } from "@/lib/composio/client";
 
 type LiveId = ProviderId | "nvidia";
 
@@ -144,12 +145,59 @@ async function pingNvidia(): Promise<ProviderLive> {
   }
 }
 
+async function pingComposio(): Promise<ProviderLive> {
+  // Composio doesn't have a single health endpoint, but connectedAccounts.list
+  // authenticates the API key and returns the connected accounts array. We
+  // treat HTTP 2xx as "live". For a 401/403 the key is bad.
+  const base = {
+    id: "composio" as LiveId,
+    label: "Composio (Instagram, Meta Ads, …)",
+    configured: false,
+    live: false,
+    status: null as number | null,
+    latencyMs: null as number | null,
+    error: null as string | null,
+    checkedAt: new Date().toISOString(),
+    model: null as string | null
+  };
+  if (!isComposioConfigured()) return { ...base, configured: false, error: "no Composio API key configured" };
+  const start = Date.now();
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 8000);
+    const client = getComposio();
+    // The SDK has no abort signal parameter for list(); we still cap latency
+    // with a setTimeout for the response, even if the underlying fetch keeps
+    // running for a moment longer. The status below tells the truth.
+    const result = await client.connectedAccounts.list();
+    clearTimeout(t);
+    const latency = Date.now() - start;
+    const count = Array.isArray((result as { items?: unknown[] }).items)
+      ? (result as { items: unknown[] }).items.length
+      : Array.isArray(result) ? (result as unknown[]).length : 0;
+    return {
+      ...base,
+      configured: true,
+      live: true,
+      status: 200,
+      latencyMs: latency,
+      error: null,
+      model: `${count} connected account${count === 1 ? "" : "s"}`
+    };
+  } catch (e) {
+    const latency = Date.now() - start;
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ...base, configured: true, live: false, latencyMs: latency, error: msg };
+  }
+}
+
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const videoResults = await Promise.all(listProviderIds().map(pingVideo));
   const nvidiaResult = await pingNvidia();
+  const composioResult = await pingComposio();
   return NextResponse.json({
-    providers: [...videoResults, nvidiaResult],
+    providers: [...videoResults, nvidiaResult, composioResult],
     nvidiaModelChoices: Object.values(NVIDIA_MODELS).map(m => ({ id: m.id, label: m.label, notes: m.notes })),
     checkedAt: new Date().toISOString()
   });
