@@ -12,21 +12,17 @@ export const PROVIDERS: Record<ProviderId, {
   label: string;
   defaultModel: string;
   modelChoices: string[];
-  durationCap: number; // max seconds the provider will do in one shot
+  durationCap: number;
   supportsImage: boolean;
-  envKey: string; // process.env fallback name
-  settingsKey: string; // encrypted key slot in settings table
-  healthUrl: string; // GET ping for "green light" status indicator
+  envKey: string;
+  settingsKey: string;
+  healthUrl: string;
 }> = {
   veo: {
     id: "veo",
     label: "Google Veo 3.1 (direct)",
     defaultModel: "veo-3.1-generate-preview",
-    modelChoices: [
-      "veo-3.1-generate-preview",
-      "veo-3.1-fast-generate-preview",
-      "veo-3.1-lite-generate-preview"
-    ],
+    modelChoices: ["veo-3.1-generate-preview", "veo-3.1-fast-generate-preview", "veo-3.1-lite-generate-preview"],
     durationCap: 8,
     supportsImage: true,
     envKey: "GEMINI_API_KEY",
@@ -37,10 +33,7 @@ export const PROVIDERS: Record<ProviderId, {
     id: "grok",
     label: "xAI Grok Imagine",
     defaultModel: "grok-imagine-video-1.5",
-    modelChoices: [
-      "grok-imagine-video-1.5",
-      "grok-imagine-video-1.0"
-    ],
+    modelChoices: ["grok-imagine-video-1.5", "grok-imagine-video-1.0"],
     durationCap: 15,
     supportsImage: true,
     envKey: "XAI_API_KEY",
@@ -51,15 +44,7 @@ export const PROVIDERS: Record<ProviderId, {
     id: "a2e",
     label: "A2E AI (multi-model router)",
     defaultModel: "veo3",
-    modelChoices: [
-      "veo3",
-      "veo3_fast",
-      "wan",
-      "wan-3.0",
-      "kling",
-      "seedance",
-      "sora"
-    ],
+    modelChoices: ["veo3", "veo3_fast", "wan", "wan-3.0", "kling", "seedance", "sora"],
     durationCap: 8,
     supportsImage: true,
     envKey: "A2E_API_KEY",
@@ -68,16 +53,10 @@ export const PROVIDERS: Record<ProviderId, {
   },
   hedra: {
     id: "hedra",
-    label: "Hedra (v3 multi-model)",
+    label: "Hedra Character / Avatar",
     defaultModel: "hedra-character-3",
-    modelChoices: [
-      "hedra-character-3",
-      "hedra-character-2",
-      "fal/grok-video-t2v",
-      "fal/grok-video-i2v",
-      "together/hedra-avatar"
-    ],
-    durationCap: 10,
+    modelChoices: ["hedra-character-3", "hedra-character-2", "together/hedra-avatar", "fal/grok-video-t2v", "fal/grok-video-i2v"],
+    durationCap: 30,
     supportsImage: true,
     envKey: "HEDRA_API_KEY",
     settingsKey: "hedra_api_key",
@@ -85,9 +64,7 @@ export const PROVIDERS: Record<ProviderId, {
   }
 };
 
-export function listProviderIds(): ProviderId[] {
-  return ["veo", "grok", "a2e", "hedra"];
-}
+export function listProviderIds(): ProviderId[] { return ["veo", "grok", "a2e", "hedra"]; }
 
 export function getProviderKey(p: ProviderId): string {
   const def = PROVIDERS[p];
