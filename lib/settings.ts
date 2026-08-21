@@ -14,6 +14,7 @@ export type EngineSettings = {
   };
   nvidia: { keyConfigured: boolean; model: string };
   composio: { keyConfigured: boolean; toolkits: Array<{ id: string; authConfigConfigured: boolean }> };
+  image: { configured: boolean; provider: "gemini" | "openai" | "mock"; model: string };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
 };
@@ -67,8 +68,24 @@ export function getEngineSettings(): EngineSettings {
       keyConfigured: isComposioConfigured(),
       toolkits: COMPOSIO_TOOLKITS.map(t => ({ id: t.id, authConfigConfigured: Boolean(getAuthConfigId(t.id)) }))
     },
+    image: getImageSettings(),
     resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
     aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")
+  };
+}
+
+// Image generation provider/model for the avatar 4-view turnaround.
+export type ImageSettings = {
+  configured: boolean;
+  provider: "gemini" | "openai" | "mock";
+  model: string;
+};
+export function getImageSettings(): ImageSettings {
+  const m = require("@/lib/avatar-generation/client") as typeof import("@/lib/avatar-generation/client");
+  return {
+    configured: m.isImageProviderConfigured(),
+    provider: m.getImageProvider(),
+    model: m.getImageModel()
   };
 }
 

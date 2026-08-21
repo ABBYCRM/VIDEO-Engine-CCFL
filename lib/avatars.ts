@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { getPreset } from "@/lib/avatar-presets";
 
 export type AvatarStatus = "draft" | "ready" | "archived";
+export type TurnaroundStatus = "draft" | "generating" | "incomplete" | "ready" | "failed";
+export type ViewGenStatus = "idle" | "generating" | "ready" | "failed";
 
 export type AvatarView = "front" | "left" | "right" | "back";
 export const VIEWS: AvatarView[] = ["front", "left", "right", "back"];
@@ -19,51 +21,73 @@ export type Avatar = {
   notes: string;
   referenceImage: string | null;
   status: AvatarStatus;
-  views: Record<AvatarView, { file: string | null; status: "ready" | "missing" }>;
+  turnaroundStatus: TurnaroundStatus;
+  turnaroundModel: string | null;
+  turnaroundStartedAt: string | null;
+  turnaroundFinishedAt: string | null;
+  turnaroundError: string | null;
+  views: Record<AvatarView, {
+    file: string | null;
+    status: "ready" | "missing";
+    generationStatus: ViewGenStatus;
+    generationModel: string | null;
+    generationError: string | null;
+  }>;
 };
-
-const VIEWS_WHERE = "(" + VIEWS.map(() => "?").join(",") + ")";
 
 function readViewsForAvatars(ids: string[]): Map<string, Avatar["views"]> {
   if (ids.length === 0) return new Map();
   const placeholders = ids.map(() => "?").join(",");
   const rows = db
-    .prepare(`SELECT avatar_id,view,file_path,status FROM avatar_views WHERE avatar_id IN (${placeholders})`)
-    .all(...ids) as Array<{ avatar_id: string; view: string; file_path: string | null; status: string }>;
+    .prepare(
+      `SELECT avatar_id,view,file_path,status,generation_status,generation_model,generation_error
+       FROM avatar_views WHERE avatar_id IN (${placeholders})`
+    )
+    .all(...ids) as Array<{
+      avatar_id: string; view: string; file_path: string | null; status: string;
+      generation_status: string; generation_model: string | null; generation_error: string | null;
+    }>;
   const out = new Map<string, Avatar["views"]>();
   for (const id of ids) {
     out.set(id, {
-      front: { file: null, status: "missing" },
-      left: { file: null, status: "missing" },
-      right: { file: null, status: "missing" },
-      back: { file: null, status: "missing" }
+      front: emptyView(),
+      left: emptyView(),
+      right: emptyView(),
+      back: emptyView()
     });
   }
   for (const r of rows) {
     const block = out.get(r.avatar_id);
     if (!block) continue;
     if (VIEWS.includes(r.view as AvatarView)) {
-      (block as Record<string, { file: string | null; status: "ready" | "missing" }>)[r.view] = {
+      (block as Record<string, Avatar["views"][AvatarView]>)[r.view as AvatarView] = {
         file: r.file_path,
-        status: r.status === "ready" ? "ready" : "missing"
+        status: r.status === "ready" ? "ready" : "missing",
+        generationStatus: (["idle", "generating", "ready", "failed"] as const).includes(r.generation_status as ViewGenStatus)
+          ? r.generation_status as ViewGenStatus
+          : "idle",
+        generationModel: r.generation_model,
+        generationError: r.generation_error
       };
     }
   }
   return out;
 }
 
+function emptyView(): Avatar["views"][AvatarView] {
+  return { file: null, status: "missing", generationStatus: "idle", generationModel: null, generationError: null };
+}
+
 export function listAvatars(): PublicAvatar[] {
   const rows = db
-    .prepare("SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status FROM avatars ORDER BY name")
+    .prepare(
+      "SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status,turnaround_status,turnaround_model,turnaround_started_at,turnaround_finished_at,turnaround_error FROM avatars ORDER BY name"
+    )
     .all() as Array<{
-      id: string;
-      name: string;
-      gender: string;
-      archetype: string;
-      wardrobe_standard: string;
-      notes: string;
-      reference_image_path: string | null;
-      status: string;
+      id: string; name: string; gender: string; archetype: string; wardrobe_standard: string;
+      notes: string; reference_image_path: string | null; status: string;
+      turnaround_status: string; turnaround_model: string | null;
+      turnaround_started_at: string | null; turnaround_finished_at: string | null; turnaround_error: string | null;
     }>;
   const ids = rows.map((r) => r.id);
   const views = readViewsForAvatars(ids);
@@ -76,34 +100,31 @@ export function listAvatars(): PublicAvatar[] {
     notes: r.notes,
     referenceImage: r.reference_image_path,
     status: (r.status as AvatarStatus) || "draft",
+    turnaroundStatus: (r.turnaround_status as TurnaroundStatus) || "draft",
+    turnaroundModel: r.turnaround_model,
+    turnaroundStartedAt: r.turnaround_started_at,
+    turnaroundFinishedAt: r.turnaround_finished_at,
+    turnaroundError: r.turnaround_error,
     views: views.get(r.id) || {
-      front: { file: null, status: "missing" },
-      left: { file: null, status: "missing" },
-      right: { file: null, status: "missing" },
-      back: { file: null, status: "missing" }
+      front: emptyView(), left: emptyView(), right: emptyView(), back: emptyView()
     }
   }));
 }
 
 export function getAvatar(id: string): PublicAvatar | null {
   const row = db
-    .prepare("SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status FROM avatars WHERE id=?")
+    .prepare(
+      "SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status,turnaround_status,turnaround_model,turnaround_started_at,turnaround_finished_at,turnaround_error FROM avatars WHERE id=?"
+    )
     .get(id) as {
-    id: string;
-    name: string;
-    gender: string;
-    archetype: string;
-    wardrobe_standard: string;
-    notes: string;
-    reference_image_path: string | null;
-    status: string;
-  } | undefined;
+      id: string; name: string; gender: string; archetype: string; wardrobe_standard: string;
+      notes: string; reference_image_path: string | null; status: string;
+      turnaround_status: string; turnaround_model: string | null;
+      turnaround_started_at: string | null; turnaround_finished_at: string | null; turnaround_error: string | null;
+    } | undefined;
   if (!row) return null;
   const views = readViewsForAvatars([id]).get(id) || {
-    front: { file: null, status: "missing" },
-    left: { file: null, status: "missing" },
-    right: { file: null, status: "missing" },
-    back: { file: null, status: "missing" }
+    front: emptyView(), left: emptyView(), right: emptyView(), back: emptyView()
   };
   return enrich({
     id: row.id,
@@ -114,6 +135,11 @@ export function getAvatar(id: string): PublicAvatar | null {
     notes: row.notes,
     referenceImage: row.reference_image_path,
     status: (row.status as AvatarStatus) || "draft",
+    turnaroundStatus: (row.turnaround_status as TurnaroundStatus) || "draft",
+    turnaroundModel: row.turnaround_model,
+    turnaroundStartedAt: row.turnaround_started_at,
+    turnaroundFinishedAt: row.turnaround_finished_at,
+    turnaroundError: row.turnaround_error,
     views
   });
 }
@@ -170,7 +196,18 @@ export type PublicAvatar = {
   referenceImageNote: string | null;
   wardrobeRegenerationPrompt: string | null;
   status: AvatarStatus;
-  views: Record<AvatarView, { file: string | null; status: "ready" | "missing" }>;
+  turnaroundStatus: TurnaroundStatus;
+  turnaroundModel: string | null;
+  turnaroundStartedAt: string | null;
+  turnaroundFinishedAt: string | null;
+  turnaroundError: string | null;
+  views: Record<AvatarView, {
+    file: string | null;
+    status: "ready" | "missing";
+    generationStatus: ViewGenStatus;
+    generationModel: string | null;
+    generationError: string | null;
+  }>;
 };
 
 // Enrich a DB Avatar with the editorial fields from data/avatar-presets.json
