@@ -5,9 +5,10 @@
     "gender": "female",
     "archetype": "newsroom spokesperson",
     "wardrobeStandard": "tailored blazer, blouse, slacks; never beachwear",
-    "notes": "Use the same identity across PI categories. Generate a 4-view turnaround before first campaign. Reference identity photo must be in professional wardrobe (tailored blazer / blouse / slacks) — not beachwear, swimwear, or revealing fashion.",
-    "referenceImage": null,
-    "referenceImagePending": "Operator must supply a professional wardrobe identity photo. Per the project's avatar wardrobe rule, beach/swimwear/lifestyle shots are identity references only and must NOT be used as the canonical campaign turnaround. The frontend will display this slot as 'Missing — professional wardrobe required' until uploaded.",
+    "notes": "Use the same identity across PI categories. The supplied reference photo is the identity reference only — the beach background and swimwear in the supplied photo must NOT carry over into the canonical campaign turnaround. The 4-view canonical turnaround and every campaign shot must regenerate the wardrobe in: tailored blazer (charcoal, navy, or black), blouse / professional top, trousers or appropriate professional skirt, neutral shoes, restrained accessories.",
+    "referenceImage": "/avatars/female-anchor-01/identity.jpg",
+    "referenceImageNote": "Beach/sunset identity reference. Wardrobe will be regenerated in professional attire (tailored blazer / blouse / slacks) when the canonical 4-view turnaround is generated and when this avatar is used in any campaign. The hair, face geometry, and identity will be preserved; only the wardrobe, environment, and overall styling change.",
+    "wardrobeRegenerationPrompt": "Preserve facial identity exactly (face shape, eye color, hairline, hair color, skin tone, body proportions). Replace beachwear with: tailored charcoal blazer, white or cream blouse, dark slacks, neutral pumps, minimal jewelry. Replace beach environment with: newsroom set / office interior / neutral studio. Photorealistic, native audio, 8 seconds single shot. ONE CONTINUOUS SHOT ONLY.",
     "views": {
       "front": null,
       "left": null,

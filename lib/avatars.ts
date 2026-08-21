@@ -3,6 +3,7 @@
 // by the /avatars page and the API routes.
 
 import { db } from "@/lib/db";
+import { getPreset } from "@/lib/avatar-presets";
 
 export type AvatarStatus = "draft" | "ready" | "archived";
 
@@ -51,7 +52,7 @@ function readViewsForAvatars(ids: string[]): Map<string, Avatar["views"]> {
   return out;
 }
 
-export function listAvatars(): Avatar[] {
+export function listAvatars(): PublicAvatar[] {
   const rows = db
     .prepare("SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status FROM avatars ORDER BY name")
     .all() as Array<{
@@ -66,7 +67,7 @@ export function listAvatars(): Avatar[] {
     }>;
   const ids = rows.map((r) => r.id);
   const views = readViewsForAvatars(ids);
-  return rows.map((r) => ({
+  return rows.map((r) => enrich({
     id: r.id,
     name: r.name,
     gender: r.gender as Avatar["gender"],
@@ -84,7 +85,7 @@ export function listAvatars(): Avatar[] {
   }));
 }
 
-export function getAvatar(id: string): Avatar | null {
+export function getAvatar(id: string): PublicAvatar | null {
   const row = db
     .prepare("SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status FROM avatars WHERE id=?")
     .get(id) as {
@@ -104,7 +105,7 @@ export function getAvatar(id: string): Avatar | null {
     right: { file: null, status: "missing" },
     back: { file: null, status: "missing" }
   };
-  return {
+  return enrich({
     id: row.id,
     name: row.name,
     gender: row.gender as Avatar["gender"],
@@ -114,7 +115,7 @@ export function getAvatar(id: string): Avatar | null {
     referenceImage: row.reference_image_path,
     status: (row.status as AvatarStatus) || "draft",
     views
-  };
+  });
 }
 
 export function updateAvatarReference(id: string, path: string | null): boolean {
@@ -166,6 +167,20 @@ export type PublicAvatar = {
   wardrobeStandard: string;
   notes: string;
   referenceImage: string | null;
+  referenceImageNote: string | null;
+  wardrobeRegenerationPrompt: string | null;
   status: AvatarStatus;
   views: Record<AvatarView, { file: string | null; status: "ready" | "missing" }>;
 };
+
+// Enrich a DB Avatar with the editorial fields from data/avatar-presets.json
+// so the page can show notes, the identity-reference warning, and the
+// wardrobe-regeneration prompt in one shape.
+export function enrich(a: Avatar): PublicAvatar {
+  const preset = getPreset(a.id);
+  return {
+    ...a,
+    referenceImageNote: preset?.referenceImageNote ?? null,
+    wardrobeRegenerationPrompt: preset?.wardrobeRegenerationPrompt ?? null
+  };
+}

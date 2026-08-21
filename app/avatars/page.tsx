@@ -20,6 +20,8 @@ type Avatar = {
   wardrobeStandard: string;
   notes: string;
   referenceImage: string | null;
+  referenceImageNote: string | null;
+  wardrobeRegenerationPrompt: string | null;
   status: "draft" | "ready" | "archived";
   views: Record<ViewKey, AvatarViewStatus>;
 };
@@ -32,8 +34,13 @@ function assetUrl(avatarId: string, kind: "reference" | ViewKey): string {
   return `/api/admin/avatars/${avatarId}/asset?view=${v}`;
 }
 
-function isFemaleBeachWardrobe(a: Avatar): boolean {
-  return a.gender === "female" && /beach|swimwear|bikini|lingerie/i.test(a.wardrobeStandard + a.notes);
+// Heuristic: the female spokesperson's notes mention beach/swimwear. Per the
+// project's avatar wardrobe rule, an identity reference can be a beach photo
+// but the canonical campaign turnaround must use professional attire.
+function hasIdentityOnlyBeachReference(a: Avatar): boolean {
+  if (a.gender !== "female") return false;
+  const haystack = `${a.wardrobeStandard} ${a.notes} ${a.referenceImageNote ?? ""}`;
+  return /beach|swimwear|bikini|lingerie/i.test(haystack);
 }
 
 export default function AvatarsPage() {
@@ -203,12 +210,24 @@ function AvatarCard({
       }
     >
       {wardrobeWarning && (
-        <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
-          <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-300" />
-          <span>
-            Female avatar wardrobe standard contains beach/swimwear terms. Per the project wardrobe rule, the
-            canonical campaign turnaround must be regenerated in professional attire (tailored blazer / blouse / slacks).
-          </span>
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <div className="flex items-start gap-2">
+            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <div className="flex-1">
+              <strong>Identity reference loaded · wardrobe must be regenerated.</strong> The
+              supplied photo is the identity reference only (beach environment, swimwear).
+              Per the project's avatar wardrobe rule, the canonical campaign turnaround and every
+              campaign shot must regenerate the wardrobe in professional attire
+              (tailored blazer / blouse / slacks). Hair, face geometry, and identity will
+              be preserved.
+            </div>
+          </div>
+          {avatar.referenceImageNote && (
+            <p className="ml-5 text-amber-200/80 italic">{avatar.referenceImageNote}</p>
+          )}
+          {avatar.wardrobeRegenerationPrompt && (
+            <RegenerationPromptBlock prompt={avatar.wardrobeRegenerationPrompt} />
+          )}
         </div>
       )}
 
@@ -330,5 +349,41 @@ function AvatarCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+function RegenerationPromptBlock({ prompt }: { prompt: string }) {
+  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="ml-5 rounded-md border border-amber-500/30 bg-slate-950/40">
+      <div className="flex items-center justify-between px-2 py-1.5">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="text-[11px] uppercase tracking-wide text-amber-200 hover:text-amber-100"
+        >
+          {open ? "▾ hide regeneration prompt" : "▸ show regeneration prompt"}
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(prompt);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            } catch {
+              /* ignore */
+            }
+          }}
+          className="rounded border border-amber-500/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-200 hover:bg-amber-500/15"
+        >
+          {copied ? "✓ copied" : "copy prompt"}
+        </button>
+      </div>
+      {open && (
+        <pre className="max-h-48 overflow-auto border-t border-amber-500/20 p-2 text-[10px] leading-relaxed text-amber-100/90">
+{prompt}
+        </pre>
+      )}
+    </div>
   );
 }
