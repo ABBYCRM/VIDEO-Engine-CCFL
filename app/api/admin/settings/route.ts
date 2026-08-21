@@ -6,9 +6,11 @@ import {
   saveEngineSettings,
   saveGeminiApiKey,
   saveHedraApiKey,
+  saveNvidiaApiKey,
   saveXaiApiKey
 } from "@/lib/settings";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
+import { isNvidiaModelId } from "@/lib/nvidia";
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,6 +25,7 @@ export async function PUT(req: Request) {
   if (body.xaiApiKey) saveXaiApiKey(String(body.xaiApiKey));
   if (body.a2eApiKey) saveA2eApiKey(String(body.a2eApiKey));
   if (body.hedraApiKey) saveHedraApiKey(String(body.hedraApiKey));
+  if (body.nvidiaApiKey) saveNvidiaApiKey(String(body.nvidiaApiKey));
 
   if (body.resolution && !["720p","1080p","4k"].includes(body.resolution)) return NextResponse.json({ error: "Invalid resolution" }, { status: 400 });
   if (body.aspectRatio && !["9:16","16:9"].includes(body.aspectRatio)) return NextResponse.json({ error: "Invalid aspect ratio" }, { status: 400 });
@@ -46,6 +49,13 @@ export async function PUT(req: Request) {
     }
   }
 
+  // NVIDIA model is independent of the video provider registry.
+  let nvidiaModel: string | undefined;
+  if (body.nvidiaModel) {
+    if (!isNvidiaModelId(body.nvidiaModel)) return NextResponse.json({ error: `Invalid NVIDIA model "${body.nvidiaModel}"` }, { status: 400 });
+    nvidiaModel = body.nvidiaModel;
+  }
+
   saveEngineSettings({
     defaultProvider,
     resolution: body.resolution,
@@ -54,7 +64,8 @@ export async function PUT(req: Request) {
     veoModel: validatedModel.veoModel,
     grokModel: validatedModel.grokModel,
     a2eModel: validatedModel.a2eModel,
-    hedraModel: validatedModel.hedraModel
+    hedraModel: validatedModel.hedraModel,
+    nvidiaModel
   });
   return NextResponse.json(getEngineSettings());
 }

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
+import { isNvidiaModelId } from "@/lib/nvidia";
 
 export type EngineSettings = {
   defaultProvider: ProviderId;
@@ -10,6 +11,7 @@ export type EngineSettings = {
     a2e: { keyConfigured: boolean; model: string };
     hedra: { keyConfigured: boolean; model: string };
   };
+  nvidia: { keyConfigured: boolean; model: string };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
 };
@@ -37,6 +39,8 @@ export function saveXaiApiKey(value: string) { setRaw("xai_api_key", encryptSecr
 export function saveA2eApiKey(value: string) { setRaw("a2e_api_key", encryptSecret(value.trim())); }
 export function saveHedraApiKey(value: string) { setRaw("hedra_api_key", encryptSecret(value.trim())); }
 
+export function saveNvidiaApiKey(value: string) { setRaw("nvidia_api_key", encryptSecret(value.trim())); }
+
 export function getEngineSettings(): EngineSettings {
   const providerConfigured = (p: ProviderId): boolean => {
     const def = PROVIDERS[p];
@@ -53,6 +57,10 @@ export function getEngineSettings(): EngineSettings {
       a2e: { keyConfigured: providerConfigured("a2e"), model: getRaw("a2e_model") || PROVIDERS.a2e.defaultModel },
       hedra: { keyConfigured: providerConfigured("hedra"), model: getRaw("hedra_model") || PROVIDERS.hedra.defaultModel }
     },
+    nvidia: {
+      keyConfigured: Boolean(getRaw("nvidia_api_key") || process.env.NVIDIA_API_KEY),
+      model: getRaw("nvidia_model") || "meta/llama-3.1-70b-instruct"
+    },
     resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
     aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")
   };
@@ -67,6 +75,7 @@ export function saveEngineSettings(input: Partial<{
   grokModel: string;
   a2eModel: string;
   hedraModel: string;
+  nvidiaModel: string;
 }>) {
   if (input.defaultProvider && isProviderId(input.defaultProvider)) setRaw("default_provider", input.defaultProvider);
   if (input.resolution) setRaw("resolution", input.resolution);
@@ -76,4 +85,5 @@ export function saveEngineSettings(input: Partial<{
   if (input.grokModel) setRaw("grok_model", input.grokModel);
   if (input.a2eModel) setRaw("a2e_model", input.a2eModel);
   if (input.hedraModel) setRaw("hedra_model", input.hedraModel);
+  if (input.nvidiaModel && isNvidiaModelId(input.nvidiaModel)) setRaw("nvidia_model", input.nvidiaModel);
 }

@@ -1,15 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
-import { KeyRound, Save, Copy, Trash2, Shield, Sparkles, Atom, Cloud, Bird, RefreshCcw } from "lucide-react";
+import { KeyRound, Save, Copy, Trash2, Shield, Sparkles, Atom, Cloud, Bird, RefreshCcw, Cpu, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ModelSelector, ModelSelectorTrigger, ModelSelectorValue, ModelSelectorContent, type AiModel, type AiModelSelection } from "@/components/ui/ai-model-select";
 
 type TokenRow = { id:string; name:string; prefix:string; createdAt:string; lastUsedAt?:string|null; revokedAt?:string|null };
 type ProviderId = "veo" | "grok" | "a2e" | "hedra";
 
 type LiveRow = {
-  id: ProviderId;
+  id: ProviderId | "nvidia";
   label: string;
   configured: boolean;
   live: boolean;
@@ -17,6 +18,7 @@ type LiveRow = {
   latencyMs: number | null;
   error: string | null;
   checkedAt: string;
+  model?: string | null;
 };
 
 const providerMeta: Record<ProviderId, { label: string; icon: any; choices: string[]; help: string; docs?: string }> = {
@@ -47,20 +49,44 @@ const providerMeta: Record<ProviderId, { label: string; icon: any; choices: stri
   }
 };
 
+// Map the NVIDIA_MODELS list from the server's live endpoint into the
+// ModelSelector's AiModel shape. The server already provides id / label /
+// notes; we derive effort / context / fast / thinking defaults so the picker
+// behaves the same for every model.
+function nvidiaModelAdapter(choice: { id: string; label: string; notes: string }): AiModel {
+  const id = choice.id;
+  return {
+    id,
+    label: choice.label,
+    description: choice.notes,
+    efforts: ["high", "medium", "low"],
+    contexts: ["8K", "16K", "32K", "64K", "128K"],
+    supportsFast: true,
+    supportsThinking: id.includes("nemotron") || id.includes("llama") || id.includes("mistral"),
+    defaultEffort: id === "nvidia/nemotron-mini-4b-instruct" ? "low" : "high",
+    defaultContext: "16K",
+    defaultFast: id !== "nvidia/nemotron-mini-4b-instruct",
+    disabled: id === "disabled"
+  };
+}
+
 export function SettingsConsole(){
  const [settings,setSettings] = useState<any>(null);
  const [gemini,setGemini] = useState("");
  const [xai,setXai] = useState("");
  const [a2e,setA2e] = useState("");
  const [hedraKey,setHedraKey] = useState("");
+ const [nvidiaKey,setNvidiaKey] = useState("");
  const [defaultProvider,setDefaultProvider] = useState<ProviderId>("veo");
  const [providerModels,setProviderModels] = useState<Record<ProviderId,string>>({ veo:"", grok:"", a2e:"", hedra:"" });
+ const [nvidiaModels,setNvidiaModels] = useState<{ id:string; label:string; notes:string }[]>([]);
+ const [nvidiaSelection,setNvidiaSelection] = useState<AiModelSelection>({ id: "meta/llama-3.1-70b-instruct", effort: "high", context: "16K", fast: true });
  const [resolution,setResolution] = useState("1080p");
  const [aspectRatio,setAspectRatio] = useState("9:16");
  const [tokens,setTokens] = useState<TokenRow[]>([]);
  const [name,setName] = useState("");
  const [newToken,setNewToken] = useState<string|null>(null);
- const [live,setLive] = useState<Record<ProviderId, LiveRow | null>>({ veo:null, grok:null, a2e:null, hedra:null });
+ const [live,setLive] = useState<Record<string, LiveRow | null>>({ veo:null, grok:null, a2e:null, hedra:null, nvidia:null });
  const [liveBusy,setLiveBusy] = useState(false);
 
  async function load(){
@@ -75,6 +101,8 @@ export function SettingsConsole(){
        a2e: d.providers?.a2e?.model || providerMeta.a2e.choices[0],
        hedra: d.providers?.hedra?.model || providerMeta.hedra.choices[0]
      });
+     const sel = d.nvidia?.model || "meta/llama-3.1-70b-instruct";
+     setNvidiaSelection((prev) => ({ ...prev, id: sel }));
      setResolution(d.resolution || "1080p");
      setAspectRatio(d.aspectRatio || "9:16");
    }
@@ -88,15 +116,16 @@ export function SettingsConsole(){
      const r = await fetch("/api/admin/providers/live");
      if(r.ok){
        const d = await r.json();
-       const next: Record<ProviderId, LiveRow | null> = { veo:null, grok:null, a2e:null, hedra:null };
+       const next: Record<string, LiveRow | null> = { veo:null, grok:null, a2e:null, hedra:null, nvidia:null };
        for (const row of d.providers as LiveRow[]) next[row.id] = row;
+       if (Array.isArray(d.nvidiaModelChoices)) setNvidiaModels(d.nvidiaModelChoices);
        setLive(next);
      }
    } finally {
      setLiveBusy(false);
    }
  }
- useEffect(()=>{ if(settings) loadLive(); },[settings?.providers?.hedra?.keyConfigured]); // refresh light when hedra key flips
+ useEffect(()=>{ if(settings) loadLive(); },[settings?.providers?.hedra?.keyConfigured, settings?.nvidia?.keyConfigured]);
 
  async function save(){
    const r = await fetch("/api/admin/settings", { method: "PUT", headers: {"content-type":"application/json"},
@@ -105,6 +134,8 @@ export function SettingsConsole(){
        xaiApiKey: xai || undefined,
        a2eApiKey: a2e || undefined,
        hedraApiKey: hedraKey || undefined,
+       nvidiaApiKey: nvidiaKey || undefined,
+       nvidiaModel: nvidiaSelection.id,
        defaultProvider,
        veoModel: providerModels.veo,
        grokModel: providerModels.grok,
@@ -116,7 +147,7 @@ export function SettingsConsole(){
    });
    if(r.ok){
      setSettings(await r.json());
-     setGemini(""); setXai(""); setA2e(""); setHedraKey("");
+     setGemini(""); setXai(""); setA2e(""); setHedraKey(""); setNvidiaKey("");
      alert("Settings saved");
      loadLive();
    }
@@ -209,6 +240,66 @@ export function SettingsConsole(){
              </div>
            );
          })}
+       </div>
+     </Card>
+
+     <Card className="p-5">
+       <div className="mb-4 flex items-center justify-between">
+         <div className="flex items-center gap-2 font-medium"><Cpu size={18} className="text-cyan-300"/>NVIDIA Content Intelligence + Performance Monitor</div>
+         <LiveDot
+           state={
+             live.nvidia ? (live.nvidia.configured && live.nvidia.live ? "green" : live.nvidia.configured ? "red" : "amber") : "unknown"
+           }
+           latency={live.nvidia?.latencyMs ?? null}
+           status={live.nvidia?.status ?? null}
+           error={live.nvidia?.error ?? null}
+           compact
+         />
+       </div>
+       <p className="mb-3 text-sm text-slate-400">
+         NVIDIA writes the social-media package (hook / captions / hashtags / platform variants) and — once ad metrics exist — feeds winning copy + prompts back into the engine. Not a video renderer; lives alongside Veo / Grok / A2E / Hedra.
+       </p>
+       <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+         <div className="grid gap-3 md:grid-cols-2">
+           <label className="grid gap-2 text-sm">
+             <span>NVIDIA NIM API key</span>
+             <Input type="password" placeholder="nvapi-… paste to replace" onChange={e => setNvidiaKey(e.target.value)} />
+             <span className="text-[11px] text-slate-500">
+               Get one at <a className="text-cyan-300 underline-offset-2 hover:underline" href="https://build.nvidia.com" target="_blank" rel="noreferrer">build.nvidia.com</a>. Stored encrypted AES-256-GCM.
+             </span>
+           </label>
+           <div className="grid gap-2 text-sm">
+             <span>Model</span>
+             {nvidiaModels.length === 0 ? (
+               <div className="grid h-11 place-items-center rounded-xl border border-slate-700 bg-slate-950 text-xs text-slate-500">
+                 Loading models…
+               </div>
+             ) : (
+               <ModelSelector
+                 models={nvidiaModels.map(nvidiaModelAdapter)}
+                 value={nvidiaSelection}
+                 onValueChange={setNvidiaSelection}
+                 aria-label="NVIDIA NIM model"
+               >
+                 <ModelSelectorTrigger className="min-h-11 w-full justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm">
+                   <ModelSelectorValue className="text-sm" />
+                 </ModelSelectorTrigger>
+                 <ModelSelectorContent side="bottom" />
+               </ModelSelector>
+             )}
+             <span className="text-[11px] text-slate-500">
+               Currently selected: <code className="rounded bg-slate-900 px-1.5 py-0.5 text-cyan-200">{nvidiaSelection.id}</code>
+             </span>
+           </div>
+         </div>
+         <details className="text-xs text-slate-400">
+           <summary className="flex cursor-pointer items-center gap-1 text-slate-300 hover:text-white"><BookOpen size={12}/>How NVIDIA is used in this build</summary>
+           <ul className="ml-4 mt-2 list-disc space-y-1">
+             <li><strong>Content Intelligence:</strong> writes a structured <code>SocialContentPackage</code> from a campaign's website + tone + platform + selected video. Hook, primaryText, shortCaption, longCaption, reelTitle, cta, hashtags, platform variants. Validated by schema before persisting.</li>
+             <li><strong>Performance Monitor:</strong> analyzes ad-account metrics when they exist. Findings + recommendations cite the metric IDs. When no metrics are available, returns <code>status: "dormant"</code> — never fabricates ROI.</li>
+             <li><strong>Why a model picker, not a fixed model:</strong> the content-writer + monitor ask the registry for the configured model id every call, so swapping models in Settings never touches call sites.</li>
+           </ul>
+         </details>
        </div>
      </Card>
 

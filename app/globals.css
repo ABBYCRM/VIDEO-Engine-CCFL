@@ -7,7 +7,12 @@
   --foreground: 210 40% 98%;
   --border: 217 33% 18%;
   --muted: 217 33% 12%;
+  --muted-foreground: 215 16% 65%;
   --primary: 190 95% 55%;
+  --popover: 222 47% 7%;
+  --popover-foreground: 210 40% 98%;
+  --accent: 217 33% 16%;
+  --ring: 190 95% 55%;
 }
 
 * { border-color: hsl(var(--border)); }

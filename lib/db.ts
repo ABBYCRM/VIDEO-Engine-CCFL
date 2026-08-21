@@ -60,6 +60,56 @@ CREATE TABLE IF NOT EXISTS avatar_views (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (avatar_id, view)
 );
+CREATE TABLE IF NOT EXISTS campaigns (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  website TEXT,
+  mission TEXT,
+  tone TEXT,
+  platform TEXT,
+  target_audience TEXT,
+  avatar_id TEXT,
+  background_id TEXT,
+  site_context TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS social_content_packages (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  package_json TEXT NOT NULL,   -- serialized SocialContentPackage (AI copy)
+  edited_json TEXT,             -- human-edited copy
+  edited_by TEXT,
+  approved INTEGER NOT NULL DEFAULT 0,
+  approved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_content_revisions (
+  id TEXT PRIMARY KEY,
+  package_id TEXT NOT NULL,
+  editor TEXT,
+  before_json TEXT NOT NULL,
+  after_json TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (package_id) REFERENCES social_content_packages(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS monitor_runs (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,           -- "global" | "campaign:<id>" | "provider:<id>"
+  status TEXT NOT NULL,          -- "dormant" | "ok" | "error"
+  model TEXT,
+  input_json TEXT,
+  output_json TEXT,
+  error TEXT,
+  started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at TEXT
+);
 `);
 
 // Migrations: tolerate older deployments that don't have the provider column.
