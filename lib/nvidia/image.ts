@@ -5,8 +5,8 @@ export type NvidiaImageModel =
   | "black-forest-labs/flux.2-klein-4b";
 
 export const NVIDIA_IMAGE_MODELS: Array<{ id: NvidiaImageModel; label: string; notes: string }> = [
-  { id: "black-forest-labs/flux.1-schnell", label: "FLUX.1 Schnell", notes: "Fast avatar drafts; 1–4 steps." },
-  { id: "black-forest-labs/flux.2-klein-4b", label: "FLUX.2 Klein 4B", notes: "Higher-quality fast generation; use when Schnell misses the brief." }
+  { id: "black-forest-labs/flux.1-schnell", label: "FLUX.1 Schnell", notes: "Fast text-to-image avatar drafts; 1–4 steps." },
+  { id: "black-forest-labs/flux.2-klein-4b", label: "FLUX.2 Klein 4B", notes: "Generation plus reference-image editing for consistent avatar views." }
 ];
 
 export function isNvidiaImageModel(v: unknown): v is NvidiaImageModel {
@@ -18,14 +18,7 @@ function endpoint(model: NvidiaImageModel) {
   return `https://ai.api.nvidia.com/v1/genai/black-forest-labs/${slug}`;
 }
 
-export async function generateAvatarImage(input: {
-  prompt: string;
-  model?: NvidiaImageModel;
-  seed?: number;
-}): Promise<{ base64: string; mimeType: "image/png"; model: NvidiaImageModel }> {
-  const model = input.model || "black-forest-labs/flux.1-schnell";
-  const prompt = input.prompt.trim().slice(0, 10000);
-  if (!prompt) throw new Error("Avatar prompt is required");
+async function callNvidia(model: NvidiaImageModel, body: Record<string, unknown>) {
   const response = await fetch(endpoint(model), {
     method: "POST",
     headers: {
@@ -33,13 +26,7 @@ export async function generateAvatarImage(input: {
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
-    body: JSON.stringify({
-      prompt,
-      width: 1024,
-      height: 1024,
-      seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0,
-      ...(model === "black-forest-labs/flux.1-schnell" ? { steps: 4 } : { steps: 4, mode: "Image Generation" })
-    }),
+    body: JSON.stringify(body),
     cache: "no-store"
   });
   if (!response.ok) {
@@ -49,5 +36,46 @@ export async function generateAvatarImage(input: {
   const json = await response.json() as { artifacts?: Array<{ base64?: string; finishReason?: string }> };
   const base64 = json.artifacts?.[0]?.base64;
   if (!base64) throw new Error("NVIDIA image API returned no image artifact");
+  return base64;
+}
+
+export async function generateAvatarImage(input: {
+  prompt: string;
+  model?: NvidiaImageModel;
+  seed?: number;
+}): Promise<{ base64: string; mimeType: "image/png"; model: NvidiaImageModel }> {
+  const model = input.model || "black-forest-labs/flux.1-schnell";
+  const prompt = input.prompt.trim().slice(0, 10000);
+  if (!prompt) throw new Error("Avatar prompt is required");
+  const base64 = await callNvidia(model, {
+    prompt,
+    width: 1024,
+    height: 1024,
+    seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0,
+    ...(model === "black-forest-labs/flux.1-schnell" ? { steps: 4 } : { steps: 4, mode: "Image Generation" })
+  });
+  return { base64, mimeType: "image/png", model };
+}
+
+export async function editAvatarImage(input: {
+  prompt: string;
+  imageBase64: string;
+  imageMimeType?: string;
+  seed?: number;
+}): Promise<{ base64: string; mimeType: "image/png"; model: "black-forest-labs/flux.2-klein-4b" }> {
+  const model = "black-forest-labs/flux.2-klein-4b" as const;
+  const prompt = input.prompt.trim().slice(0, 10000);
+  if (!prompt) throw new Error("Avatar edit prompt is required");
+  const mime = ["image/png", "image/jpeg", "image/webp"].includes(input.imageMimeType || "") ? input.imageMimeType! : "image/png";
+  const image = `data:${mime};base64,${input.imageBase64}`;
+  const base64 = await callNvidia(model, {
+    mode: "Image Editing",
+    prompt,
+    image: [image],
+    width: 1024,
+    height: 1024,
+    steps: 4,
+    seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0
+  });
   return { base64, mimeType: "image/png", model };
 }
