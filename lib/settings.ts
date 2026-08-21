@@ -3,7 +3,7 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { isNvidiaModelId } from "@/lib/nvidia";
 import { COMPOSIO_TOOLKITS, isComposioConfigured, getAuthConfigId } from "@/lib/composio/client";
-import { isImageProviderConfigured, getImageProvider, getImageModel } from "@/lib/avatar-generation/client";
+import { isImageProviderConfigured, getImageProvider, getImageModel, type ImageProvider } from "@/lib/avatar-generation/client";
 
 export type EngineSettings = {
   defaultProvider: ProviderId;
@@ -15,7 +15,7 @@ export type EngineSettings = {
   };
   nvidia: { keyConfigured: boolean; model: string };
   composio: { keyConfigured: boolean; toolkits: Array<{ id: string; authConfigConfigured: boolean }> };
-  image: { configured: boolean; provider: "gemini" | "openai" | "mock"; model: string };
+  image: { configured: boolean; provider: ImageProvider; model: string };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
 };
@@ -26,7 +26,6 @@ function getRaw(key: string): string | null {
 function setRaw(key: string, value: string) {
   db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run(key, value);
 }
-
 function isProviderId(v: unknown): v is ProviderId {
   return v === "veo" || v === "grok" || v === "a2e" || v === "hedra";
 }
@@ -38,11 +37,9 @@ export function getGeminiApiKey(): string {
   throw new Error("Gemini API key is not configured");
 }
 export function saveGeminiApiKey(value: string) { setRaw("gemini_api_key", encryptSecret(value.trim())); }
-
 export function saveXaiApiKey(value: string) { setRaw("xai_api_key", encryptSecret(value.trim())); }
 export function saveA2eApiKey(value: string) { setRaw("a2e_api_key", encryptSecret(value.trim())); }
 export function saveHedraApiKey(value: string) { setRaw("hedra_api_key", encryptSecret(value.trim())); }
-
 export function saveNvidiaApiKey(value: string) { setRaw("nvidia_api_key", encryptSecret(value.trim())); }
 
 export function getEngineSettings(): EngineSettings {
@@ -75,23 +72,14 @@ export function getEngineSettings(): EngineSettings {
   };
 }
 
-// Image generation provider/model for the avatar 4-view turnaround.
-export type ImageSettings = {
-  configured: boolean;
-  provider: "gemini" | "openai" | "mock";
-  model: string;
-};
+export type ImageSettings = { configured: boolean; provider: ImageProvider; model: string };
 export function getImageSettings(): ImageSettings {
-  return {
-    configured: isImageProviderConfigured(),
-    provider: getImageProvider(),
-    model: getImageModel()
-  };
+  return { configured: isImageProviderConfigured(), provider: getImageProvider(), model: getImageModel() };
 }
 
 export function saveEngineSettings(input: Partial<{
   defaultProvider: ProviderId;
-  model: string;           // legacy: kept for backward compat
+  model: string;
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
   veoModel: string;
@@ -103,7 +91,7 @@ export function saveEngineSettings(input: Partial<{
   if (input.defaultProvider && isProviderId(input.defaultProvider)) setRaw("default_provider", input.defaultProvider);
   if (input.resolution) setRaw("resolution", input.resolution);
   if (input.aspectRatio) setRaw("aspect_ratio", input.aspectRatio);
-  if (input.model) setRaw("veo_model", input.model); // legacy default
+  if (input.model) setRaw("veo_model", input.model);
   if (input.veoModel) setRaw("veo_model", input.veoModel);
   if (input.grokModel) setRaw("grok_model", input.grokModel);
   if (input.a2eModel) setRaw("a2e_model", input.a2eModel);
