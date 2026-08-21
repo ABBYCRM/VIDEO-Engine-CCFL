@@ -19,14 +19,16 @@ export type CreateJobInput = {
   aspectRatio?: "9:16" | "16:9";
   resolution?: "720p" | "1080p" | "4k";
   model?: string;
+  durationSeconds?: number;
   imageBase64?: string;
   imageMimeType?: string;
+  audioBase64?: string;
+  audioMimeType?: string;
 };
 
 function modelForProvider(p: ProviderId, requested: string | undefined): string {
   const def = PROVIDERS[p];
   if (requested && def.modelChoices.includes(requested)) return requested;
-  // Fall back to the per-provider saved model
   const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get(`${p}_model`) as { value: string } | undefined)?.value;
   return raw || def.defaultModel;
 }
@@ -50,7 +52,17 @@ export async function createJob(input: CreateJobInput) {
     } else if (provider === "grok") {
       operation = await grok.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else if (provider === "hedra") {
-      operation = await hedra.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+      operation = await hedra.startOneShot({
+        prompt,
+        model,
+        aspectRatio: aspect,
+        resolution,
+        durationSeconds: input.durationSeconds,
+        imageBase64: input.imageBase64,
+        imageMimeType: input.imageMimeType,
+        audioBase64: input.audioBase64,
+        audioMimeType: input.audioMimeType
+      });
     } else {
       operation = await a2e.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     }
@@ -74,15 +86,10 @@ export async function refreshJob(id: string) {
   if (!job.providerOperation) return job;
   try {
     let result: { done: false } | { done: true; outputPath: string };
-    if (job.provider === "grok") {
-      result = await grok.pollOneShot(job.providerOperation, id);
-    } else if (job.provider === "a2e") {
-      result = await a2e.pollOneShot(job.providerOperation, id, job.resolution);
-    } else if (job.provider === "hedra") {
-      result = await hedra.pollOneShot(job.providerOperation, id, job.resolution);
-    } else {
-      result = await veo.pollOneShot(job.providerOperation, id);
-    }
+    if (job.provider === "grok") result = await grok.pollOneShot(job.providerOperation, id);
+    else if (job.provider === "a2e") result = await a2e.pollOneShot(job.providerOperation, id, job.resolution);
+    else if (job.provider === "hedra") result = await hedra.pollOneShot(job.providerOperation, id, job.resolution);
+    else result = await veo.pollOneShot(job.providerOperation, id);
     if (!result.done) return job;
     db.prepare("UPDATE video_jobs SET status='succeeded',output_path=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(result.outputPath, id);
   } catch (error) {
