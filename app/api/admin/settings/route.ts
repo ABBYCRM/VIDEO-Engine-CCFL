@@ -5,6 +5,7 @@ import {
   saveA2eApiKey,
   saveEngineSettings,
   saveGeminiApiKey,
+  saveHedraApiKey,
   saveXaiApiKey
 } from "@/lib/settings";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
@@ -21,19 +22,20 @@ export async function PUT(req: Request) {
   if (body.geminiApiKey) saveGeminiApiKey(String(body.geminiApiKey));
   if (body.xaiApiKey) saveXaiApiKey(String(body.xaiApiKey));
   if (body.a2eApiKey) saveA2eApiKey(String(body.a2eApiKey));
+  if (body.hedraApiKey) saveHedraApiKey(String(body.hedraApiKey));
 
   if (body.resolution && !["720p","1080p","4k"].includes(body.resolution)) return NextResponse.json({ error: "Invalid resolution" }, { status: 400 });
   if (body.aspectRatio && !["9:16","16:9"].includes(body.aspectRatio)) return NextResponse.json({ error: "Invalid aspect ratio" }, { status: 400 });
 
   let defaultProvider: ProviderId | undefined;
   if (body.defaultProvider) {
-    if (!["veo", "grok", "a2e"].includes(body.defaultProvider)) return NextResponse.json({ error: "Invalid defaultProvider" }, { status: 400 });
+    if (!["veo", "grok", "a2e", "hedra"].includes(body.defaultProvider)) return NextResponse.json({ error: "Invalid defaultProvider" }, { status: 400 });
     defaultProvider = body.defaultProvider;
   }
 
   // Validate per-provider model choices
   const validatedModel: Record<string, string> = {};
-  for (const p of ["veo", "grok", "a2e"] as ProviderId[]) {
+  for (const p of ["veo", "grok", "a2e", "hedra"] as ProviderId[]) {
     const key = `${p}Model`;
     if (body[key]) {
       const m = String(body[key]);
@@ -51,7 +53,8 @@ export async function PUT(req: Request) {
     model: body.model,    // legacy compat
     veoModel: validatedModel.veoModel,
     grokModel: validatedModel.grokModel,
-    a2eModel: validatedModel.a2eModel
+    a2eModel: validatedModel.a2eModel,
+    hedraModel: validatedModel.hedraModel
   });
   return NextResponse.json(getEngineSettings());
 }

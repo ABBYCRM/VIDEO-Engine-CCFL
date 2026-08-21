@@ -8,6 +8,7 @@ export type EngineSettings = {
     veo: { keyConfigured: boolean; model: string };
     grok: { keyConfigured: boolean; model: string };
     a2e: { keyConfigured: boolean; model: string };
+    hedra: { keyConfigured: boolean; model: string };
   };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
@@ -21,7 +22,7 @@ function setRaw(key: string, value: string) {
 }
 
 function isProviderId(v: unknown): v is ProviderId {
-  return v === "veo" || v === "grok" || v === "a2e";
+  return v === "veo" || v === "grok" || v === "a2e" || v === "hedra";
 }
 
 export function getGeminiApiKey(): string {
@@ -34,6 +35,7 @@ export function saveGeminiApiKey(value: string) { setRaw("gemini_api_key", encry
 
 export function saveXaiApiKey(value: string) { setRaw("xai_api_key", encryptSecret(value.trim())); }
 export function saveA2eApiKey(value: string) { setRaw("a2e_api_key", encryptSecret(value.trim())); }
+export function saveHedraApiKey(value: string) { setRaw("hedra_api_key", encryptSecret(value.trim())); }
 
 export function getEngineSettings(): EngineSettings {
   const providerConfigured = (p: ProviderId): boolean => {
@@ -48,7 +50,8 @@ export function getEngineSettings(): EngineSettings {
     providers: {
       veo: { keyConfigured: providerConfigured("veo"), model: getRaw("veo_model") || PROVIDERS.veo.defaultModel },
       grok: { keyConfigured: providerConfigured("grok"), model: getRaw("grok_model") || PROVIDERS.grok.defaultModel },
-      a2e: { keyConfigured: providerConfigured("a2e"), model: getRaw("a2e_model") || PROVIDERS.a2e.defaultModel }
+      a2e: { keyConfigured: providerConfigured("a2e"), model: getRaw("a2e_model") || PROVIDERS.a2e.defaultModel },
+      hedra: { keyConfigured: providerConfigured("hedra"), model: getRaw("hedra_model") || PROVIDERS.hedra.defaultModel }
     },
     resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
     aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")
@@ -63,6 +66,7 @@ export function saveEngineSettings(input: Partial<{
   veoModel: string;
   grokModel: string;
   a2eModel: string;
+  hedraModel: string;
 }>) {
   if (input.defaultProvider && isProviderId(input.defaultProvider)) setRaw("default_provider", input.defaultProvider);
   if (input.resolution) setRaw("resolution", input.resolution);
@@ -71,4 +75,5 @@ export function saveEngineSettings(input: Partial<{
   if (input.veoModel) setRaw("veo_model", input.veoModel);
   if (input.grokModel) setRaw("grok_model", input.grokModel);
   if (input.a2eModel) setRaw("a2e_model", input.a2eModel);
+  if (input.hedraModel) setRaw("hedra_model", input.hedraModel);
 }

@@ -1,7 +1,7 @@
 import { campaignTemplates, type CampaignCategory } from "@/lib/prompts";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 
-const ALLOWED_PROVIDERS = new Set<ProviderId>(["veo", "grok", "a2e"]);
+const ALLOWED_PROVIDERS = new Set<ProviderId>(["veo", "grok", "a2e", "hedra"]);
 
 export function parseGenerationBody(body: any) {
   const category = body?.category as CampaignCategory;

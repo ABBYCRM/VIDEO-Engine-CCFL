@@ -15,6 +15,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DuckMark } from "@/components/duck-mark";
 
 const NAV: { href: string; label: string; icon: any; exact?: boolean }[] = [
   { href: "/", label: "Generate", icon: Clapperboard, exact: true },
@@ -41,10 +42,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3">
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400 text-slate-950">
-              <Clapperboard size={19} />
+            <DuckMark size={36} />
+            <span className="bg-gradient-to-r from-cyan-200 via-sky-200 to-violet-200 bg-clip-text text-transparent">
+              VIDEO-Engine
             </span>
-            VIDEO-Engine
+            <span className="rounded-full border border-slate-700 bg-slate-900/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+              CCFL
+            </span>
           </Link>
           <nav className="flex flex-wrap items-center gap-1">
             {NAV.map((n) => {

@@ -1,11 +1,11 @@
-// Provider-agnostic contract. Each adapter (veo, grok, a2e) implements the
-// start + poll + download flow. The job row stores which provider was used
-// so refreshJob() can route back to the right adapter on every poll.
+// Provider-agnostic contract. Each adapter (veo, grok, a2e, hedra) implements
+// the start + poll + download flow. The job row stores which provider was
+// used so refreshJob() can route back to the right adapter on every poll.
 
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 
-export type ProviderId = "veo" | "grok" | "a2e";
+export type ProviderId = "veo" | "grok" | "a2e" | "hedra";
 
 export const PROVIDERS: Record<ProviderId, {
   id: ProviderId;
@@ -16,6 +16,7 @@ export const PROVIDERS: Record<ProviderId, {
   supportsImage: boolean;
   envKey: string; // process.env fallback name
   settingsKey: string; // encrypted key slot in settings table
+  healthUrl: string; // GET ping for "green light" status indicator
 }> = {
   veo: {
     id: "veo",
@@ -29,7 +30,8 @@ export const PROVIDERS: Record<ProviderId, {
     durationCap: 8,
     supportsImage: true,
     envKey: "GEMINI_API_KEY",
-    settingsKey: "gemini_api_key"
+    settingsKey: "gemini_api_key",
+    healthUrl: "https://generativelanguage.googleapis.com/v1beta/models?key=__KEY__"
   },
   grok: {
     id: "grok",
@@ -42,7 +44,8 @@ export const PROVIDERS: Record<ProviderId, {
     durationCap: 15,
     supportsImage: true,
     envKey: "XAI_API_KEY",
-    settingsKey: "xai_api_key"
+    settingsKey: "xai_api_key",
+    healthUrl: "https://api.x.ai/v1/models"
   },
   a2e: {
     id: "a2e",
@@ -60,12 +63,30 @@ export const PROVIDERS: Record<ProviderId, {
     durationCap: 8,
     supportsImage: true,
     envKey: "A2E_API_KEY",
-    settingsKey: "a2e_api_key"
+    settingsKey: "a2e_api_key",
+    healthUrl: "https://video.a2e.ai/api/v1/models"
+  },
+  hedra: {
+    id: "hedra",
+    label: "Hedra (v3 multi-model)",
+    defaultModel: "hedra-character-3",
+    modelChoices: [
+      "hedra-character-3",
+      "hedra-character-2",
+      "fal/grok-video-t2v",
+      "fal/grok-video-i2v",
+      "together/hedra-avatar"
+    ],
+    durationCap: 10,
+    supportsImage: true,
+    envKey: "HEDRA_API_KEY",
+    settingsKey: "hedra_api_key",
+    healthUrl: "https://api.hedra.com/v3/models"
   }
 };
 
 export function listProviderIds(): ProviderId[] {
-  return ["veo", "grok", "a2e"];
+  return ["veo", "grok", "a2e", "hedra"];
 }
 
 export function getProviderKey(p: ProviderId): string {
@@ -84,6 +105,6 @@ export function getProviderModel(p: ProviderId): string {
 
 export function getDefaultProvider(): ProviderId {
   const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get("default_provider") as { value: string } | undefined)?.value;
-  if (raw === "grok" || raw === "a2e" || raw === "veo") return raw;
+  if (raw === "grok" || raw === "a2e" || raw === "hedra" || raw === "veo") return raw;
   return "veo";
 }

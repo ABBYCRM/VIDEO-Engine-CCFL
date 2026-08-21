@@ -7,6 +7,7 @@ import { PROVIDERS, getDefaultProvider, type ProviderId } from "@/lib/providers"
 import * as veo from "@/lib/veo";
 import * as grok from "@/lib/grok";
 import * as a2e from "@/lib/a2e";
+import * as hedra from "@/lib/hedra";
 
 export type CreateJobInput = {
   source: "admin" | "api";
@@ -48,6 +49,8 @@ export async function createJob(input: CreateJobInput) {
       operation = await veo.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else if (provider === "grok") {
       operation = await grok.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+    } else if (provider === "hedra") {
+      operation = await hedra.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else {
       operation = await a2e.startOneShot({ prompt, model, aspectRatio: aspect, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     }
@@ -75,6 +78,8 @@ export async function refreshJob(id: string) {
       result = await grok.pollOneShot(job.providerOperation, id);
     } else if (job.provider === "a2e") {
       result = await a2e.pollOneShot(job.providerOperation, id, job.resolution);
+    } else if (job.provider === "hedra") {
+      result = await hedra.pollOneShot(job.providerOperation, id, job.resolution);
     } else {
       result = await veo.pollOneShot(job.providerOperation, id);
     }
