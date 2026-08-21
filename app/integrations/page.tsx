@@ -161,6 +161,22 @@ function IntegrationsConsole() {
     } finally { setBusy(b => ({ ...b, [connectedAccountId]: false })); }
   }
 
+  async function syncFromComposio() {
+    setBusy(b => ({ ...b, _sync: true }));
+    try {
+      const r = await fetch("/api/integrations/composio/sync", { method: "POST" });
+      const d = await r.json();
+      if (d.error) {
+        pushFlash("failed", d.error);
+        setFlash({ level: "failed", msg: d.error });
+      } else {
+        pushFlash("success", `Mirrored ${d.mirrored} account${d.mirrored === 1 ? "" : "s"} from Composio`);
+        setFlash({ level: "success", msg: `Mirrored ${d.mirrored} account${d.mirrored === 1 ? "" : "s"} from Composio` });
+        await reload();
+      }
+    } finally { setBusy(b => ({ ...b, _sync: false })); }
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
@@ -214,9 +230,16 @@ function IntegrationsConsole() {
             <Card className="p-5">
               <div className="mb-4 flex items-center justify-between">
                 <div className="font-medium">Connected tools</div>
-                <Button variant="ghost" size="sm" onClick={reload}>
-                  <RefreshCcw size={14} className="mr-1" />Refresh list
-                </Button>
+                <div className="flex items-center gap-2">
+                  {overview.configured && (
+                    <Button variant="secondary" size="sm" onClick={syncFromComposio} disabled={busy._sync}>
+                      <RefreshCcw size={14} className={`mr-1 ${busy._sync ? "animate-spin" : ""}`} />Sync from Composio
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={reload}>
+                    <RefreshCcw size={14} className="mr-1" />Refresh
+                  </Button>
+                </div>
               </div>
 
               {!overview.configured && (

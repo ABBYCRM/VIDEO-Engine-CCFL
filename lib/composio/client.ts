@@ -70,21 +70,26 @@ export function getComposio(): Composio {
 // post content. requiresBusiness=true means the user's account on that
 // platform must be a Business/Creator account (Meta's rule, not ours).
 export const COMPOSIO_TOOLKITS = [
-  { id: "instagram",  label: "Instagram (Business / Creator)",  requiresBusiness: true,  publishable: true },
-  { id: "facebook",   label: "Facebook Pages",                  requiresBusiness: true,  publishable: true },
-  { id: "youtube",    label: "YouTube",                         requiresBusiness: false, publishable: true },
-  { id: "googleads",  label: "Google Ads",                      requiresBusiness: false, publishable: false },
-  { id: "metaads",    label: "Meta Ads",                        requiresBusiness: true,  publishable: false },
-  { id: "linkedin",   label: "LinkedIn Pages",                  requiresBusiness: true,  publishable: true },
-  { id: "twitter",    label: "X / Twitter",                     requiresBusiness: false, publishable: true },
-  { id: "tiktok",     label: "TikTok Ads",                      requiresBusiness: true,  publishable: true },
-  { id: "gmb",        label: "Google Business Profile",         requiresBusiness: true,  publishable: true },
-  { id: "slack",      label: "Slack",                           requiresBusiness: false, publishable: false },
-  { id: "notion",     label: "Notion",                          requiresBusiness: false, publishable: false },
-  { id: "hubspot",    label: "HubSpot",                         requiresBusiness: false, publishable: false },
-  { id: "mailchimp",  label: "Mailchimp",                       requiresBusiness: false, publishable: false },
-  { id: "resend",     label: "Resend (email)",                  requiresBusiness: false, publishable: true },
-  { id: "s3",         label: "S3 / Spaces",                     requiresBusiness: false, publishable: false }
+  { id: "instagram",      label: "Instagram (Business / Creator)",  requiresBusiness: true,  publishable: true },
+  { id: "facebook",       label: "Facebook Pages",                  requiresBusiness: true,  publishable: true },
+  { id: "youtube",        label: "YouTube",                         requiresBusiness: false, publishable: true },
+  { id: "googleads",      label: "Google Ads",                      requiresBusiness: false, publishable: false },
+  { id: "metaads",        label: "Meta Ads",                        requiresBusiness: true,  publishable: false },
+  { id: "linkedin",       label: "LinkedIn Pages",                  requiresBusiness: true,  publishable: true },
+  { id: "twitter",        label: "X / Twitter",                     requiresBusiness: false, publishable: true },
+  { id: "tiktok",         label: "TikTok Ads",                      requiresBusiness: true,  publishable: true },
+  { id: "gmb",            label: "Google Business Profile",         requiresBusiness: true,  publishable: true },
+  { id: "slack",          label: "Slack",                           requiresBusiness: false, publishable: false },
+  { id: "notion",         label: "Notion",                          requiresBusiness: false, publishable: false },
+  { id: "hubspot",        label: "HubSpot",                         requiresBusiness: false, publishable: false },
+  { id: "mailchimp",      label: "Mailchimp",                       requiresBusiness: false, publishable: false },
+  { id: "resend",         label: "Resend (email)",                  requiresBusiness: false, publishable: true },
+  { id: "s3",             label: "S3 / Spaces",                     requiresBusiness: false, publishable: false },
+  { id: "github",         label: "GitHub",                          requiresBusiness: false, publishable: false },
+  { id: "googlecalendar", label: "Google Calendar",                 requiresBusiness: false, publishable: false },
+  { id: "google_analytics", label: "Google Analytics",              requiresBusiness: false, publishable: false },
+  { id: "canva",          label: "Canva",                           requiresBusiness: false, publishable: true },
+  { id: "googlesuper",    label: "Google Workspace (Super Admin)",  requiresBusiness: false, publishable: false }
 ] as const;
 
 export type ComposioToolkitId = (typeof COMPOSIO_TOOLKITS)[number]["id"];
