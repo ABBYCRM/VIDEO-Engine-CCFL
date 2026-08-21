@@ -181,10 +181,10 @@ function IntegrationsConsole() {
     <main className="mx-auto max-w-6xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-              <Plug size={22} className="text-cyan-300" />
+              <Plug size={22} className="text-cyan-700" />
               Integrations
             </h1>
-            <p className="max-w-3xl text-slate-400">
+            <p className="max-w-3xl text-slate-600">
               Real OAuth via Composio. Set your Composio API key, paste the per-toolkit auth-config id from your Composio dashboard, and the
               Connect button round-trips the user through the provider and back to this page. Tokens never pass through this app — only the
               connected-account id.
@@ -194,8 +194,8 @@ function IntegrationsConsole() {
           {flash && (
             <div className={`mb-4 flex items-start gap-2 rounded-xl border p-3 text-sm ${
               flash.level === "success"
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                : "border-rose-500/40 bg-rose-500/10 text-rose-600"
             }`}>
               {flash.level === "success" ? <CircleCheck size={16} className="mt-0.5" /> : <CircleAlert size={16} className="mt-0.5" />}
               <span>{flash.msg}</span>
@@ -204,11 +204,11 @@ function IntegrationsConsole() {
 
           <Card className="mb-6 p-5">
             <div className="mb-3 flex items-center gap-2 font-medium">
-              <KeyRound size={18} className="text-cyan-300" />
+              <KeyRound size={18} className="text-cyan-700" />
               Composio project API key
             </div>
-            <p className="mb-3 text-sm text-slate-400">
-              The key from <a className="text-cyan-300 underline-offset-2 hover:underline" href="https://app.composio.dev" target="_blank" rel="noreferrer">app.composio.dev</a>{" "}
+            <p className="mb-3 text-sm text-slate-600">
+              The key from <a className="text-cyan-700 underline-offset-2 hover:underline" href="https://app.composio.dev" target="_blank" rel="noreferrer">app.composio.dev</a>{" "}
               → Settings → API Keys. Stored encrypted (AES-256-GCM). The "Re-check live status" dot in the next card confirms the key is valid.
             </p>
             <div className="flex gap-2">
@@ -243,7 +243,7 @@ function IntegrationsConsole() {
               </div>
 
               {!overview.configured && (
-                <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">
                   Set your Composio API key above to enable connections.
                 </div>
               )}
@@ -268,17 +268,17 @@ function IntegrationsConsole() {
                     : t.status;
                   const canConnect = overview.configured && t.authConfigConfigured;
                   return (
-                    <div key={t.id} className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4 md:grid-cols-[1.4fr_1fr]">
+                    <div key={t.id} className="grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-4 md:grid-cols-[1.4fr_1fr]">
                       <div>
                         <div className="flex items-center gap-2">
                           <div className="font-medium">{t.label}</div>
                           <StatusDot state={state} label={stateLabel} />
-                          {t.requiresBusiness && <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300">Business / Creator</span>}
-                          {t.publishable && <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-cyan-300">publishable</span>}
+                          {t.requiresBusiness && <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-800">Business / Creator</span>}
+                          {t.publishable && <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-cyan-700">publishable</span>}
                         </div>
                         {t.connectedAccountId && (
                           <div className="mt-1 text-[11px] text-slate-500">
-                            connected_account_id: <code className="rounded bg-slate-900 px-1.5 py-0.5 text-slate-300">{t.connectedAccountId}</code>
+                            connected_account_id: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">{t.connectedAccountId}</code>
                             {t.lastSyncAt ? ` · last sync ${new Date(t.lastSyncAt).toLocaleString()}` : ""}
                           </div>
                         )}

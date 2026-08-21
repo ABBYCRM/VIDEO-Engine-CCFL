@@ -2,26 +2,135 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+ * VIDEO-Engine CCFL — Light + Glassmorphism design system
+ * ------------------------------------------------------------
+ * Default: light theme with warm off-white base + single dark
+ * accent (#0F172A slate) + a single brand accent (electric cyan).
+ * Glass surfaces: white/80 + backdrop-blur for floating panels
+ * (the new AppShell dropdown menu, modals, the login card).
+ * Dark mode is preserved for any page that opts in with the
+ * `dark` class on its body.
+ * ============================================================ */
+
 :root {
-  --background: 222 47% 5%;
-  --foreground: 210 40% 98%;
-  --border: 217 33% 18%;
-  --muted: 217 33% 12%;
-  --muted-foreground: 215 16% 65%;
-  --primary: 190 95% 55%;
-  --popover: 222 47% 7%;
+  /* Surfaces */
+  --background:        40 30% 98%;             /* warm off-white */
+  --foreground:        222 47% 11%;            /* near-black ink */
+  --muted:             40 20% 94%;             /* paper */
+  --muted-foreground:  222 16% 42%;            /* secondary text */
+  --border:            222 20% 86%;            /* hairline */
+
+  /* Brand */
+  --primary:           188 90% 38%;            /* deeper cyan for contrast on light */
+  --primary-foreground: 0 0% 100%;
+
+  /* Glass surfaces — for the floating nav, modals */
+  --glass:             0 0% 100%;
+  --glass-border:      222 30% 80%;
+
+  /* Popovers / menus */
+  --popover:           0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --accent:            40 25% 95%;
+  --ring:              188 90% 50%;
+
+  /* Status */
+  --success:           152 60% 38%;
+  --warning:           32  95% 44%;
+  --danger:            0   72% 51%;
+}
+
+.dark {
+  --background:        222 47% 5%;
+  --foreground:        210 40% 98%;
+  --muted:             217 33% 12%;
+  --muted-foreground:  215 16% 65%;
+  --border:            217 33% 18%;
+  --primary:           190 95% 55%;
+  --popover:           222 47% 7%;
   --popover-foreground: 210 40% 98%;
-  --accent: 217 33% 16%;
-  --ring: 190 95% 55%;
+  --accent:            217 33% 16%;
+  --ring:              190 95% 55%;
 }
 
 * { border-color: hsl(var(--border)); }
-body {
+
+html, body {
   min-height: 100vh;
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, hsla(188, 90%, 70%, 0.18), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 100% 0%,  hsla(265, 80%, 70%, 0.12), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, hsla(40, 60%, 70%, 0.12), transparent 60%),
+    hsl(var(--background));
+  background-attachment: fixed;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.dark body {
   background:
     radial-gradient(circle at 15% -10%, rgba(25, 211, 255, .16), transparent 28rem),
     radial-gradient(circle at 100% 0%, rgba(99, 102, 241, .12), transparent 26rem),
     hsl(var(--background));
-  color: hsl(var(--foreground));
 }
-input, textarea, select { color-scheme: dark; }
+
+input, textarea, select { color-scheme: light; }
+.dark input, .dark textarea, .dark select { color-scheme: dark; }
+
+/* ============================================================
+ * Glassmorphism utility classes
+ * ------------------------------------------------------------
+ * Reusable: .glass-card (subtle frosted surface for floating
+ * panels), .glass-pill (small chips like the brand mark in the
+ * nav), .glass-divider (the hairline under the floating nav).
+ * All real backdrop-blur, all low-opacity fills, all thin
+ * borders — the same recipe iOS / macOS / Linear / Raycast use.
+ * ============================================================ */
+
+@layer components {
+  .glass {
+    background-color: hsla(var(--glass) / 0.72);
+    backdrop-filter: saturate(180%) blur(20px) brightness(105%);
+    -webkit-backdrop-filter: saturate(180%) blur(20px) brightness(105%);
+    border: 1px solid hsla(var(--glass-border) / 0.6);
+  }
+  .glass-strong {
+    background-color: hsla(var(--glass) / 0.88);
+    backdrop-filter: saturate(180%) blur(28px) brightness(108%);
+    -webkit-backdrop-filter: saturate(180%) blur(28px) brightness(108%);
+    border: 1px solid hsla(var(--glass-border) / 0.7);
+  }
+  .glass-card {
+    @apply glass rounded-2xl;
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.7) inset,
+      0 4px 24px -8px rgba(15, 23, 42, 0.08),
+      0 8px 32px -16px rgba(15, 23, 42, 0.06);
+  }
+  .glass-pill {
+    @apply glass rounded-full;
+  }
+  .glass-divider {
+    background: linear-gradient(90deg, transparent, hsla(var(--border) / 0.7), transparent);
+  }
+  .dark .glass-card {
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 4px 24px -8px rgba(0, 0, 0, 0.4),
+      0 8px 32px -16px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Status pill helpers (used across the app) */
+@layer components {
+  .status-dot-green  { background-color: hsl(152 60% 38%); }
+  .status-dot-amber  { background-color: hsl(32  95% 44%); }
+  .status-dot-red    { background-color: hsl(0   72% 51%); }
+  .status-dot-grey   { background-color: hsl(222 16% 65%); }
+}

@@ -39,18 +39,18 @@ export default function ComponentsDemoPage() {
         <main className="mx-auto max-w-5xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-              <Sparkles size={22} className="text-cyan-300" />
+              <Sparkles size={22} className="text-cyan-700" />
               Component demo
             </h1>
-            <p className="max-w-3xl text-slate-400">
-              The <code className="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-300">ExpandableTabs</code> and <code className="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-300">ModelSelector</code> components
+            <p className="max-w-3xl text-slate-600">
+              The <code className="rounded bg-slate-100 px-1.5 py-0.5 text-cyan-700">ExpandableTabs</code> and <code className="rounded bg-slate-100 px-1.5 py-0.5 text-cyan-700">ModelSelector</code> components
               in action. Click a tab to expand the label; click the model chip to open the picker.
             </p>
           </div>
 
           <Card title="Default theme">
             <div className="flex flex-col gap-4">
-              <p className="text-sm text-slate-400">Default active color: <code>text-primary</code> (cyan in the project's dark theme).</p>
+              <p className="text-sm text-slate-600">Default active color: <code>text-primary</code> (cyan in the project's dark theme).</p>
               <ExpandableTabs tabs={dashboardTabs} />
             </div>
           </Card>
@@ -58,7 +58,7 @@ export default function ComponentsDemoPage() {
           <div className="mt-6">
             <Card title="Custom active color">
               <div className="flex flex-col gap-4">
-                <p className="text-sm text-slate-400">Override the active tab color via the <code>activeColor</code> prop.</p>
+                <p className="text-sm text-slate-600">Override the active tab color via the <code>activeColor</code> prop.</p>
                 <ExpandableTabs
                   tabs={profileTabs}
                   activeColor="text-blue-400"
@@ -71,13 +71,13 @@ export default function ComponentsDemoPage() {
           <div className="mt-6">
             <Card title="AI Model selector">
               <div className="flex flex-col gap-4">
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-600">
                   Cursor-style AI model picker. Click the chip to open the menu; hover an option for the
                   detail panel; click the pencil to edit effort / context / fast / thinking.
                 </p>
                 <div className="flex items-center gap-3">
                   <ModelSelectorKit value={aiSelection} onValueChange={setAiSelection} />
-                  <code className="rounded bg-slate-900 px-2 py-1 text-xs text-slate-300">
+                  <code className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-800">
                     {JSON.stringify(aiSelection)}
                   </code>
                 </div>
@@ -87,7 +87,7 @@ export default function ComponentsDemoPage() {
 
           <div className="mt-6">
             <Card title="Integration notes">
-              <ul className="list-disc space-y-2 pl-5 text-sm text-slate-300">
+              <ul className="list-disc space-y-2 pl-5 text-sm text-slate-800">
                 <li>Project must be a shadcn-style Next.js app with TypeScript + Tailwind — already satisfied.</li>
                 <li>CSS variables for <code>--background</code>, <code>--foreground</code>, <code>--border</code>, <code>--muted</code>, <code>--primary</code> are defined in <code>app/globals.css</code>.</li>
                 <li>Required runtime deps: <code>framer-motion</code>, <code>usehooks-ts</code>, <code>lucide-react</code> — all installed.</li>

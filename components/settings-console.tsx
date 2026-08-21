@@ -161,19 +161,19 @@ export function SettingsConsole(){
  }
  async function revoke(id:string){ await fetch(`/api/admin/tokens/${id}`, { method:"DELETE" }); load(); }
 
- if(!settings) return <div className="p-8 text-slate-400">Loading settings…</div>;
+ if(!settings) return <div className="p-8 text-slate-600">Loading settings…</div>;
 
  const ALL_PROVIDERS: ProviderId[] = ["veo","grok","a2e","hedra"];
 
  return <main className="mx-auto max-w-5xl px-4 py-8">
    <h1 className="text-3xl font-semibold">Settings & API access</h1>
-   <p className="mt-2 text-slate-400">All provider keys are encrypted server-side with AES-256-GCM. Generated VIDEO-Engine tokens are stored only as SHA-256 hashes.</p>
+   <p className="mt-2 text-slate-600">All provider keys are encrypted server-side with AES-256-GCM. Generated VIDEO-Engine tokens are stored only as SHA-256 hashes.</p>
 
    <div className="mt-7 grid gap-6">
 
      <Card className="p-5">
        <div className="mb-4 flex items-center justify-between">
-         <div className="flex items-center gap-2 font-medium"><Shield size={18} className="text-cyan-300"/>Default video provider</div>
+         <div className="flex items-center gap-2 font-medium"><Shield size={18} className="text-cyan-700"/>Default video provider</div>
          <Button variant="ghost" size="sm" onClick={loadLive} disabled={liveBusy}>
            <RefreshCcw size={14} className={liveBusy ? "mr-1 animate-spin" : "mr-1"}/>Re-check live status
          </Button>
@@ -188,12 +188,12 @@ export function SettingsConsole(){
            const dot = L ? (L.configured && L.live ? "green" : L.configured ? "red" : "amber") : "unknown";
            return (
              <button key={p} onClick={() => setDefaultProvider(p)}
-               className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-cyan-400 bg-cyan-400/10" : "border-slate-800 bg-slate-950/60 hover:border-slate-600"}`}>
-               <I className={active ? "text-cyan-300" : "text-slate-400"} />
+               className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-cyan-400 bg-cyan-500/10" : "border-slate-200 bg-white/80 hover:border-slate-600"}`}>
+               <I className={active ? "text-cyan-700" : "text-slate-600"} />
                <div className="flex-1">
                  <div className="flex items-center gap-2">
                    <div className="font-medium">{M.label}</div>
-                   {configured && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">configured</span>}
+                   {configured && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-700">configured</span>}
                  </div>
                  <div className="mt-0.5 text-xs text-slate-500">{active ? "Default for new jobs" : "Click to make default"}</div>
                </div>
@@ -205,7 +205,7 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center gap-2 font-medium"><KeyRound size={18} className="text-cyan-300"/>Provider credentials</div>
+       <div className="mb-4 flex items-center gap-2 font-medium"><KeyRound size={18} className="text-cyan-700"/>Provider credentials</div>
        <div className="grid gap-5">
          {ALL_PROVIDERS.map((p) => {
            const M = providerMeta[p];
@@ -215,12 +215,12 @@ export function SettingsConsole(){
            const L = live[p];
            const dot = L ? (L.configured && L.live ? "green" : L.configured ? "red" : "amber") : "unknown";
            return (
-             <div key={p} className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+             <div key={p} className="grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-4">
                <div className="flex items-center justify-between">
                  <div className="flex items-center gap-2">
-                   <I size={18} className="text-cyan-300" />
+                   <I size={18} className="text-cyan-700" />
                    <div className="font-medium">{M.label}</div>
-                   {configured && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">configured</span>}
+                   {configured && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-700">configured</span>}
                  </div>
                  <LiveDot state={dot} latency={L?.latencyMs ?? null} status={L?.status ?? null} error={L?.error ?? null} compact />
                </div>
@@ -232,7 +232,7 @@ export function SettingsConsole(){
                  </label>
                  <label className="grid gap-2 text-sm">
                    <span>Model</span>
-                   <select className="h-11 rounded-xl border border-slate-700 bg-slate-950 px-3" value={providerModels[p]} onChange={e => setProviderModels(m => ({ ...m, [p]: e.target.value }))}>
+                   <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={providerModels[p]} onChange={e => setProviderModels(m => ({ ...m, [p]: e.target.value }))}>
                      {M.choices.map(c => <option key={c} value={c}>{c}</option>)}
                    </select>
                  </label>
@@ -245,7 +245,7 @@ export function SettingsConsole(){
 
      <Card className="p-5">
        <div className="mb-4 flex items-center justify-between">
-         <div className="flex items-center gap-2 font-medium"><Cpu size={18} className="text-cyan-300"/>NVIDIA Content Intelligence + Performance Monitor</div>
+         <div className="flex items-center gap-2 font-medium"><Cpu size={18} className="text-cyan-700"/>NVIDIA Content Intelligence + Performance Monitor</div>
          <LiveDot
            state={
              live.nvidia ? (live.nvidia.configured && live.nvidia.live ? "green" : live.nvidia.configured ? "red" : "amber") : "unknown"
@@ -256,22 +256,22 @@ export function SettingsConsole(){
            compact
          />
        </div>
-       <p className="mb-3 text-sm text-slate-400">
+       <p className="mb-3 text-sm text-slate-600">
          NVIDIA writes the social-media package (hook / captions / hashtags / platform variants) and — once ad metrics exist — feeds winning copy + prompts back into the engine. Not a video renderer; lives alongside Veo / Grok / A2E / Hedra.
        </p>
-       <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-4">
          <div className="grid gap-3 md:grid-cols-2">
            <label className="grid gap-2 text-sm">
              <span>NVIDIA NIM API key</span>
              <Input type="password" placeholder="nvapi-… paste to replace" onChange={e => setNvidiaKey(e.target.value)} />
              <span className="text-[11px] text-slate-500">
-               Get one at <a className="text-cyan-300 underline-offset-2 hover:underline" href="https://build.nvidia.com" target="_blank" rel="noreferrer">build.nvidia.com</a>. Stored encrypted AES-256-GCM.
+               Get one at <a className="text-cyan-700 underline-offset-2 hover:underline" href="https://build.nvidia.com" target="_blank" rel="noreferrer">build.nvidia.com</a>. Stored encrypted AES-256-GCM.
              </span>
            </label>
            <div className="grid gap-2 text-sm">
              <span>Model</span>
              {nvidiaModels.length === 0 ? (
-               <div className="grid h-11 place-items-center rounded-xl border border-slate-700 bg-slate-950 text-xs text-slate-500">
+               <div className="grid h-11 place-items-center rounded-xl border border-slate-200 bg-white text-xs text-slate-500">
                  Loading models…
                </div>
              ) : (
@@ -281,19 +281,19 @@ export function SettingsConsole(){
                  onValueChange={setNvidiaSelection}
                  aria-label="NVIDIA NIM model"
                >
-                 <ModelSelectorTrigger className="min-h-11 w-full justify-between rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm">
+                 <ModelSelectorTrigger className="min-h-11 w-full justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm">
                    <ModelSelectorValue className="text-sm" />
                  </ModelSelectorTrigger>
                  <ModelSelectorContent side="bottom" />
                </ModelSelector>
              )}
              <span className="text-[11px] text-slate-500">
-               Currently selected: <code className="rounded bg-slate-900 px-1.5 py-0.5 text-cyan-200">{nvidiaSelection.id}</code>
+               Currently selected: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-cyan-700">{nvidiaSelection.id}</code>
              </span>
            </div>
          </div>
-         <details className="text-xs text-slate-400">
-           <summary className="flex cursor-pointer items-center gap-1 text-slate-300 hover:text-white"><BookOpen size={12}/>How NVIDIA is used in this build</summary>
+         <details className="text-xs text-slate-600">
+           <summary className="flex cursor-pointer items-center gap-1 text-slate-800 hover:text-white"><BookOpen size={12}/>How NVIDIA is used in this build</summary>
            <ul className="ml-4 mt-2 list-disc space-y-1">
              <li><strong>Content Intelligence:</strong> writes a structured <code>SocialContentPackage</code> from a campaign's website + tone + platform + selected video. Hook, primaryText, shortCaption, longCaption, reelTitle, cta, hashtags, platform variants. Validated by schema before persisting.</li>
              <li><strong>Performance Monitor:</strong> analyzes ad-account metrics when they exist. Findings + recommendations cite the metric IDs. When no metrics are available, returns <code>status: "dormant"</code> — never fabricates ROI.</li>
@@ -307,12 +307,12 @@ export function SettingsConsole(){
        <div className="mb-4 font-medium">Default output</div>
        <div className="grid gap-4 md:grid-cols-3">
          <label className="grid gap-2 text-sm"><span>Resolution</span>
-           <select className="h-11 rounded-xl border border-slate-700 bg-slate-950 px-3" value={resolution} onChange={e=>setResolution(e.target.value)}>
+           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={resolution} onChange={e=>setResolution(e.target.value)}>
              <option>720p</option><option>1080p</option><option>4k</option>
            </select>
          </label>
          <label className="grid gap-2 text-sm"><span>Aspect ratio</span>
-           <select className="h-11 rounded-xl border border-slate-700 bg-slate-950 px-3" value={aspectRatio} onChange={e=>setAspectRatio(e.target.value)}>
+           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={aspectRatio} onChange={e=>setAspectRatio(e.target.value)}>
              <option>9:16</option><option>16:9</option>
            </select>
          </label>
@@ -328,11 +328,11 @@ export function SettingsConsole(){
          <Input value={name} onChange={e=>setName(e.target.value)} placeholder="Token label (e.g. n8n pipeline)"/>
          <Button onClick={createToken} disabled={!name}>Create token</Button>
        </div>
-       {newToken && <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Copy this token now — it is shown only once. <code className="ml-2 rounded bg-slate-900 px-2 py-1 text-amber-100">{newToken}</code></div>}
+       {newToken && <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">Copy this token now — it is shown only once. <code className="ml-2 rounded bg-slate-100 px-2 py-1 text-amber-100">{newToken}</code></div>}
        <div className="mt-4 grid gap-2">
          {tokens.length === 0 && <div className="text-sm text-slate-500">No tokens yet.</div>}
          {tokens.map(t => (
-           <div key={t.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-sm">
+           <div key={t.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 p-3 text-sm">
              <div>
                <div className="font-medium">{t.name}</div>
                <div className="text-xs text-slate-500">prefix {t.prefix}… · created {new Date(t.createdAt).toLocaleString()} {t.lastUsedAt ? `· last used ${new Date(t.lastUsedAt).toLocaleString()}` : ""} {t.revokedAt ? "· revoked" : ""}</div>
@@ -376,7 +376,7 @@ function LiveDot({
   const tip = error ? `${label} · ${error}` : (status ? `${label} · HTTP ${status}` : label) + (latency != null ? ` · ${latency}ms` : "");
   const size = compact ? 12 : 14;
   return (
-    <span title={tip} className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-400">
+    <span title={tip} className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-600">
       <span className="relative inline-grid place-items-center" style={{ width: size, height: size }}>
         <span
           aria-hidden

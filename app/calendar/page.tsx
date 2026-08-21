@@ -16,13 +16,13 @@ export default function CalendarPage() {
         <main className="mx-auto max-w-7xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="text-3xl font-semibold tracking-tight">Publishing Calendar</h1>
-            <p className="max-w-3xl text-slate-400">
+            <p className="max-w-3xl text-slate-600">
               Every completed video can be queued here with approval, auto-post, or dormant monitoring status.
               The auto-post worker is idempotent — retries never produce duplicate social posts.
             </p>
           </div>
           <Card title="Schedule" actions={<div className="flex gap-2"><Button>Add post</Button><Button variant="secondary">Toggle auto-post</Button></div>}>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-600">
               Approve → schedule → publish. Use drag-and-drop on desktop; on mobile the agenda list is
               primary. Unapproved items never auto-post.
             </p>
@@ -31,20 +31,20 @@ export default function CalendarPage() {
             <Card title="Weekly Queue">
               <div className="grid gap-3">
                 {events.map((event) => (
-                  <div key={event.item} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <div key={event.item} className="rounded-xl border border-slate-200 bg-white/70 p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className="font-medium text-slate-100">{event.item}</p>
                         <p className="text-xs text-slate-500">{event.day} · {event.network}</p>
                       </div>
-                      <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200">{event.status}</span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{event.status}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </Card>
             <Card title="Approval States">
-              <ul className="list-disc space-y-2 pl-5 text-sm text-slate-300">
+              <ul className="list-disc space-y-2 pl-5 text-sm text-slate-800">
                 <li>Draft</li>
                 <li>Pending approval</li>
                 <li>Approved</li>

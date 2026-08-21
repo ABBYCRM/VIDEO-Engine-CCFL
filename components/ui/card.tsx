@@ -11,7 +11,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     return (
       <div
         ref={ref}
-        className={cn("rounded-2xl border border-slate-800 bg-slate-950/60 p-5", className)}
+        className={cn("rounded-2xl border border-slate-200 bg-white/80 p-5", className)}
         {...props}
       >
         {(title || actions) && (

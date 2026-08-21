@@ -16,7 +16,7 @@ export function DuckMark({ size = 36, className, rounded = true }: Props) {
         rounded ? "rounded-xl" : "",
         className || ""
       ].join(" ")}
-      style={{ width: size, height: size, background: "linear-gradient(135deg,#0B1220 0%,#0F172A 55%,#1E1B4B 100%)" }}
+      style={{ width: size, height: size, background: "linear-gradient(135deg,#0B1220 0%,#0F172A 55%,#1E1B4B 100%)", boxShadow: "0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 18px -8px rgba(15,23,42,0.25)" }}
     >
       <svg
         viewBox="0 0 256 256"

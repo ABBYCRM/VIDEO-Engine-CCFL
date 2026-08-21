@@ -14,10 +14,10 @@ export default function CampaignsPage() {
         <main className="mx-auto max-w-7xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="text-3xl font-semibold tracking-tight">Campaigns</h1>
-            <p className="max-w-3xl text-slate-400">
+            <p className="max-w-3xl text-slate-600">
               Build a campaign intent: website, category, avatar, tone, platform, background, mission. The planner
               compiles the user-supplied fields into a single 8-second shot prompt that respects the project's
-              <span className="mx-1 rounded bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-cyan-300">ONE CONTINUOUS SHOT ONLY</span>
+              <span className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-cyan-700">ONE CONTINUOUS SHOT ONLY</span>
               contract.
             </p>
           </div>
@@ -26,33 +26,33 @@ export default function CampaignsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Website</span>
-                  <input className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm" placeholder="https://caseclosedfl.com" />
+                  <input className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" placeholder="https://caseclosedfl.com" />
                 </label>
                 <label className="space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</span>
-                  <select className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm">
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
                     {presets.map((preset) => <option key={preset.id}>{preset.label}</option>)}
                   </select>
                 </label>
                 <label className="space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Avatar</span>
-                  <select className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm">
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
                     {avatars.map((avatar) => <option key={avatar.id}>{avatar.name}</option>)}
                   </select>
                 </label>
                 <label className="space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tone</span>
-                  <select className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm">
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
                     {tones.map((tone) => <option key={tone}>{tone}</option>)}
                   </select>
                 </label>
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mission</span>
-                  <textarea className="min-h-32 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm" defaultValue="Create a direct-response PI campaign for rideshare passengers who were injured and need a case review." />
+                  <textarea className="min-h-32 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" defaultValue="Create a direct-response PI campaign for rideshare passengers who were injured and need a case review." />
                 </label>
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Background</span>
-                  <select className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm">
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
                     {backgrounds.map((bg) => <option key={bg.id}>{bg.name}</option>)}
                   </select>
                 </label>
@@ -60,7 +60,7 @@ export default function CampaignsPage() {
             </Card>
 
             <Card title="Provider Stack">
-              <ul className="list-disc space-y-2 pl-5 text-sm text-slate-300">
+              <ul className="list-disc space-y-2 pl-5 text-sm text-slate-800">
                 <li>Video generation: Gemini Veo · xAI Grok Imagine · A2E AI router (single 8-second shot)</li>
                 <li>Avatar animation / lip sync: Hedra Character 3 / Omnia (provider slot, not yet wired)</li>
                 <li>Image generation providers: Gemini, Grok, A2E, Hedra slot</li>

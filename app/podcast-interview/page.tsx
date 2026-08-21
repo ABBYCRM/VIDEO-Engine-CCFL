@@ -10,7 +10,7 @@ export default function PodcastInterviewPage() {
         <main className="mx-auto max-w-5xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="text-3xl font-semibold tracking-tight">Podcast Interview Style</h1>
-            <p className="max-w-3xl text-slate-400">
+            <p className="max-w-3xl text-slate-600">
               VIRAL_VERTICAL_COMMENTARY_COLLAGE — upload a top video and generate the lower talking-head layer
               as one continuous 8-second shot. See <code>lib/prompt-rag/styles/podcast-interview-style.md</code>.
             </p>
@@ -19,11 +19,11 @@ export default function PodcastInterviewPage() {
             <form className="grid gap-4">
               <label className="grid gap-2 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top video (optional)</span>
-                <input type="file" accept="video/*" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm" />
+                <input type="file" accept="video/*" className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" />
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top / bottom relationship</span>
-                <select defaultValue="mixed" className="h-11 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm">
+                <select defaultValue="mixed" className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm">
                   <option value="related">Related</option>
                   <option value="unrelated">Unrelated</option>
                   <option value="ironic">Ironic contrast</option>
@@ -32,11 +32,11 @@ export default function PodcastInterviewPage() {
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Editorial hook (3–8 words)</span>
-                <input placeholder="3–8 word hook" className="h-11 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm" />
+                <input placeholder="3–8 word hook" className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm" />
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bottom-speaker mission</span>
-                <textarea rows={6} className="min-h-32 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm" />
+                <textarea rows={6} className="min-h-32 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" />
               </label>
               <div className="flex items-center justify-end">
                 <Button type="submit">Generate Podcast Interview Style</Button>
@@ -44,7 +44,7 @@ export default function PodcastInterviewPage() {
             </form>
           </Card>
           <Card title="Style defaults">
-            <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-white p-4 text-xs text-slate-100">
 {`HOOK_TEXT_INTENSITY=85
 CAPTION_DENSITY=65
 EDIT_FREQUENCY=55

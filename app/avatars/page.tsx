@@ -114,16 +114,16 @@ export default function AvatarsPage() {
         <main className="mx-auto max-w-7xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-              <Users size={24} className="text-cyan-300" />
+              <Users size={24} className="text-cyan-700" />
               Avatars
             </h1>
-            <p className="max-w-3xl text-slate-400">
+            <p className="max-w-3xl text-slate-600">
               All campaign categories reuse the same canonical avatar identity. Before an avatar can be used,
               generate and store the required 4-view turnaround render: front, left side, right side, back.
               Click any reference slot to upload a new image — saved immediately to <code>public/avatars/&lt;id&gt;/</code>.
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200/90">
-              <ShieldCheck size={14} className="text-amber-300" />
+            <div className="mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800/90">
+              <ShieldCheck size={14} className="text-amber-800" />
               <strong>Wardrobe rule:</strong> The default female spokesperson never uses beachwear. The canonical
               campaign turnaround must use a tailored blazer / professional top / slacks. Beach / swimwear / lifestyle
               photos can serve as identity reference but are not the canonical turnaround.
@@ -131,7 +131,7 @@ export default function AvatarsPage() {
           </div>
 
           <div className="mb-6 flex items-center justify-between">
-            <div className="text-sm text-slate-400">
+            <div className="text-sm text-slate-600">
               {loading ? "Loading…" : `${avatars.length} avatar${avatars.length === 1 ? "" : "s"}`}
             </div>
             <Button variant="secondary" onClick={load} disabled={loading}>
@@ -160,7 +160,7 @@ export default function AvatarsPage() {
 
           {avatars.length === 0 && !loading && (
             <Card title="No avatars yet">
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-600">
                 Avatar CRUD is wired and persisted to SQLite. The default two seed entries should appear after
                 the first request. If you see this, click <em>Refresh</em>.
               </p>
@@ -201,8 +201,8 @@ function AvatarCard({
           <span
             className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
               turnaroundReady
-                ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                : "border border-slate-700 bg-slate-800 text-slate-400"
+                ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700"
+                : "border border-slate-200 bg-slate-100 text-slate-600"
             }`}
           >
             {turnaroundReady ? "ready" : "draft"}
@@ -214,9 +214,9 @@ function AvatarCard({
       }
     >
       {wardrobeWarning && (
-        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800">
           <div className="flex items-start gap-2">
-            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-800" />
             <div className="flex-1">
               <strong>Identity reference loaded · wardrobe must be regenerated.</strong> The
               supplied photo is the identity reference only (beach environment, swimwear).
@@ -227,7 +227,7 @@ function AvatarCard({
             </div>
           </div>
           {avatar.referenceImageNote && (
-            <p className="ml-5 text-amber-200/80 italic">{avatar.referenceImageNote}</p>
+            <p className="ml-5 text-amber-800/80 italic">{avatar.referenceImageNote}</p>
           )}
           {avatar.wardrobeRegenerationPrompt && (
             <RegenerationPromptBlock prompt={avatar.wardrobeRegenerationPrompt} />
@@ -243,14 +243,14 @@ function AvatarCard({
             <img
               src={assetUrl(avatar.id, "reference")}
               alt={`${avatar.name} identity reference`}
-              className="aspect-[3/4] w-full rounded-xl border border-slate-800 object-cover"
+              className="aspect-[3/4] w-full rounded-xl border border-slate-200 object-cover"
             />
           ) : (
-            <div className="grid aspect-[3/4] w-full place-items-center rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3 text-center text-xs text-amber-200">
+            <div className="grid aspect-[3/4] w-full place-items-center rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3 text-center text-xs text-amber-800">
               <div>
-                <ImageOff size={20} className="mx-auto mb-1 text-amber-300" />
+                <ImageOff size={20} className="mx-auto mb-1 text-amber-800" />
                 <div className="font-semibold">Missing</div>
-                <div className="mt-1 text-amber-200/70">Professional wardrobe identity required</div>
+                <div className="mt-1 text-amber-800/70">Professional wardrobe identity required</div>
               </div>
             </div>
           )}
@@ -278,18 +278,18 @@ function AvatarCard({
         </div>
         <div>
           <p className="text-sm">
-            <strong className="text-slate-300">Archetype:</strong>{" "}
-            <span className="text-slate-400">{avatar.archetype}</span>
+            <strong className="text-slate-800">Archetype:</strong>{" "}
+            <span className="text-slate-600">{avatar.archetype}</span>
           </p>
           <p className="text-sm">
-            <strong className="text-slate-300">Gender:</strong>{" "}
-            <span className="text-slate-400">{avatar.gender}</span>
+            <strong className="text-slate-800">Gender:</strong>{" "}
+            <span className="text-slate-600">{avatar.gender}</span>
           </p>
           <p className="text-sm">
-            <strong className="text-slate-300">Wardrobe standard:</strong>{" "}
-            <span className="text-slate-400">{avatar.wardrobeStandard}</span>
+            <strong className="text-slate-800">Wardrobe standard:</strong>{" "}
+            <span className="text-slate-600">{avatar.wardrobeStandard}</span>
           </p>
-          <p className="mt-2 text-sm text-slate-400">{avatar.notes}</p>
+          <p className="mt-2 text-sm text-slate-600">{avatar.notes}</p>
         </div>
       </div>
 
@@ -309,9 +309,9 @@ function AvatarCard({
             return (
               <div
                 key={view}
-                className="rounded-xl border border-slate-800 bg-slate-950/40 p-2"
+                className="rounded-xl border border-slate-200 bg-white/70 p-2"
               >
-                <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-800">
                   <span>{view}</span>
                   {v?.status === "ready" ? (
                     <span className="inline-flex items-center gap-1 text-emerald-400">
@@ -323,9 +323,9 @@ function AvatarCard({
                 </div>
                 {v?.file ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={assetUrl(avatar.id, view)} alt={`${avatar.name} ${view} view`} className="aspect-[3/4] w-full rounded-lg border border-slate-800 object-cover" />
+                  <img src={assetUrl(avatar.id, view)} alt={`${avatar.name} ${view} view`} className="aspect-[3/4] w-full rounded-lg border border-slate-200 object-cover" />
                 ) : (
-                  <div className="grid aspect-[3/4] w-full place-items-center rounded-lg border border-dashed border-slate-700 bg-slate-900 text-center text-[10px] text-slate-500">
+                  <div className="grid aspect-[3/4] w-full place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-100 text-center text-[10px] text-slate-500">
                     missing
                   </div>
                 )}
@@ -341,7 +341,7 @@ function AvatarCard({
                   }}
                 />
                 <button
-                  className="mt-1 w-full rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-800 hover:bg-slate-100 disabled:opacity-50"
                   disabled={busyId === `${avatar.id}:${view}`}
                   onClick={() => viewInputRefs.current[view]?.click()}
                 >
@@ -360,11 +360,11 @@ function RegenerationPromptBlock({ prompt }: { prompt: string }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
   return (
-    <div className="ml-5 rounded-md border border-amber-500/30 bg-slate-950/40">
+    <div className="ml-5 rounded-md border border-amber-500/30 bg-white/70">
       <div className="flex items-center justify-between px-2 py-1.5">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="text-[11px] uppercase tracking-wide text-amber-200 hover:text-amber-100"
+          className="text-[11px] uppercase tracking-wide text-amber-800 hover:text-amber-100"
         >
           {open ? "▾ hide regeneration prompt" : "▸ show regeneration prompt"}
         </button>
@@ -378,7 +378,7 @@ function RegenerationPromptBlock({ prompt }: { prompt: string }) {
               /* ignore */
             }
           }}
-          className="rounded border border-amber-500/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-200 hover:bg-amber-500/15"
+          className="rounded border border-amber-500/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-800 hover:bg-amber-500/15"
         >
           {copied ? "✓ copied" : "copy prompt"}
         </button>
