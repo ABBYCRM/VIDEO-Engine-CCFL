@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plug, Link as LinkIcon, Unlink, RefreshCcw, CircleCheck, CircleAlert, KeyRound, ArrowRight, Save } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -50,6 +50,18 @@ function StatusDot({ state, label }: { state: "green" | "red" | "amber" | "grey"
 }
 
 export default function IntegrationsPage() {
+  return (
+    <AuthGuard>
+      <AppShell>
+        <Suspense fallback={<main className="mx-auto max-w-6xl px-4 py-8 text-slate-500">Loading…</main>}>
+          <IntegrationsConsole />
+        </Suspense>
+      </AppShell>
+    </AuthGuard>
+  );
+}
+
+function IntegrationsConsole() {
   const sp = useSearchParams();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [composioKey, setComposioKey] = useState("");
@@ -150,9 +162,7 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <AuthGuard>
-      <AppShell>
-        <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-8">
           <div className="mb-6 flex flex-col gap-2">
             <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
               <Plug size={22} className="text-cyan-300" />
@@ -294,7 +304,5 @@ export default function IntegrationsPage() {
             </Card>
           )}
         </main>
-      </AppShell>
-    </AuthGuard>
   );
 }
