@@ -46,7 +46,9 @@ const spanVariants = {
   exit: { width: 0, opacity: 0 },
 };
 
-const transition = { delay: 0.1, type: "spring", bounce: 0, duration: 0.6 };
+// framer-motion 13.x infers `type: "spring"` as a generic string; cast keeps the literal type
+// expected by the Transition union while staying compatible with the animation prop below.
+const transition = { delay: 0.1, type: "spring" as const, bounce: 0, duration: 0.6 };
 
 export function ExpandableTabs({
   tabs,
