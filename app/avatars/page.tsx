@@ -24,6 +24,14 @@ type Avatar = {
   views: Record<ViewKey, AvatarViewStatus>;
 };
 
+// The API returns the on-disk path (/avatars/<id>/<filename>). We stream those
+// through /api/admin/avatars/[id]/asset?view=... because the Next.js standalone
+// build bakes /public at build time and doesn't serve runtime uploads.
+function assetUrl(avatarId: string, kind: "reference" | ViewKey): string {
+  const v = kind === "reference" ? "reference" : kind;
+  return `/api/admin/avatars/${avatarId}/asset?view=${v}`;
+}
+
 function isFemaleBeachWardrobe(a: Avatar): boolean {
   return a.gender === "female" && /beach|swimwear|bikini|lingerie/i.test(a.wardrobeStandard + a.notes);
 }
@@ -210,7 +218,7 @@ function AvatarCard({
           {avatar.referenceImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={avatar.referenceImage}
+              src={assetUrl(avatar.id, "reference")}
               alt={`${avatar.name} identity reference`}
               className="aspect-[3/4] w-full rounded-xl border border-slate-800 object-cover"
             />
@@ -292,7 +300,7 @@ function AvatarCard({
                 </div>
                 {v?.file ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.file} alt={`${avatar.name} ${view} view`} className="aspect-[3/4] w-full rounded-lg border border-slate-800 object-cover" />
+                  <img src={assetUrl(avatar.id, view)} alt={`${avatar.name} ${view} view`} className="aspect-[3/4] w-full rounded-lg border border-slate-800 object-cover" />
                 ) : (
                   <div className="grid aspect-[3/4] w-full place-items-center rounded-lg border border-dashed border-slate-700 bg-slate-900 text-center text-[10px] text-slate-500">
                     missing
