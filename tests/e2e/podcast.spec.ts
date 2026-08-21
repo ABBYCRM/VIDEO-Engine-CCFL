@@ -40,10 +40,10 @@ test("podcast composer previews upload, writes copy, creates avatar, and starts 
   await upload.setInputFiles({ name: "context.mp4", mimeType: "video/mp4", buffer: Buffer.from("fake-video") });
   await expect(page.getByLabel("Podcast composition preview").locator("video").first()).toBeVisible();
 
-  await page.getByText("Mission").locator("..").locator("textarea").fill("Explain why documenting the scene matters.");
+  await page.getByLabel("Mission").fill("Explain why documenting the scene matters.");
   await page.getByRole("button", { name: "Write script + captions" }).click();
-  await expect(page.getByDisplayValue("WATCH THIS")).toBeVisible();
-  await expect(page.getByDisplayValue("Here is the short podcast script.")).toBeVisible();
+  await expect(page.getByLabel("Hook")).toHaveValue("WATCH THIS");
+  await expect(page.getByLabel("8-second spoken script")).toHaveValue("Here is the short podcast script.");
   await expect(page.getByText("A concise social caption.")).toBeVisible();
 
   await page.getByRole("button", { name: "Generate avatar" }).click();
