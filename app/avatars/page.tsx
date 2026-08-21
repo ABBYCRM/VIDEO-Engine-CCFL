@@ -34,13 +34,17 @@ function assetUrl(avatarId: string, kind: "reference" | ViewKey): string {
   return `/api/admin/avatars/${avatarId}/asset?view=${v}`;
 }
 
-// Heuristic: the female spokesperson's notes mention beach/swimwear. Per the
-// project's avatar wardrobe rule, an identity reference can be a beach photo
-// but the canonical campaign turnaround must use professional attire.
+// Heuristic: wardrobe warning is shown when the avatar is female AND
+//   (a) the preset flagged an explicit wardrobeRegenerationPrompt (the
+//       reference is identity-only and the operator must regenerate), OR
+//   (b) the wardrobe standard still mentions beach/swimwear (the supply is
+//       non-canonical).
+// When wardrobeRegenerationPrompt is null AND the wardrobe standard names
+// professional garments, the avatar is canonical — no warning shown.
 function hasIdentityOnlyBeachReference(a: Avatar): boolean {
   if (a.gender !== "female") return false;
-  const haystack = `${a.wardrobeStandard} ${a.notes} ${a.referenceImageNote ?? ""}`;
-  return /beach|swimwear|bikini|lingerie/i.test(haystack);
+  if (a.wardrobeRegenerationPrompt) return true;
+  return /beach|swimwear|bikini|lingerie/i.test(`${a.wardrobeStandard} ${a.notes}`);
 }
 
 export default function AvatarsPage() {
