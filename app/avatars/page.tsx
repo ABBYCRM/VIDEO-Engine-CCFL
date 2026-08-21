@@ -191,7 +191,7 @@ function AvatarCard({
   const referenceReady = Boolean(avatar.referenceImage);
   const viewsReady = VIEWS.every((v) => avatar.views[v]?.status === "ready");
   const turnaroundReady = referenceReady && viewsReady;
-  const wardrobeWarning = isFemaleBeachWardrobe(avatar);
+  const wardrobeWarning = hasIdentityOnlyBeachReference(avatar);
 
   return (
     <Card
