@@ -40,6 +40,26 @@ CREATE TABLE IF NOT EXISTS video_jobs (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS avatars (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  gender TEXT NOT NULL,
+  archetype TEXT NOT NULL,
+  wardrobe_standard TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  reference_image_path TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS avatar_views (
+  avatar_id TEXT NOT NULL,
+  view TEXT NOT NULL CHECK (view IN ('front','left','right','back')),
+  file_path TEXT,
+  status TEXT NOT NULL DEFAULT 'missing',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (avatar_id, view)
+);
 `);
 
 // Migrations: tolerate older deployments that don't have the provider column.
@@ -50,3 +70,48 @@ function ensureColumn(table: string, column: string, ddl: string) {
   }
 }
 try { ensureColumn("video_jobs", "provider", "provider TEXT NOT NULL DEFAULT 'veo'"); } catch {}
+
+// One-time seed: copy the 2 default avatar presets from JSON into the DB so the
+// page can read from a single source of truth. Existing rows are left alone.
+function seedDefaultAvatars() {
+  const row = db.prepare("SELECT COUNT(*) as n FROM avatars").get() as { n: number };
+  if (row.n > 0) return;
+  try {
+    const presetsPath = path.resolve(process.cwd(), "data/avatar-presets.json");
+    const raw = fs.readFileSync(presetsPath, "utf8");
+    const presets = JSON.parse(raw) as Array<{
+      id: string;
+      name: string;
+      gender: string;
+      archetype: string;
+      wardrobeStandard: string;
+      notes: string;
+      referenceImage?: string | null;
+    }>;
+    const insert = db.prepare(
+      "INSERT INTO avatars(id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status) VALUES(?,?,?,?,?,?,?,?)"
+    );
+    const insertView = db.prepare(
+      "INSERT INTO avatar_views(avatar_id,view,file_path,status) VALUES(?,?,?,?)"
+    );
+    for (const p of presets) {
+      insert.run(
+        p.id,
+        p.name,
+        p.gender,
+        p.archetype,
+        p.wardrobeStandard,
+        p.notes,
+        p.referenceImage ?? null,
+        p.referenceImage ? "ready" : "draft"
+      );
+      for (const v of ["front", "left", "right", "back"] as const) {
+        insertView.run(p.id, v, null, "missing");
+      }
+    }
+  } catch {
+    // First run on a fresh repo: data/avatar-presets.json may not exist yet.
+    // That's fine — the page will still render via the JSON catalog.
+  }
+}
+seedDefaultAvatars();
