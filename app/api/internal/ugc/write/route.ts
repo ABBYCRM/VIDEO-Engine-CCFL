@@ -9,7 +9,8 @@ export async function POST(req: Request) {
     const result = await writeUgcPackage({
       mission: String(body.mission || ""),
       tone: body.tone ? String(body.tone) : undefined,
-      contextMode: body.contextMode ? String(body.contextMode) : undefined
+      contextMode: body.contextMode ? String(body.contextMode) : undefined,
+      targetSeconds: Number.isFinite(Number(body.targetSeconds)) ? Number(body.targetSeconds) : 30
     });
     return NextResponse.json(result);
   } catch (e) {
