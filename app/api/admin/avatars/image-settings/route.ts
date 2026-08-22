@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   if (body.provider) {
     const provider = String(body.provider) as ImageProvider;
-    if (!["nvidia", "gemini", "openai", "mock"].includes(provider)) return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
+    if (!["gemini", "openai", "xai", "mock"].includes(provider)) return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     setImageProvider(provider);
   }
   if (body.model && listImageModelChoices().includes(String(body.model))) setImageModel(String(body.model));

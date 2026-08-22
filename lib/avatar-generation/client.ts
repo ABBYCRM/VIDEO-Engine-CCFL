@@ -4,22 +4,42 @@ import path from "node:path";
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { VIEWS, type AvatarView } from "@/lib/avatars";
-import { editAvatarImage } from "@/lib/nvidia/image";
-import { getNvidiaApiKey } from "@/lib/nvidia/client";
 
-export type ImageProvider = "nvidia" | "gemini" | "openai" | "mock";
+// Image providers for the 4-view avatar turnaround.
+//
+// 2026-08-22: removed NVIDIA FLUX.2 Klein 4B. The hosted endpoint at
+// https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b is
+// the Preview API which only accepts `example_id` placeholders for the
+// reference image — real base64 inputs are rejected with
+//   "Expected: example_id, got: base64"
+// The production NIM is self-hosted (NGC container on your own GPU) and
+// not accessible via API. Operator can re-add it later by deploying
+// their own FLUX NIM and pointing `lib/nvidia/image.ts` at it.
+//
+// 2026-08-22: added xAI Grok Imagine for the fresh-portrait (no reference)
+// path. xAI /v1/images/edits returns HTTP 422 for image-to-image edits, so
+// it can't do the identity-preserving 4-view turnaround from a reference
+// photo. It IS usable for the "generate reference from a prompt" flow on
+// /avatars when the operator wants a brand-new identity.
+
+export type ImageProvider = "gemini" | "openai" | "xai" | "mock";
 const SETTING_KEY = "image_api_key";
 const SETTING_MODEL_KEY = "image_model";
 const SETTING_PROVIDER_KEY = "image_provider";
 const PROVIDER_MODELS: Record<ImageProvider, string[]> = {
-  nvidia: ["black-forest-labs/flux.2-klein-4b"],
-  gemini: ["gemini-2.0-flash-exp", "gemini-2.5-flash-image-preview", "gemini-2.5-flash"],
+  gemini: [
+    "gemini-2.5-flash-image",
+    "gemini-3.1-flash-image-preview",
+    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image"
+  ],
   openai: ["gpt-image-1", "dall-e-3"],
+  xai: ["grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-quality"],
   mock: ["mock-stable-diffusion-1"]
 };
 
 function getRaw(key: string) {
-  return (db.prepare("SELECT value FROM settings WHERE key=?").get(key) as { value: string } | undefined)?.value;
+  return (db.prepare("SELECT value FROM settings WHERE key=?").get(key) as { value: string } | undefined)?.value ?? null;
 }
 function setRaw(key: string, value: string) {
   db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run(key, value);
@@ -27,22 +47,21 @@ function setRaw(key: string, value: string) {
 
 export function getImageProvider(): ImageProvider {
   const raw = getRaw(SETTING_PROVIDER_KEY);
-  return raw === "nvidia" || raw === "gemini" || raw === "openai" || raw === "mock" ? raw : "nvidia";
+  return raw === "gemini" || raw === "openai" || raw === "xai" || raw === "mock" ? raw : "gemini";
 }
 export function setImageProvider(provider: ImageProvider) { setRaw(SETTING_PROVIDER_KEY, provider); }
 
 export function getImageApiKey(): string {
-  const provider = getImageProvider();
-  if (provider === "nvidia") return getNvidiaApiKey();
   const encrypted = getRaw(SETTING_KEY);
   if (encrypted) return decryptSecret(encrypted);
+  const provider = getImageProvider();
   if (provider === "openai" && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
   if (provider === "gemini" && process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+  if (provider === "xai" && process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
   throw new Error("Image API key is not configured");
 }
 export function saveImageApiKey(value: string) {
-  if (getImageProvider() === "nvidia") setRaw("nvidia_api_key", encryptSecret(value.trim()));
-  else setRaw(SETTING_KEY, encryptSecret(value.trim()));
+  setRaw(SETTING_KEY, encryptSecret(value.trim()));
 }
 export function isImageProviderConfigured(): boolean {
   if (getImageProvider() === "mock") return true;
@@ -60,10 +79,10 @@ export function setImageModel(model: string) {
 }
 export function listImageProviders() {
   return [
-    { id: "nvidia", label: "NVIDIA FLUX.2 Klein 4B", envVar: "NVIDIA_API_KEY", help: "Preferred. Uses FLUX.2 image editing to preserve the reference identity across the four turnaround views." },
-    { id: "gemini", label: "Google Gemini image generation", envVar: "GEMINI_API_KEY", help: "Reference-image generation fallback." },
-    { id: "openai", label: "OpenAI image generation", envVar: "OPENAI_API_KEY", help: "Optional fallback; gpt-image-1 supports reference editing." },
-    { id: "mock", label: "Mock placeholder", envVar: null, help: "Development-only deterministic placeholders." }
+    { id: "gemini", label: "Google Gemini image generation", envVar: "GEMINI_API_KEY", help: "Native multimodal; supports reference-image editing. Best for identity-preserving 4-view turnaround." },
+    { id: "openai", label: "OpenAI image generation", envVar: "OPENAI_API_KEY", help: "gpt-image-1 supports reference editing. Higher cost, slower latency." },
+    { id: "xai",   label: "xAI Grok Imagine", envVar: "XAI_API_KEY", help: "Text-to-image only. Good for generating a fresh reference portrait from a prompt; cannot edit a reference for the 4-view turnaround." },
+    { id: "mock",  label: "Mock placeholder", envVar: null, help: "Development-only deterministic SVG. Proves the pipeline but is not AI." }
   ] as const;
 }
 export function listImageModelChoices() { return PROVIDER_MODELS[getImageProvider()]; }
@@ -102,12 +121,13 @@ export async function generateView(opts: { avatarId: string; view: AvatarView; r
   const provider = getImageProvider();
   const model = getImageModel();
   const prompt = `${VIEW_PROMPTS[opts.view]}\nArchetype: ${opts.archetype}.\nWardrobe standard: ${opts.wardrobeStandard}.`;
-  const referencePath = resolveReferencePath(opts.referenceImagePath);
-  if (provider === "nvidia") {
-    const bytes = await fs.readFile(referencePath);
-    const result = await editAvatarImage({ prompt, imageBase64: bytes.toString("base64"), imageMimeType: mimeFor(referencePath) });
-    return { png: Buffer.from(result.base64, "base64"), model: result.model, prompt };
+  if (provider === "xai") {
+    // xAI /v1/images/edits returns 422 for image-to-image. The 4-view
+    // turnaround fundamentally needs a reference image, so xAI can't do
+    // this. Throw a clear error so the operator sees it.
+    throw new ImageUpstreamError("xAI Grok Imagine does not support image-to-image editing. Pick Gemini or OpenAI for the 4-view turnaround; use xAI for fresh reference portraits only.", 400);
   }
+  const referencePath = resolveReferencePath(opts.referenceImagePath);
   if (provider === "openai") return openaiImageGenerate(referencePath, model, prompt);
   if (provider === "mock") return mockGenerate(opts, model, prompt);
   return geminiImageGenerate(referencePath, model, prompt);
@@ -156,6 +176,31 @@ async function mockGenerate(opts: { avatarId: string; view: AvatarView }, model:
   return { png: await sharp(Buffer.from(svg)).png().toBuffer(), model, prompt };
 }
 
+// xAI text-to-image: used by the "Generate reference portrait from a prompt"
+// flow on /avatars. NOT used for the 4-view turnaround (xAI has no image
+// editing endpoint). Returns a PNG buffer.
+export async function generateReferencePortraitFromPrompt(prompt: string): Promise<{ png: Buffer; model: string }> {
+  const key = process.env.XAI_API_KEY;
+  if (!key) throw new ImageKeyMissingError();
+  const model = getImageModel().startsWith("grok-") ? getImageModel() : "grok-imagine-image";
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 90000);
+  try {
+    const r = await fetch("https://api.x.ai/v1/images/generations", {
+      method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      signal: ac.signal,
+      body: JSON.stringify({ model, prompt, n: 1 })
+    });
+    if (!r.ok) throw new ImageUpstreamError(`xAI image API HTTP ${r.status}: ${(await r.text()).slice(0,300)}`, r.status);
+    const json = await r.json() as { data?: Array<{ url?: string }> };
+    const url = json.data?.[0]?.url;
+    if (!url) throw new ImageUpstreamError("xAI returned no image URL", 502);
+    const dl = await fetch(url, { signal: ac.signal });
+    if (!dl.ok) throw new ImageUpstreamError(`xAI image download HTTP ${dl.status}`, dl.status);
+    const ab = await dl.arrayBuffer();
+    return { png: Buffer.from(ab), model };
+  } finally { clearTimeout(timer); }
+}
+
 function patchView(avatarId: string, view: AvatarView, patch: Record<string, unknown>) {
   const entries = Object.entries(patch).filter(([,v]) => v !== undefined);
   if (!entries.length) return;
@@ -182,37 +227,55 @@ export async function startTurnaround(avatarId: string, opts: { views?: AvatarVi
   const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string | null; archetype: string; wardrobe_standard: string } | undefined;
   if (!avatar) throw new Error("Avatar not found");
   if (!avatar.reference_image_path) return { started: [], skipped: wanted, reason: "Upload or generate a reference identity photo first." };
-  if (!isImageProviderConfigured()) throw new ImageKeyMissingError();
-  const model = getImageModel(); const now = new Date().toISOString();
-  for (const view of wanted) {
-    const prompt = `${VIEW_PROMPTS[view]}\nArchetype: ${avatar.archetype}.\nWardrobe standard: ${avatar.wardrobe_standard}.`;
-    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,reference_image_path,status) VALUES(?,?,?,?,?,?,'generating')").run(crypto.randomUUID(), avatarId, view, model, prompt, avatar.reference_image_path);
-    patchView(avatarId, view, { generation_status: "generating", generation_model: model, generation_prompt: prompt, generation_error: null, generation_started_at: now, generation_finished_at: null });
+  patchAvatar(avatarId, { turnaround_status: "generating", turnaround_started_at: new Date().toISOString(), turnaround_error: null });
+  for (const v of wanted) {
+    patchView(avatarId, v, { generation_status: "generating", generation_error: null, generation_started_at: new Date().toISOString() });
   }
-  patchAvatar(avatarId, { turnaround_status: "generating", turnaround_model: model, turnaround_started_at: now, turnaround_finished_at: null, turnaround_error: null });
-  void runGenerations(avatarId, wanted);
-  return { started: [...wanted], skipped: [] };
+  setImmediate(() => { runTurnaround(avatarId, wanted).catch((e) => console.error("turnaround fatal", avatarId, e)); });
+  return { started: wanted, skipped: [] };
 }
-
-async function runGenerations(avatarId: string, views: AvatarView[]) {
-  const avatar = db.prepare("SELECT reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { reference_image_path: string | null; archetype: string; wardrobe_standard: string } | undefined;
-  if (!avatar?.reference_image_path) return;
-  let failures = 0;
-  for (const view of views) {
+async function runTurnaround(avatarId: string, views: AvatarView[]) {
+  const finishedAt = new Date().toISOString();
+  const allErrors: string[] = [];
+  for (const v of views) {
     try {
-      const result = await generateView({ avatarId, view, referenceImagePath: avatar.reference_image_path, archetype: avatar.archetype, wardrobeStandard: avatar.wardrobe_standard });
-      const publicPath = await saveView(avatarId, view, result.png);
-      patchView(avatarId, view, { file_path: publicPath, status: "ready", generation_status: "ready", generation_model: result.model, generation_prompt: result.prompt, generation_error: null, generation_finished_at: new Date().toISOString() });
-      db.prepare("UPDATE avatar_generations SET result_path=?,status='ready',finished_at=CURRENT_TIMESTAMP WHERE avatar_id=? AND view=? AND status='generating'").run(publicPath, avatarId, view);
+      const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string; archetype: string; wardrobe_standard: string };
+      const t0 = Date.now();
+      const result = await generateView({ avatarId, view: v, referenceImagePath: avatar.reference_image_path, archetype: avatar.archetype, wardrobeStandard: avatar.wardrobe_standard });
+      const filePath = await saveView(avatarId, v, result.png);
+      const latency = Date.now() - t0;
+      patchView(avatarId, v, { file_path: filePath, status: "ready", generation_status: "ready", generation_model: result.model, generation_prompt: result.prompt, generation_finished_at: finishedAt });
+      db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,latency_ms,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, result.model, result.prompt, "ready", latency, new Date(t0).toISOString(), finishedAt);
     } catch (e) {
-      failures++;
-      const message = e instanceof Error ? e.message : String(e);
-      patchView(avatarId, view, { generation_status: "failed", generation_error: message, generation_finished_at: new Date().toISOString() });
-      db.prepare("UPDATE avatar_generations SET status='failed',error=?,finished_at=CURRENT_TIMESTAMP WHERE avatar_id=? AND view=? AND status='generating'").run(message, avatarId, view);
+      const msg = e instanceof Error ? e.message : String(e);
+      allErrors.push(`${v}: ${msg}`);
+      patchView(avatarId, v, { generation_status: "failed", generation_error: msg, generation_finished_at: finishedAt });
+      db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error_message,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, getImageModel(), null, "failed", msg, new Date().toISOString(), finishedAt);
     }
   }
-  const ready = (db.prepare("SELECT COUNT(*) n FROM avatar_views WHERE avatar_id=? AND status='ready'").get(avatarId) as { n: number }).n;
-  const status = ready === VIEWS.length ? "ready" : ready > 0 ? "incomplete" : failures ? "failed" : "draft";
-  patchAvatar(avatarId, { turnaround_status: status, turnaround_finished_at: new Date().toISOString(), turnaround_error: failures ? `${failures} view generation${failures === 1 ? "" : "s"} failed` : null });
-  if (ready === VIEWS.length) db.prepare("UPDATE avatars SET status='ready',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(avatarId);
+  const finalStatus = allErrors.length === views.length ? "failed" : allErrors.length ? "incomplete" : "ready";
+  patchAvatar(avatarId, { turnaround_status: finalStatus, turnaround_finished_at: finishedAt, turnaround_error: allErrors.length === views.length ? allErrors.join(" | ") : null });
+}
+export async function regenerateView(avatarId: string, view: AvatarView): Promise<{ ok: boolean; reason?: string }> {
+  const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string; archetype: string; wardrobe_standard: string } | undefined;
+  if (!avatar) return { ok: false, reason: "Avatar not found" };
+  if (!avatar.reference_image_path) return { ok: false, reason: "Reference image missing" };
+  patchView(avatarId, view, { generation_status: "generating", generation_error: null, generation_started_at: new Date().toISOString() });
+  setImmediate(() => { runRegenerate(avatarId, view, avatar).catch(e => console.error("regen fatal", e)); });
+  return { ok: true };
+}
+async function runRegenerate(avatarId: string, view: AvatarView, avatar: { reference_image_path: string; archetype: string; wardrobe_standard: string }) {
+  const finishedAt = new Date().toISOString();
+  try {
+    const t0 = Date.now();
+    const result = await generateView({ avatarId, view, referenceImagePath: avatar.reference_image_path, archetype: avatar.archetype, wardrobeStandard: avatar.wardrobe_standard });
+    const filePath = await saveView(avatarId, view, result.png);
+    const latency = Date.now() - t0;
+    patchView(avatarId, view, { file_path: filePath, status: "ready", generation_status: "ready", generation_model: result.model, generation_prompt: result.prompt, generation_finished_at: finishedAt });
+    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,latency_ms,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, view, result.model, result.prompt, "ready", latency, new Date(t0).toISOString(), finishedAt);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    patchView(avatarId, view, { generation_status: "failed", generation_error: msg, generation_finished_at: finishedAt });
+    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error_message,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, view, getImageModel(), null, "failed", msg, new Date().toISOString(), finishedAt);
+  }
 }
