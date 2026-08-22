@@ -5,34 +5,12 @@ import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { VIEWS, type AvatarView } from "@/lib/avatars";
 
-// Image providers for the 4-view avatar turnaround.
-//
-// 2026-08-22: removed NVIDIA FLUX.2 Klein 4B. The hosted endpoint at
-// https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b is
-// the Preview API which only accepts `example_id` placeholders for the
-// reference image — real base64 inputs are rejected with
-//   "Expected: example_id, got: base64"
-// The production NIM is self-hosted (NGC container on your own GPU) and
-// not accessible via API. Operator can re-add it later by deploying
-// their own FLUX NIM and pointing `lib/nvidia/image.ts` at it.
-//
-// 2026-08-22: added xAI Grok Imagine for the fresh-portrait (no reference)
-// path. xAI /v1/images/edits returns HTTP 422 for image-to-image edits, so
-// it can't do the identity-preserving 4-view turnaround from a reference
-// photo. It IS usable for the "generate reference from a prompt" flow on
-// /avatars when the operator wants a brand-new identity.
-
 export type ImageProvider = "gemini" | "openai" | "xai" | "mock";
 const SETTING_KEY = "image_api_key";
 const SETTING_MODEL_KEY = "image_model";
 const SETTING_PROVIDER_KEY = "image_provider";
 const PROVIDER_MODELS: Record<ImageProvider, string[]> = {
-  gemini: [
-    "gemini-2.5-flash-image",
-    "gemini-3.1-flash-image-preview",
-    "gemini-3.1-flash-image",
-    "gemini-3.1-flash-lite-image"
-  ],
+  gemini: ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview", "gemini-3.1-flash-image", "gemini-3.1-flash-lite-image"],
   openai: ["gpt-image-1", "dall-e-3"],
   xai: ["grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-quality"],
   mock: ["mock-stable-diffusion-1"]
@@ -60,9 +38,7 @@ export function getImageApiKey(): string {
   if (provider === "xai" && process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
   throw new Error("Image API key is not configured");
 }
-export function saveImageApiKey(value: string) {
-  setRaw(SETTING_KEY, encryptSecret(value.trim()));
-}
+export function saveImageApiKey(value: string) { setRaw(SETTING_KEY, encryptSecret(value.trim())); }
 export function isImageProviderConfigured(): boolean {
   if (getImageProvider() === "mock") return true;
   try { return Boolean(getImageApiKey()); } catch { return false; }
@@ -81,8 +57,8 @@ export function listImageProviders() {
   return [
     { id: "gemini", label: "Google Gemini image generation", envVar: "GEMINI_API_KEY", help: "Native multimodal; supports reference-image editing. Best for identity-preserving 4-view turnaround." },
     { id: "openai", label: "OpenAI image generation", envVar: "OPENAI_API_KEY", help: "gpt-image-1 supports reference editing. Higher cost, slower latency." },
-    { id: "xai",   label: "xAI Grok Imagine", envVar: "XAI_API_KEY", help: "Text-to-image only. Good for generating a fresh reference portrait from a prompt; cannot edit a reference for the 4-view turnaround." },
-    { id: "mock",  label: "Mock placeholder", envVar: null, help: "Development-only deterministic SVG. Proves the pipeline but is not AI." }
+    { id: "xai", label: "xAI Grok Imagine", envVar: "XAI_API_KEY", help: "Text-to-image only. Good for generating a fresh reference portrait from a prompt; cannot edit a reference for the 4-view turnaround." },
+    { id: "mock", label: "Mock placeholder", envVar: null, help: "Development-only deterministic SVG. Proves the pipeline but is not AI." }
   ] as const;
 }
 export function listImageModelChoices() { return PROVIDER_MODELS[getImageProvider()]; }
@@ -112,21 +88,31 @@ function resolveReferencePath(referenceImagePath: string) {
   if (path.isAbsolute(referenceImagePath)) return referenceImagePath;
   return path.resolve(process.cwd(), referenceImagePath);
 }
-function mimeFor(pathname: string) {
+
+function mimeFromExtension(pathname: string): "image/png" | "image/jpeg" | "image/webp" | null {
   const lower = pathname.toLowerCase();
-  return lower.endsWith(".png") ? "image/png" : lower.endsWith(".webp") ? "image/webp" : "image/jpeg";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+  return null;
+}
+function sniffImageMime(bytes: Buffer, pathname: string): "image/png" | "image/jpeg" | "image/webp" {
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) return "image/png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 12 && bytes.subarray(0,4).toString("ascii") === "RIFF" && bytes.subarray(8,12).toString("ascii") === "WEBP") return "image/webp";
+  const ext = mimeFromExtension(pathname);
+  if (ext) return ext;
+  throw new ImageUpstreamError("Reference image must be a PNG, JPEG, or WebP file before canonical turnaround generation.", 400);
+}
+function uploadFilename(mime: "image/png" | "image/jpeg" | "image/webp") {
+  return mime === "image/png" ? "reference.png" : mime === "image/webp" ? "reference.webp" : "reference.jpg";
 }
 
 export async function generateView(opts: { avatarId: string; view: AvatarView; referenceImagePath: string; archetype: string; wardrobeStandard: string }): Promise<GenerateResult> {
   const provider = getImageProvider();
   const model = getImageModel();
   const prompt = `${VIEW_PROMPTS[opts.view]}\nArchetype: ${opts.archetype}.\nWardrobe standard: ${opts.wardrobeStandard}.`;
-  if (provider === "xai") {
-    // xAI /v1/images/edits returns 422 for image-to-image. The 4-view
-    // turnaround fundamentally needs a reference image, so xAI can't do
-    // this. Throw a clear error so the operator sees it.
-    throw new ImageUpstreamError("xAI Grok Imagine does not support image-to-image editing. Pick Gemini or OpenAI for the 4-view turnaround; use xAI for fresh reference portraits only.", 400);
-  }
+  if (provider === "xai") throw new ImageUpstreamError("xAI Grok Imagine does not support image-to-image editing. Pick Gemini or OpenAI for the 4-view turnaround; use xAI for fresh reference portraits only.", 400);
   const referencePath = resolveReferencePath(opts.referenceImagePath);
   if (provider === "openai") return openaiImageGenerate(referencePath, model, prompt);
   if (provider === "mock") return mockGenerate(opts, model, prompt);
@@ -135,21 +121,21 @@ export async function generateView(opts: { avatarId: string; view: AvatarView; r
 
 async function geminiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
-  const b64 = (await fs.readFile(referencePath)).toString("base64");
+  const bytes = await fs.readFile(referencePath);
+  const mime = sniffImageMime(bytes, referencePath);
+  const b64 = bytes.toString("base64");
   const TIMEOUT_MS = 30000;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
-  // Hard Promise.race fallback — AbortController alone has been observed to
-  // not always interrupt the underlying socket in Next.js's server runtime,
-  // so we also reject the promise after the same window + 1.5s grace.
+  let hardTimer: NodeJS.Timeout | undefined;
   const hardTimeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new ImageUpstreamError(`Gemini image API hard timeout after ${TIMEOUT_MS + 1500}ms`, 504)), TIMEOUT_MS + 1500);
+    hardTimer = setTimeout(() => reject(new ImageUpstreamError(`Gemini image API hard timeout after ${TIMEOUT_MS + 1500}ms`, 504)), TIMEOUT_MS + 1500);
   });
   try {
     const response = await Promise.race([
       fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: ac.signal,
-        body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: mimeFor(referencePath), data: b64 } }, { text: prompt }] }], generationConfig: { responseModalities: ["IMAGE"], temperature: 0.35 } })
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: mime, data: b64 } }, { text: prompt }] }], generationConfig: { responseModalities: ["IMAGE"], temperature: 0.35 } })
       }),
       hardTimeout
     ]);
@@ -158,20 +144,39 @@ async function geminiImageGenerate(referencePath: string, model: string, prompt:
     const data = json.candidates?.[0]?.content?.parts?.find(p => p.inline_data?.data)?.inline_data?.data;
     if (!data) throw new ImageUpstreamError("Gemini returned no image", 502);
     return { png: Buffer.from(data, "base64"), model, prompt };
-  } finally { clearTimeout(timer); }
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new ImageUpstreamError(`Gemini image API timed out after ${TIMEOUT_MS}ms`, 504);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    if (hardTimer) clearTimeout(hardTimer);
+  }
 }
 
 async function openaiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
-  const TIMEOUT_MS = 30000;
-  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  const TIMEOUT_MS = 45000;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
   try {
     let response: Response;
     if (model === "dall-e-3") {
-      response = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, signal: ac.signal, body: JSON.stringify({ model, prompt, n: 1, size: "1024x1792", response_format: "b64_json" }) });
+      response = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        signal: ac.signal,
+        body: JSON.stringify({ model, prompt, n: 1, size: "1024x1792", response_format: "b64_json" })
+      });
     } else {
       const bytes = await fs.readFile(referencePath);
-      const form = new FormData(); form.append("model", model); form.append("image", new Blob([bytes]), "reference.png"); form.append("prompt", prompt); form.append("n", "1"); form.append("size", "1024x1536"); form.append("input_fidelity", "high");
+      const mime = sniffImageMime(bytes, referencePath);
+      const form = new FormData();
+      form.append("model", model);
+      form.append("image", new Blob([bytes], { type: mime }), uploadFilename(mime));
+      form.append("prompt", prompt);
+      form.append("n", "1");
+      form.append("size", "1024x1536");
+      form.append("input_fidelity", "high");
       response = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form, signal: ac.signal });
     }
     if (!response.ok) throw new ImageUpstreamError(`OpenAI image API HTTP ${response.status}: ${(await response.text()).slice(0,300)}`, response.status);
@@ -179,6 +184,9 @@ async function openaiImageGenerate(referencePath: string, model: string, prompt:
     const data = json.data?.[0]?.b64_json;
     if (!data) throw new ImageUpstreamError("OpenAI returned no image", 502);
     return { png: Buffer.from(data, "base64"), model, prompt };
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new ImageUpstreamError(`OpenAI image API timed out after ${TIMEOUT_MS}ms`, 504);
+    throw e;
   } finally { clearTimeout(timer); }
 }
 
@@ -188,9 +196,6 @@ async function mockGenerate(opts: { avatarId: string; view: AvatarView }, model:
   return { png: await sharp(Buffer.from(svg)).png().toBuffer(), model, prompt };
 }
 
-// xAI text-to-image: used by the "Generate reference portrait from a prompt"
-// flow on /avatars. NOT used for the 4-view turnaround (xAI has no image
-// editing endpoint). Returns a PNG buffer.
 export async function generateReferencePortraitFromPrompt(prompt: string): Promise<{ png: Buffer; model: string }> {
   const key = process.env.XAI_API_KEY;
   if (!key) throw new ImageKeyMissingError();
@@ -210,6 +215,9 @@ export async function generateReferencePortraitFromPrompt(prompt: string): Promi
     if (!dl.ok) throw new ImageUpstreamError(`xAI image download HTTP ${dl.status}`, dl.status);
     const ab = await dl.arrayBuffer();
     return { png: Buffer.from(ab), model };
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new ImageUpstreamError("xAI image API timed out after 30000ms", 504);
+    throw e;
   } finally { clearTimeout(timer); }
 }
 
@@ -239,55 +247,63 @@ export async function startTurnaround(avatarId: string, opts: { views?: AvatarVi
   const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string | null; archetype: string; wardrobe_standard: string } | undefined;
   if (!avatar) throw new Error("Avatar not found");
   if (!avatar.reference_image_path) return { started: [], skipped: wanted, reason: "Upload or generate a reference identity photo first." };
-  patchAvatar(avatarId, { turnaround_status: "generating", turnaround_started_at: new Date().toISOString(), turnaround_error: null });
-  for (const v of wanted) {
-    patchView(avatarId, v, { generation_status: "generating", generation_error: null, generation_started_at: new Date().toISOString() });
+  try {
+    const referencePath = resolveReferencePath(avatar.reference_image_path);
+    sniffImageMime(await fs.readFile(referencePath), referencePath);
+  } catch (e) {
+    return { started: [], skipped: wanted, reason: e instanceof Error ? e.message : String(e) };
   }
+  patchAvatar(avatarId, { turnaround_status: "generating", turnaround_started_at: new Date().toISOString(), turnaround_error: null });
+  for (const v of wanted) patchView(avatarId, v, { generation_status: "generating", generation_error: null, generation_started_at: new Date().toISOString() });
   setImmediate(() => { runTurnaround(avatarId, wanted).catch((e) => console.error("turnaround fatal", avatarId, e)); });
   return { started: wanted, skipped: [] };
 }
-async function runTurnaround(avatarId: string, views: AvatarView[]) {
-  const finishedAt = new Date().toISOString();
-  const allErrors: string[] = [];
-  for (const v of views) {
-    try {
-      const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string; archetype: string; wardrobe_standard: string };
-      const t0 = Date.now();
-      const result = await generateView({ avatarId, view: v, referenceImagePath: avatar.reference_image_path, archetype: avatar.archetype, wardrobeStandard: avatar.wardrobe_standard });
-      const filePath = await saveView(avatarId, v, result.png);
-      const latency = Date.now() - t0;
-      patchView(avatarId, v, { file_path: filePath, status: "ready", generation_status: "ready", generation_model: result.model, generation_prompt: result.prompt, generation_finished_at: finishedAt });
-      db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,latency_ms,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, result.model, result.prompt, "ready", latency, new Date(t0).toISOString(), finishedAt);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      allErrors.push(`${v}: ${msg}`);
-      patchView(avatarId, v, { generation_status: "failed", generation_error: msg, generation_finished_at: finishedAt });
-      db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error_message,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, getImageModel(), null, "failed", msg, new Date().toISOString(), finishedAt);
-    }
+
+async function runOneView(avatarId: string, v: AvatarView) {
+  const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string; archetype: string; wardrobe_standard: string };
+  const startedAt = new Date();
+  try {
+    const result = await generateView({ avatarId, view: v, referenceImagePath: avatar.reference_image_path, archetype: avatar.archetype, wardrobeStandard: avatar.wardrobe_standard });
+    const filePath = await saveView(avatarId, v, result.png);
+    const finishedAt = new Date().toISOString();
+    patchView(avatarId, v, { file_path: filePath, status: "ready", generation_status: "ready", generation_error: null, generation_model: result.model, generation_prompt: result.prompt, generation_finished_at: finishedAt });
+    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,latency_ms,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, result.model, result.prompt, "ready", Date.now() - startedAt.getTime(), startedAt.toISOString(), finishedAt);
+    return null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const finishedAt = new Date().toISOString();
+    patchView(avatarId, v, { generation_status: "failed", generation_error: msg, generation_finished_at: finishedAt });
+    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error_message,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, getImageModel(), null, "failed", msg, startedAt.toISOString(), finishedAt);
+    return `${v}: ${msg}`;
   }
+}
+
+async function runTurnaround(avatarId: string, views: AvatarView[]) {
+  const allErrors: string[] = [];
+  // Two concurrent edits keeps latency bounded without hammering paid provider limits.
+  for (let i = 0; i < views.length; i += 2) {
+    const errors = await Promise.all(views.slice(i, i + 2).map(v => runOneView(avatarId, v)));
+    allErrors.push(...errors.filter((x): x is string => Boolean(x)));
+  }
+  const finishedAt = new Date().toISOString();
   const finalStatus = allErrors.length === views.length ? "failed" : allErrors.length ? "incomplete" : "ready";
   patchAvatar(avatarId, { turnaround_status: finalStatus, turnaround_finished_at: finishedAt, turnaround_error: allErrors.length === views.length ? allErrors.join(" | ") : null });
 }
+
 export async function regenerateView(avatarId: string, view: AvatarView): Promise<{ ok: boolean; reason?: string }> {
   const avatar = db.prepare("SELECT id,reference_image_path,archetype,wardrobe_standard FROM avatars WHERE id=?").get(avatarId) as { id: string; reference_image_path: string; archetype: string; wardrobe_standard: string } | undefined;
   if (!avatar) return { ok: false, reason: "Avatar not found" };
   if (!avatar.reference_image_path) return { ok: false, reason: "Reference image missing" };
+  try {
+    const referencePath = resolveReferencePath(avatar.reference_image_path);
+    sniffImageMime(await fs.readFile(referencePath), referencePath);
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
   patchView(avatarId, view, { generation_status: "generating", generation_error: null, generation_started_at: new Date().toISOString() });
   setImmediate(() => { runRegenerate(avatarId, view, avatar).catch(e => console.error("regen fatal", e)); });
   return { ok: true };
 }
 async function runRegenerate(avatarId: string, view: AvatarView, avatar: { reference_image_path: string; archetype: string; wardrobe_standard: string }) {
-  const finishedAt = new Date().toISOString();
-  try {
-    const t0 = Date.now();
-    const result = await generateView({ avatarId, view, referenceImagePath: avatar.reference_image_path, archetype: avatar.archetype, wardrobeStandard: avatar.wardrobe_standard });
-    const filePath = await saveView(avatarId, view, result.png);
-    const latency = Date.now() - t0;
-    patchView(avatarId, view, { file_path: filePath, status: "ready", generation_status: "ready", generation_model: result.model, generation_prompt: result.prompt, generation_finished_at: finishedAt });
-    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,latency_ms,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, view, result.model, result.prompt, "ready", latency, new Date(t0).toISOString(), finishedAt);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    patchView(avatarId, view, { generation_status: "failed", generation_error: msg, generation_finished_at: finishedAt });
-    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error_message,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, view, getImageModel(), null, "failed", msg, new Date().toISOString(), finishedAt);
-  }
+  await runOneView(avatarId, view);
 }
