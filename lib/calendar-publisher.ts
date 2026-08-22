@@ -13,7 +13,8 @@ async function publishRow(post:any){
   if(post.network==="website"){
     if(!post.site_id)throw new Error("Website auto-post item has no Site");
     if(post.generation_status&&post.generation_status!=="ready")throw new Error(`Website draft is ${post.generation_status}; it is not ready to publish`);
-    return publishWebsite({siteId:post.site_id,title:post.title,content:post.content_body||post.caption||"",slug:post.slug||null});
+    if(!String(post.content_body||"").trim())throw new Error("Website article body is empty");
+    return publishWebsite({siteId:post.site_id,title:post.title,content:post.content_body,slug:post.slug||null,excerpt:post.caption||null,metaTitle:post.seo_title||null,metaDescription:post.meta_description||null,focusKeyword:post.focus_keyword||null,featuredImageUrl:post.media_url||null});
   }
   throw new Error(`${post.network} auto-post publisher is not connected`);
 }
