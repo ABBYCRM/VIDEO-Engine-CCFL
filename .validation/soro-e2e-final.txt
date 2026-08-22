@@ -1,0 +1,1 @@
+Final Soro-like UX and workflow validation marker after all acceptance fixes.
