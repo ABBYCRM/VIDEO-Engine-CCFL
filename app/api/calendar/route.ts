@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import "@/lib/calendar-assets";
+import { startCalendarPublisherLoop } from "@/lib/calendar-publisher";
+startCalendarPublisherLoop();
 const NETWORKS=new Set(["instagram","facebook","youtube","tiktok","linkedin","website"]),STATUSES=new Set(["draft","pending","approved","published","failed"]),FORMATS=new Set(["podcast","ugc","newsroom","direct","cinematic","image","blog"]);
 function rowToPost(row:any){return{id:row.id,title:row.title,network:row.network,scheduledAt:row.scheduled_at,status:row.status,autoPost:Boolean(row.auto_post),caption:row.caption,contentType:row.content_type||"ugc",videoJobId:row.video_job_id,mediaUrl:row.media_url,mediaType:row.media_type,sourceAssetKey:row.source_asset_key,siteId:row.site_id,campaignId:row.campaign_id,planningHorizonDays:row.planning_horizon_days,connectedAccountId:row.connected_account_id,publishedAt:row.published_at,error:row.error,createdAt:row.created_at,updatedAt:row.updated_at};}
 export async function GET(){if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});return NextResponse.json({posts:(db.prepare("SELECT * FROM scheduled_posts ORDER BY scheduled_at ASC").all() as any[]).map(rowToPost)});}
