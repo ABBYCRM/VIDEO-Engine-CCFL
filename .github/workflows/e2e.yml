@@ -34,7 +34,6 @@ jobs:
         run: npm run test:e2e -- --project=chromium --grep-invert "deployed"
 
   live-ui:
-    if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 25
