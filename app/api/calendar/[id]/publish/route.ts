@@ -17,7 +17,8 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
     }else if(post.network==="website"){
       if(!post.site_id)return NextResponse.json({error:"Website Calendar items must be linked to a Site before publishing"},{status:409});
       if(post.generation_status&&post.generation_status!=="ready")return NextResponse.json({error:`Blog draft is ${post.generation_status}; wait for generation to finish before publishing`},{status:409});
-      result=await publishWebsite({siteId:post.site_id,title:post.title,content:post.content_body||post.caption||"",slug:post.slug||null});
+      if(!String(post.content_body||"").trim())return NextResponse.json({error:"Generated article body is empty"},{status:409});
+      result=await publishWebsite({siteId:post.site_id,title:post.title,content:post.content_body,slug:post.slug||null,excerpt:post.caption||null,metaTitle:post.seo_title||null,metaDescription:post.meta_description||null,focusKeyword:post.focus_keyword||null,featuredImageUrl:post.media_url||null});
     }else{
       return NextResponse.json({error:`${post.network} publishing is not connected yet. Use Instagram, Website, or keep this item in owner review.`},{status:409});
     }
