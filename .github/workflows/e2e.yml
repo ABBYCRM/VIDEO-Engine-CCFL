@@ -31,4 +31,36 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Run Playwright
-        run: npm run test:e2e -- --project=chromium
+        run: npm run test:e2e -- --project=chromium --grep-invert "deployed"
+
+  live-ui:
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PLAYWRIGHT_BASE_URL: https://video-engine-ccfl-jpd37.ondigitalocean.app
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Wait for deployed app and run live UI suite
+        shell: bash
+        run: |
+          for attempt in {1..24}; do
+            if curl --fail --silent --show-error --max-time 10 "$PLAYWRIGHT_BASE_URL/login" >/dev/null; then
+              if npx playwright test tests/e2e/live-ui.spec.ts --project=chromium; then
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "Live DigitalOcean UI did not reach the expected main-branch state"
+          exit 1
