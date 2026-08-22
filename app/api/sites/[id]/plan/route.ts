@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { generateBlogPlan } from "@/lib/nvidia/blog-writer";
 import { getSite } from "@/lib/sites";
 import { ensureAssetCalendarPost } from "@/lib/calendar-assets";
+import { startBlogAutopilotLoop } from "@/lib/blog-autopilot";
 
 export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -25,6 +26,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
       approvalMode:site.approvalMode==="auto"?"auto":"manual"
     }));
     db.prepare("UPDATE sites SET updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
+    startBlogAutopilotLoop();
     return NextResponse.json({ok:true,count:drafts.length,drafts,calendarIds,autopilot:true},{status:201});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:String(e)},{status:400});}
 }
