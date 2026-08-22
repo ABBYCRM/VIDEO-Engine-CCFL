@@ -1,14 +1,23 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
-async function realLogin(page: import("@playwright/test").Page) {
+async function realLogin(page: Page) {
   await page.goto("/login");
   await page.getByPlaceholder("Admin password").fill(process.env.ADMIN_PASSWORD || "e2e-local-only");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Create campaign content" })).toBeVisible({ timeout: 15000 });
 }
 
-function fieldSelect(page: import("@playwright/test").Page, label: string) {
-  return page.locator("label").filter({ hasText: new RegExp(`^${label}`) }).locator("select");
+function field(page: Page, label: string): Locator {
+  return page.locator("label").filter({ hasText: new RegExp(`^${label}`) });
+}
+function fieldSelect(page: Page, label: string) {
+  return field(page, label).locator("select");
+}
+function fieldInput(page: Page, label: string) {
+  return field(page, label).locator("input");
+}
+function fieldTextarea(page: Page, label: string) {
+  return field(page, label).locator("textarea");
 }
 
 test("real admin workflow persists a Site and Calendar article without API stubs", async ({ page }) => {
@@ -20,8 +29,8 @@ test("real admin workflow persists a Site and Calendar article without API stubs
 
   await page.goto("/sites");
   await page.getByRole("button", { name: "Add site", exact: true }).click();
-  await page.getByLabel("Site name", { exact: true }).fill(siteName);
-  await page.getByLabel("Website URL", { exact: true }).fill(siteUrl);
+  await fieldInput(page, "Site name").fill(siteName);
+  await fieldInput(page, "Website URL").fill(siteUrl);
   await fieldSelect(page, "CMS / publishing target").selectOption("wordpress");
   await fieldSelect(page, "Publishing cadence").selectOption("manual");
   await fieldSelect(page, "Approval policy").selectOption("manual");
@@ -35,15 +44,15 @@ test("real admin workflow persists a Site and Calendar article without API stubs
 
   await page.goto("/calendar");
   await page.getByRole("button", { name: "Add post", exact: true }).click();
-  await page.getByLabel("Title", { exact: true }).fill(articleTitle);
-  await page.getByLabel("Format", { exact: true }).selectOption("blog");
-  await page.getByLabel("Network", { exact: true }).selectOption("website");
-  await page.getByLabel("Caption / excerpt / review notes", { exact: true }).fill("Owner review excerpt.");
-  await page.getByLabel("SEO title", { exact: true }).fill("E2E SEO title");
-  await page.getByLabel("Focus keyword", { exact: true }).fill("e2e editorial test");
-  await page.getByLabel("Slug", { exact: true }).fill(`e2e-article-${suffix}`);
-  await page.getByLabel("Meta description", { exact: true }).fill("A deterministic integration article used to verify the real Calendar persistence workflow.");
-  await page.getByLabel("Article body", { exact: true }).fill("## Integration article\n\nThis is persisted through the real Calendar API and SQLite database during CI.\n\n- Reviewable\n- Editable\n- Approval controlled");
+  await fieldInput(page, "Title").fill(articleTitle);
+  await fieldSelect(page, "Format").selectOption("blog");
+  await fieldSelect(page, "Network").selectOption("website");
+  await fieldTextarea(page, "Caption / excerpt / review notes").fill("Owner review excerpt.");
+  await fieldInput(page, "SEO title").fill("E2E SEO title");
+  await fieldInput(page, "Focus keyword").fill("e2e editorial test");
+  await fieldInput(page, "Slug").fill(`e2e-article-${suffix}`);
+  await fieldTextarea(page, "Meta description").fill("A deterministic integration article used to verify the real Calendar persistence workflow.");
+  await fieldTextarea(page, "Article body").fill("## Integration article\n\nThis is persisted through the real Calendar API and SQLite database during CI.\n\n- Reviewable\n- Editable\n- Approval controlled");
   await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(page.getByText(articleTitle).first()).toBeVisible();
@@ -55,7 +64,7 @@ test("real admin workflow persists a Site and Calendar article without API stubs
   await page.reload();
   await expect(page.getByText(articleTitle).first()).toBeVisible();
   await page.getByText(articleTitle).first().click();
-  await expect(page.getByLabel("Article body", { exact: true })).toHaveValue(/Integration article/);
+  await expect(fieldTextarea(page, "Article body")).toHaveValue(/Integration article/);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
   await page.goto("/sites");
