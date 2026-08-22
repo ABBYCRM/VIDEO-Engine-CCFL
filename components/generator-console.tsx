@@ -1,10 +1,202 @@
 "use client";
-import Link from "next/link";import {useEffect,useState} from "react";import {Car,Truck,Footprints,Smartphone,WandSparkles,Upload,Play,Sparkles,Atom,Cloud,Bird,Mic2} from "lucide-react";import {Button} from "@/components/ui/button";import {Input} from "@/components/ui/input";import {Textarea} from "@/components/ui/textarea";
-const modes=[{id:"car_accident",title:"Car Accident",icon:Car,sub:"Roadside, collision, aftermath"},{id:"rideshare",title:"Rideshare / Uber / Lyft",icon:Smartphone,sub:"Passenger and driver scenarios"},{id:"trucking",title:"Trucking / 18-Wheeler",icon:Truck,sub:"Commercial vehicle incidents"},{id:"slip_fall",title:"Slip & Fall",icon:Footprints,sub:"Premises-liability scenarios"},{id:"ugc",title:"UGC Video",icon:WandSparkles,sub:"Creator-style campaign video"}] as const;
-const providers=[{id:"veo",label:"Google Veo 3.1",icon:Sparkles,cap:"8s cinematic"},{id:"grok",label:"xAI Grok Imagine",icon:Atom,cap:"up to 15s"},{id:"a2e",label:"A2E AI router",icon:Cloud,cap:"model dependent"},{id:"hedra",label:"Hedra",icon:Bird,cap:"30s avatar / podcast"}] as const;type ProviderId=typeof providers[number]["id"];type Job={id:string;provider?:ProviderId;status:string;error?:string;fileUrl?:string|null};
-export function GeneratorConsole(){const[category,setCategory]=useState<typeof modes[number]["id"]>("car_accident"),[provider,setProvider]=useState<ProviderId>("veo"),[settings,setSettings]=useState<any>(null),[mission,setMission]=useState(""),[subject,setSubject]=useState(""),[script,setScript]=useState(""),[image,setImage]=useState<{base64:string;mime:string;name:string}|null>(null),[job,setJob]=useState<Job|null>(null),[busy,setBusy]=useState(false);useEffect(()=>{fetch("/api/admin/settings").then(r=>r.ok?r.json():null).then(s=>{if(s){setSettings(s);setProvider(s.defaultProvider||"veo")}}).catch(()=>{})},[]);async function onFile(file?:File){if(!file)return;if(file.size>10*1024*1024){alert("Image must be 10MB or smaller");return}const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(",")[1]||"");reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)});setImage({base64,mime:file.type,name:file.name})}async function generate(){setBusy(true);setJob(null);const r=await fetch("/api/internal/generate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({provider,category,mission,subject,script,imageBase64:image?.base64,imageMimeType:image?.mime})}),d=await r.json();setBusy(false);if(!r.ok){setJob({id:"",provider,status:"failed",error:d.error});return}setJob({...d.job,provider})}useEffect(()=>{if(!job?.id||["succeeded","failed"].includes(job.status))return;const t=setInterval(async()=>{const r=await fetch(`/api/v1/video/${job.id}`);if(r.ok){const d=await r.json();setJob(j=>({...j!,...d}))}},5000);return()=>clearInterval(t)},[job?.id,job?.status]);const selected=providers.find(p=>p.id===provider)!;
-return <main><div className="mb-7"><div className="mb-2 text-sm font-medium text-violet-700">Campaign production</div><h1 className="text-[34px] font-semibold leading-tight tracking-tight text-slate-900">Create campaign content</h1><p className="mt-1 max-w-3xl text-[15px] text-slate-600">Choose the format first, then the engine. Duration follows the selected provider instead of forcing every workflow into an 8-second clip.</p></div>
-<div className="mb-6 grid gap-3 sm:grid-cols-2"><Link href="/podcast-interview" className="rounded-2xl border border-violet-300 bg-violet-50 p-4 transition hover:border-violet-500"><Mic2 className="text-violet-600"/><div className="mt-2 font-semibold">Podcast / split-screen</div><div className="text-xs text-slate-600">Uploaded source video on top + 15/30s AI host below. Hedra preferred.</div></Link><button onClick={()=>setCategory("ugc")} className="rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-violet-300"><WandSparkles className="text-slate-600"/><div className="mt-2 font-semibold">UGC / campaign shot</div><div className="text-xs text-slate-600">Direct-to-camera, newsroom, accident scenario, or cinematic creative.</div></button></div>
-<div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Video engine</div><div className="grid gap-3 md:grid-cols-4">{providers.map(p=>{const I=p.icon,active=provider===p.id,configured=settings?.providers?.[p.id]?.keyConfigured;return <button key={p.id} onClick={()=>setProvider(p.id)} className={`rounded-2xl border p-4 text-left ${active?"border-violet-400 bg-violet-50":"border-slate-200 bg-white"}`}><I className={active?"text-violet-600":"text-slate-500"}/><div className="mt-2 font-medium">{p.label}</div><div className="text-xs text-slate-500">{p.cap}{configured===false?" · key needed":""}</div></button>})}</div>
-<div className="mb-2 mt-6 text-xs uppercase tracking-wider text-slate-500">Campaign type</div><div className="grid gap-3 md:grid-cols-5">{modes.map(m=>{const I=m.icon,active=category===m.id;return <button key={m.id} onClick={()=>setCategory(m.id)} className={`rounded-2xl border p-4 text-left ${active?"border-violet-400 bg-violet-50":"border-slate-200 bg-white"}`}><I/><div className="mt-2 font-medium">{m.title}</div><div className="text-xs text-slate-500">{m.sub}</div></button>})}</div>
-<div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><div className="soro-card p-5"><div className="grid gap-4"><label className="grid gap-2 text-sm">Mission<Textarea value={mission} onChange={e=>setMission(e.target.value)}/></label><label className="grid gap-2 text-sm">Subject / spokesperson direction<Input value={subject} onChange={e=>setSubject(e.target.value)}/></label><label className="grid gap-2 text-sm">Exact dialogue (optional)<Textarea value={script} onChange={e=>setScript(e.target.value)}/></label><label className="grid gap-2 text-sm">Reference image (optional)<div className="flex items-center gap-3"><Input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>onFile(e.target.files?.[0])}/>{image&&<span className="text-xs">{image.name}</span>}<Upload size={18}/></div></label><Button size="lg" disabled={busy} onClick={generate}><Play size={17} className="mr-2"/>{busy?`Starting ${selected.label}…`:`Generate with ${selected.label}`}</Button></div></div><div className="soro-card min-h-[470px] p-5"><div className="mb-4"><div className="font-medium">Output</div><div className="text-xs text-slate-500">{selected.cap} · provider-specific generation</div></div>{!job&&<div className="grid h-[360px] place-items-center rounded-xl border border-dashed text-sm text-slate-500">Generated video appears here.</div>}{job?.status==="failed"&&<div className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{job.error}</div>}{job&&!["succeeded","failed"].includes(job.status)&&<div className="grid h-[360px] place-items-center text-sm">{selected.label} is generating…</div>}{job?.status==="succeeded"&&job.fileUrl&&<video src={job.fileUrl} className="max-h-[520px] w-full rounded-xl bg-black" controls autoPlay playsInline/>}</div></div></main>}
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { Atom, Bird, CalendarPlus, Car, Cloud, Footprints, Mic2, Play, Smartphone, Sparkles, Truck, Upload, WandSparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
+const modes = [
+  { id:"car_accident", title:"Car Accident", icon:Car, sub:"Roadside, collision, aftermath" },
+  { id:"rideshare", title:"Rideshare / Uber / Lyft", icon:Smartphone, sub:"Passenger and driver scenarios" },
+  { id:"trucking", title:"Trucking / 18-Wheeler", icon:Truck, sub:"Commercial vehicle incidents" },
+  { id:"slip_fall", title:"Slip & Fall", icon:Footprints, sub:"Premises-liability scenarios" },
+  { id:"ugc", title:"UGC Video", icon:WandSparkles, sub:"Creator-style campaign video" }
+] as const;
+
+const providers = [
+  { id:"veo", label:"Google Veo 3.1", icon:Sparkles, cap:"8s cinematic", duration:8 },
+  { id:"grok", label:"xAI Grok Imagine", icon:Atom, cap:"up to 15s", duration:15 },
+  { id:"a2e", label:"A2E AI router", icon:Cloud, cap:"model dependent", duration:8 },
+  { id:"hedra", label:"Hedra", icon:Bird, cap:"15/30s avatar · audio driven", duration:30 }
+] as const;
+
+type ProviderId = typeof providers[number]["id"];
+type Job = { id:string; provider?:ProviderId; status:string; error?:string; fileUrl?:string|null };
+type MediaInput = { base64:string; mime:string; name:string };
+
+async function fileToMedia(file: File): Promise<MediaInput> {
+  const base64 = await new Promise<string>((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  return { base64, mime:file.type, name:file.name };
+}
+
+export function GeneratorConsole() {
+  const [category,setCategory] = useState<typeof modes[number]["id"]>("car_accident");
+  const [provider,setProvider] = useState<ProviderId>("veo");
+  const [settings,setSettings] = useState<any>(null);
+  const [mission,setMission] = useState("");
+  const [subject,setSubject] = useState("");
+  const [script,setScript] = useState("");
+  const [image,setImage] = useState<MediaInput|null>(null);
+  const [audio,setAudio] = useState<MediaInput|null>(null);
+  const [hedraDuration,setHedraDuration] = useState<15|30>(30);
+  const [job,setJob] = useState<Job|null>(null);
+  const [busy,setBusy] = useState(false);
+  const [scheduleState,setScheduleState] = useState<"idle"|"saving"|"saved">("idle");
+  const [error,setError] = useState<string|null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/settings").then(r => r.ok ? r.json() : null).then(s => {
+      if (s) { setSettings(s); setProvider(s.defaultProvider || "veo"); }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!job?.id || ["succeeded","failed"].includes(job.status)) return;
+    const timer = setInterval(async () => {
+      const r = await fetch(`/api/v1/video/${job.id}`, { cache:"no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        setJob(j => ({ ...(j || {}), ...d } as Job));
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [job?.id,job?.status]);
+
+  const selected = providers.find(p => p.id === provider)!;
+  const selectedMode = modes.find(m => m.id === category)!;
+  const hedraReady = provider !== "hedra" || Boolean(image && audio);
+  const durationSeconds = provider === "hedra" ? hedraDuration : selected.duration;
+
+  async function chooseImage(file?: File) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setError("Reference image must be 10MB or smaller."); return; }
+    setImage(await fileToMedia(file));
+    setError(null);
+  }
+
+  async function chooseAudio(file?: File) {
+    if (!file) return;
+    if (file.size > 105 * 1024 * 1024) { setError("Driving audio must be 105MB or smaller."); return; }
+    setAudio(await fileToMedia(file));
+    setError(null);
+  }
+
+  async function generate() {
+    if (provider === "hedra" && (!image || !audio)) {
+      setError("Hedra Character/Avatar needs both a reference image and driving audio. Add both before generating.");
+      return;
+    }
+    setBusy(true); setJob(null); setError(null); setScheduleState("idle");
+    try {
+      const r = await fetch("/api/internal/generate", {
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({
+          provider, category, mission, subject, script,
+          durationSeconds,
+          imageBase64:image?.base64,
+          imageMimeType:image?.mime,
+          audioBase64:audio?.base64,
+          audioMimeType:audio?.mime
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setJob({ ...(d.job || {}), provider });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setJob({ id:"", provider, status:"failed", error:message });
+      setError(message);
+    } finally { setBusy(false); }
+  }
+
+  async function sendToCalendar() {
+    if (!job?.id || job.status !== "succeeded") return;
+    setScheduleState("saving"); setError(null);
+    try {
+      const when = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const r = await fetch("/api/calendar", {
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({
+          title:`${selectedMode.title} · ${selected.label}`,
+          network:"instagram",
+          scheduledAt:when.toISOString(),
+          status:"pending",
+          autoPost:false,
+          contentType:category === "ugc" ? "ugc" : "cinematic",
+          caption:mission || script || `${selectedMode.title} generated video`,
+          videoJobId:job.id
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setScheduleState("saved");
+    } catch (e) {
+      setScheduleState("idle");
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return <main>
+    <div className="mb-7">
+      <div className="mb-2 text-sm font-medium text-violet-700">Campaign production</div>
+      <h1 className="text-[34px] font-semibold leading-tight tracking-tight text-slate-900">Create campaign content</h1>
+      <p className="mt-1 max-w-3xl text-[15px] text-slate-600">Choose the content format, campaign type, and video engine. Generated assets move into Library and Calendar for review instead of ending as isolated prompts.</p>
+    </div>
+
+    <div className="mb-6 grid gap-3 sm:grid-cols-2">
+      <Link href="/podcast-interview" className="rounded-2xl border border-violet-300 bg-violet-50 p-4 transition hover:border-violet-500">
+        <Mic2 className="text-violet-600"/><div className="mt-2 font-semibold">Podcast / split-screen</div><div className="text-xs text-slate-600">Uploaded source video on top + 15/30s AI host below. Hedra preferred, other engines remain available.</div>
+      </Link>
+      <button onClick={() => setCategory("ugc")} className="rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-violet-300">
+        <WandSparkles className="text-slate-600"/><div className="mt-2 font-semibold">UGC / campaign shot</div><div className="text-xs text-slate-600">Direct-to-camera, newsroom, accident scenario, or cinematic creative.</div>
+      </button>
+    </div>
+
+    <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">Video engine</div>
+    <div className="grid gap-3 md:grid-cols-4">{providers.map(p => {
+      const I=p.icon, active=provider===p.id, configured=settings?.providers?.[p.id]?.keyConfigured;
+      return <button key={p.id} onClick={() => { setProvider(p.id); setError(null); }} className={`rounded-2xl border p-4 text-left transition ${active?"border-violet-400 bg-violet-50 ring-1 ring-violet-200":"border-slate-200 bg-white hover:border-violet-300"}`}>
+        <I className={active?"text-violet-600":"text-slate-500"}/><div className="mt-2 font-medium">{p.label}</div><div className="text-xs text-slate-500">{p.cap}{configured===false?" · key needed":""}</div>
+      </button>;
+    })}</div>
+
+    <div className="mb-2 mt-6 text-xs uppercase tracking-wider text-slate-500">Campaign type</div>
+    <div className="grid gap-3 md:grid-cols-5">{modes.map(m => {
+      const I=m.icon, active=category===m.id;
+      return <button key={m.id} onClick={() => setCategory(m.id)} className={`rounded-2xl border p-4 text-left transition ${active?"border-violet-400 bg-violet-50":"border-slate-200 bg-white hover:border-violet-300"}`}><I/><div className="mt-2 font-medium">{m.title}</div><div className="text-xs text-slate-500">{m.sub}</div></button>;
+    })}</div>
+
+    {error && <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
+
+    <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+      <div className="soro-card p-5"><div className="grid gap-4">
+        <label className="grid gap-2 text-sm"><span className="font-medium text-slate-700">Mission</span><Textarea value={mission} onChange={e=>setMission(e.target.value)} placeholder="What should this content accomplish?"/></label>
+        <label className="grid gap-2 text-sm"><span className="font-medium text-slate-700">Subject / spokesperson direction</span><Input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Who or what should appear?"/></label>
+        <label className="grid gap-2 text-sm"><span className="font-medium text-slate-700">Exact dialogue (optional)</span><Textarea value={script} onChange={e=>setScript(e.target.value)} placeholder="Spoken copy, if the provider supports it"/></label>
+        <label className="grid gap-2 text-sm"><span className="font-medium text-slate-700">Reference image {provider === "hedra" ? "(required)" : "(optional)"}</span><div className="flex items-center gap-3"><Input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>chooseImage(e.target.files?.[0])}/><Upload size={18}/></div>{image&&<span className="text-xs text-emerald-700">Loaded: {image.name}</span>}</label>
+        {provider === "hedra" && <div className="grid gap-4 rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <label className="grid gap-1 text-sm"><span className="font-medium text-violet-900">Hedra duration</span><select value={hedraDuration} onChange={e=>setHedraDuration(Number(e.target.value) as 15|30)} className="h-11 rounded-xl border border-violet-200 bg-white px-3"><option value={15}>15 seconds</option><option value={30}>30 seconds</option></select></label>
+          <label className="grid gap-2 text-sm"><span className="font-medium text-violet-900">Driving audio (required)</span><Input type="file" accept="audio/*" onChange={e=>chooseAudio(e.target.files?.[0])}/>{audio&&<span className="text-xs text-emerald-700">Loaded: {audio.name}</span>}<span className="text-xs text-violet-700">Character/Avatar models animate the reference image from this audio.</span></label>
+        </div>}
+        <Button size="lg" disabled={busy || !hedraReady} onClick={generate}><Play size={17} className="mr-2"/>{busy?`Starting ${selected.label}…`:`Generate ${durationSeconds}s with ${selected.label}`}</Button>
+      </div></div>
+
+      <div className="soro-card min-h-[470px] p-5">
+        <div className="mb-4 flex items-start justify-between gap-3"><div><div className="font-medium">Output</div><div className="text-xs text-slate-500">{durationSeconds}s · {selected.label} · provider-specific generation</div></div>{job&&<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase">{job.status}</span>}</div>
+        {!job&&<div className="grid h-[330px] place-items-center rounded-xl border border-dashed border-slate-200 text-center text-sm text-slate-500">Generated video appears here.</div>}
+        {job?.status==="failed"&&<div className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{job.error}</div>}
+        {job&&!["succeeded","failed"].includes(job.status)&&<div className="grid h-[330px] place-items-center text-sm"><div className="text-center"><div className="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600"/>{selected.label} is generating…</div></div>}
+        {job?.status==="succeeded"&&job.fileUrl&&<div><video src={job.fileUrl} className="max-h-[430px] w-full rounded-xl bg-black" controls autoPlay playsInline/><div className="mt-4 flex flex-wrap items-center gap-2"><Button onClick={sendToCalendar} disabled={scheduleState!=="idle"}><CalendarPlus size={15} className="mr-2"/>{scheduleState==="saved"?"Added to Calendar":scheduleState==="saving"?"Adding…":"Send to approval Calendar"}</Button>{scheduleState==="saved"&&<Link href="/calendar" className="text-sm font-medium text-violet-700 hover:underline">Review scheduled post →</Link>}</div></div>}
+      </div>
+    </div>
+  </main>;
+}
