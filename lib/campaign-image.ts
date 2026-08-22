@@ -29,7 +29,7 @@ async function editWithOpenAI(referencePath:string,prompt:string,model:string){
   try{const r=await fetch("https://api.openai.com/v1/images/edits",{method:"POST",headers:{Authorization:`Bearer ${key}`},body:form,signal:ac.signal});if(!r.ok)throw new ImageUpstreamError(`OpenAI image API HTTP ${r.status}: ${(await r.text()).slice(0,300)}`,r.status);const json=await r.json() as {data?:Array<{b64_json?:string}>};const data=json.data?.[0]?.b64_json;if(!data)throw new ImageUpstreamError("OpenAI returned no image",502);return{base64:data,mimeType:"image/png",model};}finally{clearTimeout(timer)}
 }
 
-export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null}){
+export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean}){
   const prompt=`Create one campaign-ready vertical social-media still. ${input.prompt}\nPhotorealistic unless the creative direction explicitly requests another style. No fabricated legal results, settlement amounts, testimonials, injuries, statistics, logos, or text artifacts.`;
   let result:{base64:string;mimeType:string;model:string};
   if(input.avatarId){
@@ -47,6 +47,6 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
   }else{
     const fresh=await generateAvatarImage({prompt});result={base64:fresh.base64,mimeType:fresh.mimeType,model:fresh.model};
   }
-  const saved=await saveGeneratedImage({base64:result.base64,source:"campaign-still",model:result.model,prompt,mimeType:result.mimeType});
+  const saved=await saveGeneratedImage({base64:result.base64,source:"campaign-still",model:result.model,prompt,mimeType:result.mimeType,createCalendarPost:input.createCalendarPost});
   return{...result,assetId:saved.id,assetUrl:saved.url};
 }
