@@ -1,30 +1,20 @@
 import { expect, test } from "@playwright/test";
 import { stubAuthenticatedSession } from "./helpers";
 
-test("Sites supports blog-only onboarding header code CMS publishing and calendar planning",async({page})=>{
+test("Sites researches URL first then saves inferred blog strategy",async({page})=>{
   await stubAuthenticatedSession(page);let sites:any[]=[];let planned:any=null;let lastSave:any=null;
-  await page.route("**/api/sites",async route=>{const req=route.request();if(req.method()==="GET"&&new URL(req.url()).pathname==="/api/sites")return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({sites})});if(req.method()==="POST"&&new URL(req.url()).pathname==="/api/sites"){const input=await req.postDataJSON();lastSave=input;const site={id:"site-1",...input,url:"https://example.com",verifiedAt:null,lastSeenAt:null,status:"setup",bridgeToken:"ve_site_test",publishConfigured:Boolean(input.publishEndpoint&&input.publishSecret)};sites=[site];return route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({site})});}return route.continue();});
-  await page.route("**/api/sites/site-1",async route=>{if(route.request().method()==="PATCH"){const input=await route.request().postDataJSON();lastSave=input;sites=[{...sites[0],...input,publishConfigured:Boolean(input.publishEndpoint&&(input.publishSecret||sites[0].publishConfigured))}];return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({site:sites[0]})});}return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({site:{...sites[0],bridgeToken:"ve_site_test"}})});});
-  await page.route("**/api/sites/site-1/plan",async route=>{planned=await route.request().postDataJSON();return route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({ok:true,count:14})});});
-  await page.goto("/sites");
-  await expect(page.getByRole("heading",{name:"Sites",exact:true})).toBeVisible();
-  await expect(page.getByText(/blog \+ images only/i)).toBeVisible();
-  await page.getByRole("button",{name:"Add site",exact:true}).click();
-  await page.getByRole("textbox",{name:"Site name",exact:true}).fill("Example Blog");
-  await page.getByRole("textbox",{name:"Website URL",exact:true}).fill("https://example.com");
-  await page.locator("label").filter({hasText:/^Image style/}).locator("select").selectOption("hyper-realistic");
-  await page.locator("label").filter({hasText:/^Publishing mode/}).locator("select").selectOption("wordpress-rest");
-  await page.getByRole("textbox",{name:"WordPress username",exact:true}).fill("publisher");
-  await page.getByRole("textbox",{name:"Application password",exact:true}).fill("app-pass");
-  await expect(page.getByText(/No video settings exist in this workflow/i)).toBeVisible();
-  await page.getByRole("button",{name:"Save site",exact:true}).click();
-  expect(lastSave.publishMode).toBe("wordpress-rest");
-  expect(lastSave.publishEndpoint).toContain("/wp-json/wp/v2/posts");
-  await expect(page.getByText("Install header code",{exact:true})).toBeVisible();
-  await expect(page.locator("pre")).toContainText("/api/sites/bridge.js?key=ve_site_test");
-  await page.getByRole("button",{name:"Close",exact:true}).last().click();
-  await page.getByLabel("Planning horizon for Example Blog",{exact:true}).selectOption("14");
-  await page.getByRole("button",{name:"Generate blog calendar",exact:true}).click();
-  await expect(page.getByText(/14 NVIDIA blog drafts added to Calendar/)).toBeVisible();
-  expect(planned.horizonDays).toBe(14);
+  await page.route("**/api/sites",async route=>{const req=route.request(),path=new URL(req.url()).pathname;if(req.method()==="GET"&&path==="/api/sites")return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({sites})});if(req.method()==="POST"&&path==="/api/sites"){const input=await req.postDataJSON();lastSave=input;const site={id:"site-1",...input,url:"https://example.com",verifiedAt:null,lastSeenAt:null,status:"setup",bridgeToken:"ve_site_test",publishConfigured:false};sites=[site];return route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({site})})}return route.continue()});
+  await page.route("**/api/sites/research",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({research:{siteName:"Example Legal",language:"en",targetAudience:"Florida drivers researching accident next steps",brandVoice:"clear, calm, authoritative",topicFocus:"collision documentation, insurance process, medical follow-up",keywords:"car accident checklist, crash documentation, Florida accident",articleLength:"long",cadence:"3-week",cta:"Request a consultation",internalLinking:true,externalLinks:true,imageStyle:"editorial photography",imageAspectRatio:"16:9",cms:"wordpress",summary:"The site is a Florida legal information site focused on practical post-collision guidance.",pagesAnalyzed:["https://example.com/","https://example.com/about"]}})}));
+  await page.route("**/api/sites/site-1",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({site:{...sites[0],bridgeToken:"ve_site_test"}})}));
+  await page.route("**/api/sites/site-1/plan",async route=>{planned=await route.request().postDataJSON();return route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({ok:true,count:14})})});
+  await page.goto("/sites");await page.getByRole("button",{name:"Add site",exact:true}).click();
+  await expect(page.getByText("1. Let AI learn the website")).toBeVisible();await expect(page.getByRole("button",{name:"Save site"})).toBeDisabled();
+  await page.getByRole("textbox",{name:"Website URL",exact:true}).fill("https://example.com");await page.getByRole("button",{name:"Research site with AI"}).click();
+  await expect(page.getByText("AI research complete")).toBeVisible();await expect(page.getByRole("textbox",{name:/Target audience/})).toHaveValue(/Florida drivers/);await expect(page.getByRole("textbox",{name:/Brand voice/})).toHaveValue(/authoritative/);await expect(page.getByRole("textbox",{name:/Seed keywords/})).toHaveValue(/car accident checklist/);
+  await page.getByRole("button",{name:"2. Review optional publishing and creative controls"}).click();await expect(page.getByLabel("CMS / publishing target")).toHaveValue("wordpress");await expect(page.getByLabel("Image style")).toHaveValue("editorial photography");
+  await page.getByRole("button",{name:"Save site",exact:true}).click();expect(lastSave.targetAudience).toContain("Florida drivers");expect(lastSave.publishMode).toBe("unconfigured");
+  await expect(page.getByText("Install header code",{exact:true})).toBeVisible();await expect(page.locator("pre")).toContainText("/api/sites/bridge.js?key=ve_site_test");await page.getByRole("button",{name:"Close",exact:true}).last().click();
+  await page.getByLabel("Planning horizon for Example Legal").selectOption("14");await page.getByRole("button",{name:"Generate blog calendar"}).click();await expect(page.getByText(/14 full blog drafts queued into Calendar/)).toBeVisible();expect(planned.horizonDays).toBe(14);
 });
+
+test("Sites shows friendly URL validation only after action",async({page})=>{await stubAuthenticatedSession(page);await page.route("**/api/sites",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({sites:[]})}));await page.goto("/sites");await page.getByRole("button",{name:"Add site"}).click();await expect(page.getByText("Invalid URL")).toHaveCount(0);await page.getByLabel("Website URL").fill("example");await page.getByRole("button",{name:"Research site with AI"}).click();await expect(page.getByText(/full website URL/i)).toBeVisible();});
