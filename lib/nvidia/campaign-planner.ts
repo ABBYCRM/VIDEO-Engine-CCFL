@@ -8,7 +8,7 @@ const CAMPAIGN_BRIEFS:Record<string,string>={
   trucking:"Personal-injury awareness creative involving commercial trucks / 18-wheelers, scene preservation, multiple responsible parties, and urgency around evidence. Avoid invented legal conclusions, statistics, settlements, or guarantees.",
   trucking_accident:"Personal-injury awareness creative involving commercial trucks / 18-wheelers, scene preservation, multiple responsible parties, and urgency around evidence. Avoid invented legal conclusions, statistics, settlements, or guarantees.",
   slip_fall:"Premises-liability awareness creative about a fall, unsafe condition, documentation, reporting, medical follow-up, or preserving evidence. Avoid claiming a property owner is liable without facts.",
-  ugc:"Creator-style direct-response social video. Natural, conversational, thumb-stopping, credible and concise. It may use a spokesperson reacting to a common problem or explaining one useful next step without fake testimonials or fabricated facts."
+  ugc:"Creator-style direct-response social creative. Natural, conversational, thumb-stopping, credible and concise. It may use a spokesperson reacting to a common problem or explaining one useful next step without fake testimonials or fabricated facts."
 };
 
 const PROVIDER_GUIDANCE:Record<string,string>={
@@ -18,18 +18,24 @@ const PROVIDER_GUIDANCE:Record<string,string>={
   hedra:"Talking-character/avatar performance driven by audio. The dialogue is the primary timing source. Camera and background should remain stable and spokesperson-centric.",
   generic:"Create a reusable campaign brief suitable for Calendar planning. Focus on message, audience, spokesperson direction, hook and caption rather than one model-specific shot."
 };
+const OUTPUT_GUIDANCE:Record<string,string>={
+  video:"The requested output is a video. Plan motion, framing, timing and dialogue appropriate to the selected video provider.",
+  image:"The requested output is a single still social post. Plan one decisive frame with a photorealistic/editorial visual direction and no motion-only instructions. Dialogue should be empty unless it is useful as overlay copy.",
+  auto_mix:"The campaign alternates video and still-image posts. Make the core hook/caption reusable across both, and make visualDirection describe a concept that can be expressed as either a motion shot or a single strong frame."
+};
 
 export type CampaignPlan={mission:string;subject:string;script:string;hook:string;caption:string;visualDirection:string;rationale:string};
 
-export async function planCampaign(input:{category:string;provider:string;durationSeconds:number;avatarName?:string|null}):Promise<CampaignPlan>{
+export async function planCampaign(input:{category:string;provider:string;durationSeconds:number;avatarName?:string|null;outputMode?:"video"|"image"|"auto_mix"|string}):Promise<CampaignPlan>{
   if(!isNvidiaEnabled())throw new Error("NVIDIA content intelligence is not configured");
   const brief=CAMPAIGN_BRIEFS[input.category]||CAMPAIGN_BRIEFS.ugc;
   const provider=PROVIDER_GUIDANCE[input.provider]||PROVIDER_GUIDANCE.generic;
+  const output=OUTPUT_GUIDANCE[input.outputMode||"video"]||OUTPUT_GUIDANCE.video;
   const duration=Math.max(8,Math.min(30,Math.round(input.durationSeconds||8)));
   const avatar=input.avatarName?`Use canonical spokesperson ${input.avatarName}; preserve that identity consistently.`:"Choose an appropriate adult spokesperson or subject for the concept.";
   const response=await chatCompletion({model:getNvidiaModel(),temperature:.55,maxTokens:1400,jsonMode:true,messages:[
-    {role:"system",content:"You are the creative planner inside an internal campaign-content application. The operator chooses a campaign type, content format/provider and optionally a canonical spokesperson; you do the prompt-writing work. Return JSON only with mission, subject, script, hook, caption, visualDirection, rationale. Never invent case results, settlements, testimonials, legal guarantees, medical diagnoses, statistics, factual claims, or client-specific details. Make the plan immediately executable and reusable for Calendar scheduling."},
-    {role:"user",content:`Campaign brief: ${brief}\nExecution constraint: ${provider}\nTarget duration when applicable: ${duration} seconds.\nSpokesperson: ${avatar}\n\nCreate a strong but compliant campaign concept. mission = what the content accomplishes; subject = precise person/environment/camera direction; script = exact spoken dialogue only when useful (for Hedra always provide dialogue timed to duration); hook = short opening line; caption = social post copy; visualDirection = provider-ready visual action; rationale = one concise sentence explaining the choice.`}
+    {role:"system",content:"You are the creative planner inside an internal campaign-content application. The operator chooses a campaign type, output mode, content format/provider and optionally a canonical spokesperson; you do the prompt-writing work. Return JSON only with mission, subject, script, hook, caption, visualDirection, rationale. Never invent case results, settlements, testimonials, legal guarantees, medical diagnoses, statistics, factual claims, or client-specific details. Make the plan immediately executable and reusable for Calendar scheduling."},
+    {role:"user",content:`Campaign brief: ${brief}\nOutput requirement: ${output}\nExecution constraint: ${provider}\nTarget duration when applicable: ${duration} seconds.\nSpokesperson: ${avatar}\n\nCreate a strong but compliant campaign concept. mission = what the content accomplishes; subject = precise person/environment/camera direction; script = exact spoken dialogue only when useful (for Hedra video always provide dialogue timed to duration); hook = short opening line; caption = social post copy; visualDirection = generation-ready visual action/frame; rationale = one concise sentence explaining the choice.`}
   ]});
   let p:any;try{p=JSON.parse(response.text.trim().replace(/^```(?:json)?\s*/i,"").replace(/```\s*$/, ""));}catch{throw new Error("Campaign planner returned invalid JSON. Retry the AI plan.");}
   const s=(v:any,n:number)=>String(v||"").trim().slice(0,n);
