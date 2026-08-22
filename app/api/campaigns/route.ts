@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createPlanningSlots } from "@/lib/calendar-assets";
+import { startCampaignAutopilotLoop } from "@/lib/campaign-autopilot";
 
 function ensureColumn(name:string,ddl:string){try{const cols=db.prepare("PRAGMA table_info(campaigns)").all() as {name:string}[];if(!cols.some(c=>c.name===name))db.exec(`ALTER TABLE campaigns ADD COLUMN ${ddl}`)}catch{}}
 ensureColumn("planning_horizon_days","planning_horizon_days INTEGER NOT NULL DEFAULT 7");
@@ -21,6 +22,7 @@ export async function POST(req:Request){
   if(!name||!category||!mission)return NextResponse.json({error:"Campaign name, category, and AI plan are required"},{status:400});if(![3,7,14,30].includes(horizon))return NextResponse.json({error:"Planning horizon must be 3, 7, 14, or 30 days"},{status:400});
   const id=crypto.randomUUID();db.prepare(`INSERT INTO campaigns(id,name,category,website,mission,tone,platform,avatar_id,background_id,planning_horizon_days,content_type,output_mode,video_provider,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'draft')`).run(id,name,category,website||null,mission,tone||null,platform||null,avatarId||null,backgroundId||null,horizon,contentType,outputMode,videoProvider);
   const calendarIds=createPlanningSlots({horizonDays:horizon,titlePrefix:name,contentType,outputMode:outputMode as "video"|"image"|"auto_mix",network:platform||"instagram",caption:mission,campaignId:id,approvalMode:body.autoPost?"auto":"manual",cadence:"daily"});
+  startCampaignAutopilotLoop();
   const campaign=db.prepare(`SELECT id,name,category,website,mission,tone,platform,avatar_id as avatarId,background_id as backgroundId,planning_horizon_days as planningHorizonDays,content_type as contentType,output_mode as outputMode,video_provider as videoProvider,status,created_at as createdAt FROM campaigns WHERE id=?`).get(id);
   return NextResponse.json({campaign,calendarCount:calendarIds.length},{status:201});
 }
