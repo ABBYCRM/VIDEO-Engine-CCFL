@@ -3,7 +3,7 @@ name: Build and E2E
 on:
   push:
     branches:
-      - feat/ugc-avatar-nvidia-workflow
+      - main
   pull_request:
 
 jobs:
