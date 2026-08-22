@@ -16,8 +16,8 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
       result=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption});
     }else if(post.network==="website"){
       if(!post.site_id)return NextResponse.json({error:"Website Calendar items must be linked to a Site before publishing"},{status:409});
-      const blog=post.source_asset_key?.startsWith("blog:")?db.prepare("SELECT slug FROM blog_posts WHERE id=?").get(String(post.source_asset_key).slice(5)) as any:null;
-      result=await publishWebsite({siteId:post.site_id,title:post.title,content:post.caption||"",slug:blog?.slug||null});
+      if(post.generation_status&&post.generation_status!=="ready")return NextResponse.json({error:`Blog draft is ${post.generation_status}; wait for generation to finish before publishing`},{status:409});
+      result=await publishWebsite({siteId:post.site_id,title:post.title,content:post.content_body||post.caption||"",slug:post.slug||null});
     }else{
       return NextResponse.json({error:`${post.network} publishing is not connected yet. Use Instagram, Website, or keep this item in owner review.`},{status:409});
     }
@@ -25,7 +25,7 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
     return NextResponse.json({ok:true,result});
   }catch(e){
     const message=e instanceof Error?e.message:String(e);
-    db.prepare("UPDATE scheduled_posts SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(message,id);
+    db.prepare("UPDATE scheduled_posts SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(message.slice(0,2000),id);
     return NextResponse.json({error:message},{status:400});
   }
 }
