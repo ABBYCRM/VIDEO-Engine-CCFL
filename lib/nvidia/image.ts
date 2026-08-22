@@ -51,8 +51,8 @@ export async function generateAvatarImage(input: {
     prompt,
     width: 1024,
     height: 1024,
-    seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0,
-    ...(model === "black-forest-labs/flux.1-schnell" ? { steps: 4 } : { steps: 4, mode: "Image Generation" })
+    steps: 4,
+    seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0
   });
   return { base64, mimeType: "image/png", model };
 }
@@ -69,7 +69,6 @@ export async function editAvatarImage(input: {
   const mime = ["image/png", "image/jpeg", "image/webp"].includes(input.imageMimeType || "") ? input.imageMimeType! : "image/png";
   const image = `data:${mime};base64,${input.imageBase64}`;
   const base64 = await callNvidia(model, {
-    mode: "Image Editing",
     prompt,
     image: [image],
     width: 1024,

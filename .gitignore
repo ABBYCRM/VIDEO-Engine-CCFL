@@ -11,3 +11,4 @@ npm-debug.log*
 .DS_Store
 
 tsconfig.tsbuildinfo
+.do_config_*.md
