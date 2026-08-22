@@ -4,13 +4,13 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-xl text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400",
+  "inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2",
   { variants: { variant: {
-    default: "bg-cyan-500 text-slate-950 hover:bg-cyan-300",
-    secondary: "bg-slate-100 text-slate-100 hover:bg-slate-700",
-    outline: "border border-slate-200 bg-transparent text-slate-100 hover:bg-slate-100",
-    danger: "bg-red-500/15 text-red-300 hover:bg-red-500/25",
-    ghost: "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-100"
+    default: "bg-violet-600 text-white shadow-sm hover:bg-violet-700 active:bg-violet-800",
+    secondary: "border border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-100 hover:text-slate-950 active:bg-slate-200",
+    outline: "border border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-950",
+    danger: "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800",
+    ghost: "bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950"
   }, size: { default: "h-10 px-4", sm: "h-9 px-3", lg: "h-12 px-6" } }, defaultVariants: { variant: "default", size: "default" } }
 );
 
