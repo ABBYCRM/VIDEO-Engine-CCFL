@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
+import { db } from "@/lib/db";
 import {
   getAvatarImageModel,
   getAvatarImageProvider,
@@ -12,37 +13,24 @@ import {
   type AvatarImageProvider
 } from "@/lib/avatar-generation/provider";
 
-function payload() {
-  return {
-    configured: isAvatarImageProviderConfigured(),
-    provider: getAvatarImageProvider(),
-    model: getAvatarImageModel(),
-    providers: listAvatarImageProviders(),
-    modelChoices: listAvatarImageModelChoices(),
-    maskedKey: null
-  };
+function payload(){return{configured:isAvatarImageProviderConfigured(),provider:getAvatarImageProvider(),model:getAvatarImageModel(),providers:listAvatarImageProviders(),modelChoices:listAvatarImageModelChoices(),maskedKey:null};}
+function clearStaleGenerationState(){
+  db.prepare("UPDATE avatar_views SET generation_status='idle',generation_error=NULL,generation_finished_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE generation_status IN ('failed','generating')").run();
+  db.exec(`UPDATE avatars SET turnaround_error=NULL,turnaround_status=CASE WHEN (SELECT COUNT(*) FROM avatar_views v WHERE v.avatar_id=avatars.id AND v.status='ready')=4 THEN 'ready' ELSE 'incomplete' END,updated_at=CURRENT_TIMESTAMP`);
 }
 
-export async function GET() {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json(payload());
-}
-
-export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const body = await req.json().catch(() => ({}));
-    if (body.provider) {
-      const provider = String(body.provider) as AvatarImageProvider;
-      if (!["nvidia", "gemini", "openai", "xai", "mock"].includes(provider)) {
-        return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
-      }
-      setAvatarImageProvider(provider);
+export async function GET(){if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});return NextResponse.json(payload());}
+export async function POST(req:Request){
+  if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});
+  try{
+    const body=await req.json().catch(()=>({}));
+    if(body.provider){
+      const provider=String(body.provider) as AvatarImageProvider;
+      if(!["nvidia","gemini","openai","xai","mock"].includes(provider))return NextResponse.json({error:"Invalid provider"},{status:400});
+      const previous=getAvatarImageProvider();setAvatarImageProvider(provider);if(previous!==provider)clearStaleGenerationState();
     }
-    if (body.model && listAvatarImageModelChoices().includes(String(body.model))) setAvatarImageModel(String(body.model));
-    if (body.apiKey) saveAvatarImageApiKey(String(body.apiKey));
+    if(body.model&&listAvatarImageModelChoices().includes(String(body.model)))setAvatarImageModel(String(body.model));
+    if(body.apiKey)saveAvatarImageApiKey(String(body.apiKey));
     return NextResponse.json(payload());
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 });
-  }
+  }catch(e){return NextResponse.json({error:e instanceof Error?e.message:String(e)},{status:400});}
 }
