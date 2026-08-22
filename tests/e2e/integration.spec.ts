@@ -7,6 +7,10 @@ async function realLogin(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Create campaign content" })).toBeVisible({ timeout: 15000 });
 }
 
+function fieldSelect(page: import("@playwright/test").Page, label: string) {
+  return page.locator("label").filter({ hasText: new RegExp(`^${label}`) }).locator("select");
+}
+
 test("real admin workflow persists a Site and Calendar article without API stubs", async ({ page }) => {
   await realLogin(page);
   const suffix = Date.now();
@@ -18,10 +22,10 @@ test("real admin workflow persists a Site and Calendar article without API stubs
   await page.getByRole("button", { name: "Add site", exact: true }).click();
   await page.getByLabel("Site name", { exact: true }).fill(siteName);
   await page.getByLabel("Website URL", { exact: true }).fill(siteUrl);
-  await page.getByLabel("CMS / publishing target", { exact: true }).selectOption("wordpress");
-  await page.getByLabel("Publishing cadence", { exact: true }).selectOption("manual");
-  await page.getByLabel("Approval policy", { exact: true }).selectOption("manual");
-  await page.locator("label").filter({ hasText: /^Image style/ }).locator("select").selectOption("hyper-realistic");
+  await fieldSelect(page, "CMS / publishing target").selectOption("wordpress");
+  await fieldSelect(page, "Publishing cadence").selectOption("manual");
+  await fieldSelect(page, "Approval policy").selectOption("manual");
+  await fieldSelect(page, "Image style").selectOption("hyper-realistic");
   await page.getByRole("button", { name: "Save site", exact: true }).click();
   await expect(page.getByText(/Install header code/i)).toBeVisible();
   await expect(page.locator("pre")).toContainText("/api/sites/bridge.js?key=ve_site_");
