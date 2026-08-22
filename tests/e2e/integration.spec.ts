@@ -9,7 +9,6 @@ async function realLogin(page: import("@playwright/test").Page) {
 
 test("real admin workflow persists a Site and Calendar article without API stubs", async ({ page }) => {
   await realLogin(page);
-
   const suffix = Date.now();
   const siteName = `E2E Editorial ${suffix}`;
   const siteUrl = `https://e2e-${suffix}.example.com`;
@@ -24,10 +23,9 @@ test("real admin workflow persists a Site and Calendar article without API stubs
   await page.getByLabel("Approval policy").selectOption("manual");
   await page.getByLabel("Image style").selectOption("hyper-realistic");
   await page.getByRole("button", { name: "Save site" }).click();
-
   await expect(page.getByText(/Install header code/i)).toBeVisible();
   await expect(page.locator("pre")).toContainText("/api/sites/bridge.js?key=ve_site_");
-  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Close" }).last().click();
   await expect(page.getByText(siteName)).toBeVisible();
   await expect(page.getByText(siteUrl)).toBeVisible();
 
@@ -53,7 +51,7 @@ test("real admin workflow persists a Site and Calendar article without API stubs
   await page.reload();
   await expect(page.getByText(articleTitle).first()).toBeVisible();
   await page.getByText(articleTitle).first().click();
-  await expect(page.getByLabel("Article body")).toContainText("Integration article");
+  await expect(page.getByLabel("Article body")).toHaveValue(/Integration article/);
   await page.getByRole("button", { name: "Cancel" }).click();
 
   await page.goto("/sites");
