@@ -136,12 +136,23 @@ export async function generateView(opts: { avatarId: string; view: AvatarView; r
 async function geminiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
   const b64 = (await fs.readFile(referencePath)).toString("base64");
-  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 30000);
+  const TIMEOUT_MS = 30000;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  // Hard Promise.race fallback — AbortController alone has been observed to
+  // not always interrupt the underlying socket in Next.js's server runtime,
+  // so we also reject the promise after the same window + 1.5s grace.
+  const hardTimeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new ImageUpstreamError(`Gemini image API hard timeout after ${TIMEOUT_MS + 1500}ms`, 504)), TIMEOUT_MS + 1500);
+  });
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: ac.signal,
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: mimeFor(referencePath), data: b64 } }, { text: prompt }] }], generationConfig: { responseModalities: ["IMAGE"], temperature: 0.35 } })
-    });
+    const response = await Promise.race([
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: ac.signal,
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: mimeFor(referencePath), data: b64 } }, { text: prompt }] }], generationConfig: { responseModalities: ["IMAGE"], temperature: 0.35 } })
+      }),
+      hardTimeout
+    ]);
     if (!response.ok) throw new ImageUpstreamError(`Gemini image API HTTP ${response.status}: ${(await response.text()).slice(0,300)}`, response.status);
     const json = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ inline_data?: { data?: string } }> } }> };
     const data = json.candidates?.[0]?.content?.parts?.find(p => p.inline_data?.data)?.inline_data?.data;
@@ -152,7 +163,8 @@ async function geminiImageGenerate(referencePath: string, model: string, prompt:
 
 async function openaiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
-  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 30000);
+  const TIMEOUT_MS = 30000;
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
   try {
     let response: Response;
     if (model === "dall-e-3") {
