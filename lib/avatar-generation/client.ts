@@ -136,7 +136,7 @@ export async function generateView(opts: { avatarId: string; view: AvatarView; r
 async function geminiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
   const b64 = (await fs.readFile(referencePath)).toString("base64");
-  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 90000);
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 30000);
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: ac.signal,
@@ -152,7 +152,7 @@ async function geminiImageGenerate(referencePath: string, model: string, prompt:
 
 async function openaiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
-  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 90000);
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 30000);
   try {
     let response: Response;
     if (model === "dall-e-3") {
@@ -183,7 +183,7 @@ export async function generateReferencePortraitFromPrompt(prompt: string): Promi
   const key = process.env.XAI_API_KEY;
   if (!key) throw new ImageKeyMissingError();
   const model = getImageModel().startsWith("grok-") ? getImageModel() : "grok-imagine-image";
-  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 90000);
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 30000);
   try {
     const r = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },

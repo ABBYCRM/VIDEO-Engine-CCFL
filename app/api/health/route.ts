@@ -36,7 +36,7 @@ async function pingHedra() {
   const t0 = Date.now();
   const authHeader = `Basic ${Buffer.from(process.env.HEDRA_API_KEY || "").toString("base64")}`;
   const r = await withTimeout(
-    fetch("https://api.hedra.com/v1/models", { headers: { "X-API-Key": process.env.HEDRA_API_KEY || "", Authorization: authHeader } }),
+    fetch("https://api.hedra.com/v3/jobs", { headers: { "X-API-Key": process.env.HEDRA_API_KEY || "", Authorization: authHeader } }),
     TIMEOUT_MS
   );
   if (!r.ok) return { configured, live: false, error: r.error, latencyMs: Date.now() - t0 };
