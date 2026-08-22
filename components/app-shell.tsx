@@ -4,24 +4,23 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Clapperboard, Settings, BookOpen, LogOut, Megaphone, Users,
-  Calendar, Plug, Library, Mic, Plus, Globe, ChevronRight, X
+  Calendar, Plug, Library, Plus, Globe, ChevronRight, X
 } from "lucide-react";
 import { DuckMark } from "@/components/duck-mark";
 
-type NavItem = { href: string; label: string; icon: any; group: "WORKSPACE" | "WORKFLOW" | "ACCOUNT"; badge?: "new" | number; exact?: boolean };
+type NavItem = { href: string; label: string; icon: any; group: "CREATE" | "REVIEW" | "ACCOUNT"; exact?: boolean };
 
 const NAV: NavItem[] = [
-  { href: "/",                  label: "Generate",      icon: Clapperboard, group: "WORKSPACE", exact: true },
-  { href: "/campaigns",         label: "Campaigns",     icon: Megaphone,   group: "WORKSPACE" },
-  { href: "/avatars",           label: "Avatars",       icon: Users,       group: "WORKSPACE" },
-  { href: "/calendar",          label: "Calendar",      icon: Calendar,    group: "WORKFLOW" },
-  { href: "/library",           label: "Library",       icon: Library,     group: "WORKFLOW" },
-  { href: "/podcast-interview", label: "Podcast Style", icon: Mic,         group: "WORKFLOW", badge: "new" },
-  { href: "/integrations",      label: "Integrations",  icon: Plug,        group: "ACCOUNT" },
-  { href: "/docs",              label: "API",           icon: BookOpen,    group: "ACCOUNT" },
-  { href: "/settings",          label: "Settings",      icon: Settings,    group: "ACCOUNT" }
+  { href: "/",             label: "Create",       icon: Clapperboard, group: "CREATE", exact: true },
+  { href: "/campaigns",    label: "Campaigns",    icon: Megaphone,    group: "CREATE" },
+  { href: "/avatars",      label: "Avatars",      icon: Users,        group: "CREATE" },
+  { href: "/library",      label: "Library",      icon: Library,      group: "REVIEW" },
+  { href: "/calendar",     label: "Calendar",     icon: Calendar,     group: "REVIEW" },
+  { href: "/integrations", label: "Integrations", icon: Plug,         group: "ACCOUNT" },
+  { href: "/docs",         label: "API",          icon: BookOpen,     group: "ACCOUNT" },
+  { href: "/settings",     label: "Settings",     icon: Settings,     group: "ACCOUNT" }
 ];
-const GROUPS: NavItem["group"][] = ["WORKSPACE", "WORKFLOW", "ACCOUNT"];
+const GROUPS: NavItem["group"][] = ["CREATE", "REVIEW", "ACCOUNT"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -67,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       const I = n.icon;
                       const active = n.exact ? path === n.href : path.startsWith(n.href);
                       return <li key={n.href}><Link href={n.href} onClick={() => setMobileOpen(false)} className={`group flex items-center gap-2 rounded-xl px-2.5 py-2 text-[14px] transition ${active ? "bg-violet-50 font-semibold text-violet-700" : "text-slate-700 hover:bg-slate-50"}`}>
-                        <I size={16} className={active ? "text-violet-600" : "text-slate-500"}/><span className="flex-1 truncate">{n.label}</span>{n.badge === "new" && <span className="soro-new-pill">new</span>}
+                        <I size={16} className={active ? "text-violet-600" : "text-slate-500"}/><span className="flex-1 truncate">{n.label}</span>
                       </Link></li>;
                     })}
                   </ul>
