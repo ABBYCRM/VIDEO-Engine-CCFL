@@ -201,9 +201,9 @@ function seedDefaultAvatars() {
 }
 seedDefaultAvatars();
 
-// Start the avatar generation watchdog. It scans every 60s for views
-// that have been 'generating' for >2 minutes and force-fails them. This
-// is the safety net for the rare case where the in-process AbortController
-// / Promise.race timeout doesn't fire (Node event loop starved, process
-// reaped, etc.). Idempotent — re-importing this module is safe.
+// Long-running internal workers. Each start function is idempotent and disabled in tests.
+// Dynamic imports avoid circular initialization while still starting workers as soon as
+// the server's shared persistence layer is initialized.
 import("./avatar-watchdog").then((m) => m.startWatchdogLoop()).catch(() => { /* noop */ });
+import("./calendar-publisher").then((m) => m.startCalendarPublisherLoop()).catch(() => { /* noop */ });
+import("./blog-autopilot").then((m) => m.startBlogAutopilotLoop()).catch(() => { /* noop */ });
