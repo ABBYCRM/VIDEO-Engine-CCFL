@@ -200,3 +200,10 @@ function seedDefaultAvatars() {
   } catch {}
 }
 seedDefaultAvatars();
+
+// Start the avatar generation watchdog. It scans every 60s for views
+// that have been 'generating' for >2 minutes and force-fails them. This
+// is the safety net for the rare case where the in-process AbortController
+// / Promise.race timeout doesn't fire (Node event loop starved, process
+// reaped, etc.). Idempotent — re-importing this module is safe.
+import("./avatar-watchdog").then((m) => m.startWatchdogLoop()).catch(() => { /* noop */ });
