@@ -5,7 +5,7 @@ export type NvidiaImageModel =
   | "black-forest-labs/flux.2-klein-4b";
 
 export const NVIDIA_IMAGE_MODELS: Array<{ id: NvidiaImageModel; label: string; notes: string }> = [
-  { id: "black-forest-labs/flux.1-schnell", label: "FLUX.1 Schnell", notes: "Fast text-to-image avatar drafts; 1–4 steps." },
+  { id: "black-forest-labs/flux.1-schnell", label: "FLUX.1 Schnell", notes: "Fast text-to-image drafts; ideal for article imagery and avatar concepts." },
   { id: "black-forest-labs/flux.2-klein-4b", label: "FLUX.2 Klein 4B", notes: "Generation plus reference-image editing for consistent avatar views." }
 ];
 
@@ -39,22 +39,41 @@ async function callNvidia(model: NvidiaImageModel, body: Record<string, unknown>
   return base64;
 }
 
+function imageSize(aspectRatio: string | undefined) {
+  switch (aspectRatio) {
+    case "16:9": return { width: 1344, height: 768 };
+    case "4:3": return { width: 1152, height: 896 };
+    case "3:2": return { width: 1216, height: 832 };
+    case "1:1": default: return { width: 1024, height: 1024 };
+  }
+}
+
+export async function generateImage(input: {
+  prompt: string;
+  model?: NvidiaImageModel;
+  seed?: number;
+  aspectRatio?: "16:9" | "4:3" | "3:2" | "1:1" | string;
+}): Promise<{ base64: string; mimeType: "image/png"; model: NvidiaImageModel }> {
+  const model = input.model || "black-forest-labs/flux.1-schnell";
+  const prompt = input.prompt.trim().slice(0, 10000);
+  if (!prompt) throw new Error("Image prompt is required");
+  const { width, height } = imageSize(input.aspectRatio);
+  const base64 = await callNvidia(model, {
+    prompt,
+    width,
+    height,
+    steps: 4,
+    seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0
+  });
+  return { base64, mimeType: "image/png", model };
+}
+
 export async function generateAvatarImage(input: {
   prompt: string;
   model?: NvidiaImageModel;
   seed?: number;
 }): Promise<{ base64: string; mimeType: "image/png"; model: NvidiaImageModel }> {
-  const model = input.model || "black-forest-labs/flux.1-schnell";
-  const prompt = input.prompt.trim().slice(0, 10000);
-  if (!prompt) throw new Error("Avatar prompt is required");
-  const base64 = await callNvidia(model, {
-    prompt,
-    width: 1024,
-    height: 1024,
-    steps: 4,
-    seed: Number.isFinite(input.seed) ? Math.max(0, Math.floor(input.seed!)) : 0
-  });
-  return { base64, mimeType: "image/png", model };
+  return generateImage({ ...input, aspectRatio: "1:1" });
 }
 
 export async function editAvatarImage(input: {
