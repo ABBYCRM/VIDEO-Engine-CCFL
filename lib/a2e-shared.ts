@@ -46,7 +46,7 @@ export async function uploadA2eBytes(bytes: Buffer, mime: string, prefix = "vide
   const put = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": mime, "Content-Length": String(bytes.length) },
-    body: bytes
+    body: new Uint8Array(bytes)
   });
   if (!put.ok) throw new Error(`A2E media upload HTTP ${put.status}: ${(await put.text()).slice(0, 200)}`);
   return cdnUrl;
