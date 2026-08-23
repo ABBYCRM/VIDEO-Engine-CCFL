@@ -5,7 +5,10 @@ import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { VIEWS, type AvatarView } from "@/lib/avatars";
 
-export type ImageProvider = "gemini" | "openai" | "xai" | "mock";
+import { uploadA2eBase64 } from "@/lib/a2e-shared";
+import { getProviderKey } from "@/lib/providers";
+
+export type ImageProvider = "gemini" | "openai" | "xai" | "a2e" | "mock";
 const SETTING_KEY = "image_api_key";
 const SETTING_MODEL_KEY = "image_model";
 const SETTING_PROVIDER_KEY = "image_provider";
@@ -13,6 +16,7 @@ const PROVIDER_MODELS: Record<ImageProvider, string[]> = {
   gemini: ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview", "gemini-3.1-flash-image", "gemini-3.1-flash-lite-image"],
   openai: ["gpt-image-1", "dall-e-3"],
   xai: ["grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-quality"],
+  a2e: ["gpt-image-1.5", "gpt-image-2"],
   mock: ["mock-stable-diffusion-1"]
 };
 
@@ -25,7 +29,7 @@ function setRaw(key: string, value: string) {
 
 export function getImageProvider(): ImageProvider {
   const raw = getRaw(SETTING_PROVIDER_KEY);
-  return raw === "gemini" || raw === "openai" || raw === "xai" || raw === "mock" ? raw : "gemini";
+  return raw === "gemini" || raw === "openai" || raw === "xai" || raw === "a2e" || raw === "mock" ? raw : "gemini";
 }
 export function setImageProvider(provider: ImageProvider) { setRaw(SETTING_PROVIDER_KEY, provider); }
 
@@ -36,6 +40,7 @@ export function getImageApiKey(): string {
   if (provider === "openai" && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
   if (provider === "gemini" && process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
   if (provider === "xai" && process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
+  if (provider === "a2e") return getProviderKey("a2e");
   throw new Error("Image API key is not configured");
 }
 export function saveImageApiKey(value: string) { setRaw(SETTING_KEY, encryptSecret(value.trim())); }
@@ -56,6 +61,7 @@ export function setImageModel(model: string) {
 export function listImageProviders() {
   return [
     { id: "gemini", label: "Google Gemini image generation", envVar: "GEMINI_API_KEY", help: "Native multimodal; supports reference-image editing. Best for identity-preserving 4-view turnaround." },
+    { id: "a2e", label: "A2E GPT Image (gpt-image-1.5 / gpt-image-2)", envVar: "A2E_API_KEY", help: "Asynchronous upload-reference-then-edit. Routed through A2E's GPT Image endpoint. Best for 4-view turnaround when OpenAI is slow or its gpt-image-1 base64 path is timing out." },
     { id: "openai", label: "OpenAI image generation", envVar: "OPENAI_API_KEY", help: "gpt-image-1 supports reference editing. Higher cost, slower latency." },
     { id: "xai", label: "xAI Grok Imagine", envVar: "XAI_API_KEY", help: "Text-to-image only. Good for generating a fresh reference portrait from a prompt; cannot edit a reference for the 4-view turnaround." },
     { id: "mock", label: "Mock placeholder", envVar: null, help: "Development-only deterministic SVG. Proves the pipeline but is not AI." }
@@ -112,8 +118,9 @@ export async function generateView(opts: { avatarId: string; view: AvatarView; r
   const provider = getImageProvider();
   const model = getImageModel();
   const prompt = `${VIEW_PROMPTS[opts.view]}\nArchetype: ${opts.archetype}.\nWardrobe standard: ${opts.wardrobeStandard}.`;
-  if (provider === "xai") throw new ImageUpstreamError("xAI Grok Imagine does not support image-to-image editing. Pick Gemini or OpenAI for the 4-view turnaround; use xAI for fresh reference portraits only.", 400);
+  if (provider === "xai") throw new ImageUpstreamError("xAI Grok Imagine does not support image-to-image editing. Pick A2E, Gemini, or OpenAI for the 4-view turnaround; use xAI for fresh reference portraits only.", 400);
   const referencePath = resolveReferencePath(opts.referenceImagePath);
+  if (provider === "a2e") return a2eImageGenerate(referencePath, model, prompt);
   if (provider === "openai") return openaiImageGenerate(referencePath, model, prompt);
   if (provider === "mock") return mockGenerate(opts, model, prompt);
   return geminiImageGenerate(referencePath, model, prompt);
@@ -155,7 +162,8 @@ async function geminiImageGenerate(referencePath: string, model: string, prompt:
 
 async function openaiImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
   const key = getImageApiKey();
-  const TIMEOUT_MS = 45000;
+  // gpt-image-1 with reference editing routinely takes 60-90s. 45s was too short.
+  const TIMEOUT_MS = 120000;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
   try {
@@ -188,6 +196,90 @@ async function openaiImageGenerate(referencePath: string, model: string, prompt:
     if (e instanceof Error && e.name === "AbortError") throw new ImageUpstreamError(`OpenAI image API timed out after ${TIMEOUT_MS}ms`, 504);
     throw e;
   } finally { clearTimeout(timer); }
+}
+
+async function a2eImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
+  // A2E's GPT Image endpoint takes a reference image via URL, not base64.
+  // Workflow: upload reference via /r2/upload-presigned-url → get cdnUrl,
+  // then POST /userGptImage/start with input_images=[cdnUrl], then poll
+  // /userGptImage/detail/{id} until image_urls is populated.
+  // End-to-end this can take 30-120s for a single image, so use a 180s budget.
+  const TIMEOUT_MS = 180000;
+  const POLL_MS = 2500;
+  const bytes = await fs.readFile(referencePath);
+  const mime = sniffImageMime(bytes, referencePath);
+  const b64 = bytes.toString("base64");
+  const cdnUrl = await uploadA2eBase64(b64, mime, "video-engine/avatar-references");
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    const startBody: Record<string, unknown> = {
+      name: `avatar-turnaround-${Date.now()}`,
+      prompt,
+      input_images: [cdnUrl],
+      model: model === "gpt-image-2" ? "gpt-image-2" : "gpt-image-1.5"
+    };
+    // gpt-image-1.5 supports aspect_ratio + quality; gpt-image-2 supports resolution.
+    if (model === "gpt-image-2") {
+      startBody.resolution = "1K";
+      startBody.aspect_ratio = "2:3"; // portrait for canonical turnaround
+    } else {
+      startBody.aspect_ratio = "2:3";
+      startBody.quality = "high";
+    }
+    const startRes = await fetch("https://video.a2e.ai/api/v1/userGptImage/start", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getImageApiKey()}`, "Content-Type": "application/json" },
+      body: JSON.stringify(startBody),
+      cache: "no-store",
+      signal: ac.signal
+    });
+    if (!startRes.ok) throw new ImageUpstreamError(`A2E GPT image start HTTP ${startRes.status}: ${(await startRes.text()).slice(0, 300)}`, startRes.status);
+    const startJson = await startRes.json() as { code?: number; data?: Array<{ _id?: string; current_status?: string; image_urls?: string[]; fail_reason?: string }> | { _id?: string; current_status?: string; image_urls?: string[]; fail_reason?: string }; error?: string };
+    const records = Array.isArray(startJson.data) ? startJson.data : startJson.data ? [startJson.data] : [];
+    const first = records[0];
+    if (!first?._id) throw new ImageUpstreamError(`A2E GPT image start did not return a task id (code=${startJson.code}, error=${startJson.error ?? "?"})`, 502);
+    const taskId = first._id;
+    const directUrl = first.image_urls?.[0];
+    if (first.current_status && /fail|error|nfsw|nsfw/i.test(first.current_status)) {
+      throw new ImageUpstreamError(`A2E GPT image start returned failure status: ${first.current_status} (${first.fail_reason ?? "no reason"})`, 502);
+    }
+    if (directUrl) return await downloadPngFromUrl(directUrl, model, prompt, ac.signal);
+    // Otherwise poll
+    const deadline = Date.now() + TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (ac.signal.aborted) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS));
+      const detailRes = await fetch(`https://video.a2e.ai/api/v1/userGptImage/detail/${encodeURIComponent(taskId)}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${getImageApiKey()}`, "Content-Type": "application/json" },
+        cache: "no-store",
+        signal: ac.signal
+      });
+      if (!detailRes.ok) {
+        // transient — keep polling until the deadline
+        continue;
+      }
+      const detail = await detailRes.json() as { code?: number; data?: { _id?: string; current_status?: string; image_urls?: string[]; fail_reason?: string } };
+      const status = (detail.data?.current_status ?? "").toLowerCase();
+      const url = detail.data?.image_urls?.[0];
+      if (url) return await downloadPngFromUrl(url, model, prompt, ac.signal);
+      if (status && /fail|error|nsfw|nfsw/.test(status)) {
+        throw new ImageUpstreamError(`A2E GPT image task failed: ${status} (${detail.data?.fail_reason ?? "no reason"})`, 502);
+      }
+    }
+    throw new ImageUpstreamError(`A2E GPT image task did not complete within ${TIMEOUT_MS}ms`, 504);
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new ImageUpstreamError(`A2E GPT image API timed out after ${TIMEOUT_MS}ms`, 504);
+    throw e;
+  } finally { clearTimeout(timer); }
+}
+
+async function downloadPngFromUrl(url: string, model: string, prompt: string, signal: AbortSignal): Promise<GenerateResult> {
+  const dl = await fetch(url, { signal });
+  if (!dl.ok) throw new ImageUpstreamError(`A2E image download HTTP ${dl.status}`, dl.status);
+  const ab = await dl.arrayBuffer();
+  return { png: Buffer.from(ab), model, prompt };
 }
 
 async function mockGenerate(opts: { avatarId: string; view: AvatarView }, model: string, prompt: string): Promise<GenerateResult> {
