@@ -17,9 +17,9 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } }
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    // CI has already executed `npm run build`; exercise the same production
-    // runtime DigitalOcean starts instead of recompiling through next dev.
-    command: process.env.CI ? "npm run start" : "npm run dev",
+    command: process.env.CI
+      ? "mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static && cp -R public .next/standalone/public && node .next/standalone/server.js"
+      : "npm run dev",
     url: "http://127.0.0.1:3000/login",
     reuseExistingServer: !process.env.CI,
     timeout: 120000
