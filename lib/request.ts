@@ -1,7 +1,13 @@
 import { campaignTemplates, type CampaignCategory } from "@/lib/prompts";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
+import { getA2eModel } from "@/lib/a2e-model-catalog";
 
 const ALLOWED_PROVIDERS = new Set<ProviderId>(["veo", "grok", "a2e", "hedra"]);
+
+function nearest(value: number, allowed: number[]) {
+  if (!allowed.length) return value;
+  return allowed.reduce((best, current) => Math.abs(current - value) < Math.abs(best - value) ? current : best, allowed[0]);
+}
 
 export function parseGenerationBody(body: any) {
   const category = body?.category as CampaignCategory;
@@ -21,14 +27,29 @@ export function parseGenerationBody(body: any) {
   if (body?.audioBase64 && !body?.audioMimeType) throw new Error("audioMimeType is required with audioBase64");
   if (body?.audioBase64 && Buffer.byteLength(body.audioBase64, "base64") > 105 * 1024 * 1024) throw new Error("Driving audio must be 105MB or smaller");
 
-  let model: string | undefined = body?.model ? String(body.model).slice(0, 80) : undefined;
-  if (model && provider && !PROVIDERS[provider].modelChoices.includes(model)) model = undefined;
+  const model: string | undefined = body?.model ? String(body.model).slice(0, 80) : undefined;
+  if (model && provider && !PROVIDERS[provider].modelChoices.includes(model)) {
+    throw new Error(`Unsupported ${PROVIDERS[provider].label} model: ${model}`);
+  }
 
   const requestedDuration = Number(body?.durationSeconds);
-  const durationCap = provider ? PROVIDERS[provider].durationCap : 8;
-  const durationSeconds = Number.isFinite(requestedDuration)
-    ? Math.max(1, Math.min(durationCap, Math.round(requestedDuration)))
-    : provider === "hedra" ? 30 : durationCap;
+  let durationSeconds: number;
+  if (provider === "a2e") {
+    const def = getA2eModel(model || PROVIDERS.a2e.defaultModel);
+    if (!def) throw new Error("Invalid A2E model");
+    const wanted = Number.isFinite(requestedDuration) ? Math.round(requestedDuration) : def.durations[def.durations.length - 1];
+    durationSeconds = nearest(wanted, def.durations);
+  } else {
+    const durationCap = provider ? PROVIDERS[provider].durationCap : 8;
+    durationSeconds = Number.isFinite(requestedDuration)
+      ? Math.max(1, Math.min(durationCap, Math.round(requestedDuration)))
+      : provider === "hedra" ? 30 : durationCap;
+  }
+
+  const avatarId = body?.avatarId ? String(body.avatarId).trim().slice(0, 120) : undefined;
+  if (provider === "a2e" && model === "video-twin" && !avatarId) {
+    throw new Error("A2E Video Twin requires a selected canonical avatar.");
+  }
 
   return {
     provider,
@@ -40,6 +61,7 @@ export function parseGenerationBody(body: any) {
     aspectRatio,
     model,
     durationSeconds,
+    avatarId,
     imageBase64: body?.imageBase64 ? String(body.imageBase64) : undefined,
     imageMimeType: body?.imageMimeType ? String(body.imageMimeType) : undefined,
     audioBase64: body?.audioBase64 ? String(body.audioBase64) : undefined,
