@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
 import { db } from "@/lib/db";
 import { compileVeoPrompt } from "@/lib/prompt-compiler";
 import type { CampaignCategory } from "@/lib/prompts";
 import { getEngineSettings } from "@/lib/settings";
 import { PROVIDERS, getDefaultProvider, type ProviderId } from "@/lib/providers";
 import { ensureAssetCalendarPost } from "@/lib/calendar-assets";
+import { savePersistentLibraryAsset } from "@/lib/persistent-library";
 import * as veo from "@/lib/veo";
 import * as grok from "@/lib/grok";
 import * as a2e from "@/lib/a2e";
@@ -62,17 +64,7 @@ async function startProviderOperation(args: {
     } else if (provider === "grok") {
       operation = await grok.startOneShot({ prompt, model, aspectRatio, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else if (provider === "hedra") {
-      operation = await hedra.startOneShot({
-        prompt,
-        model,
-        aspectRatio,
-        resolution,
-        durationSeconds: input.durationSeconds,
-        imageBase64: input.imageBase64,
-        imageMimeType: input.imageMimeType,
-        audioBase64: input.audioBase64,
-        audioMimeType: input.audioMimeType
-      });
+      operation = await hedra.startOneShot({ prompt, model, aspectRatio, resolution, durationSeconds: input.durationSeconds, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType, audioBase64: input.audioBase64, audioMimeType: input.audioMimeType });
     } else {
       operation = await a2e.startOneShot({ prompt, model, aspectRatio, resolution, durationSeconds: input.durationSeconds, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     }
@@ -90,16 +82,8 @@ export async function createJob(input: CreateJobInput) {
   const model = modelForProvider(provider, input.model);
   const aspectRatio = input.aspectRatio || defaults.aspectRatio;
   const resolution = input.resolution || defaults.resolution;
-
-  db.prepare("INSERT INTO video_jobs(id,source,category,prompt,provider,model,aspect_ratio,resolution,status) VALUES(?,?,?,?,?,?,?,?,?)")
-    .run(id, input.source, input.category, prompt, provider, model, aspectRatio, resolution, "queued");
-
-  // Never hold the user's HTTP request open while a paid provider accepts a job.
-  // The UI receives the local job immediately and polls while provider startup runs.
-  setImmediate(() => {
-    void startProviderOperation({ id, provider, prompt, model, aspectRatio, resolution, input });
-  });
-
+  db.prepare("INSERT INTO video_jobs(id,source,category,prompt,provider,model,aspect_ratio,resolution,status) VALUES(?,?,?,?,?,?,?,?,?)").run(id, input.source, input.category, prompt, provider, model, aspectRatio, resolution, "queued");
+  setImmediate(() => { void startProviderOperation({ id, provider, prompt, model, aspectRatio, resolution, input }); });
   return getJob(id)!;
 }
 
@@ -112,22 +96,35 @@ export async function refreshJob(id: string, options?: { ensureCalendar?: boolea
   if (!job) return null;
   if (["succeeded", "failed"].includes(job.status)) return job;
   if (!job.providerOperation) return job;
-
   try {
     let result: { done: false } | { done: true; outputPath: string };
     if (job.provider === "grok") result = await grok.pollOneShot(job.providerOperation, id);
     else if (job.provider === "a2e") result = await a2e.pollOneShot(job.providerOperation, id, job.resolution);
     else if (job.provider === "hedra") result = await hedra.pollOneShot(job.providerOperation, id, job.resolution);
     else result = await veo.pollOneShot(job.providerOperation, id);
-
     if (!result.done) return job;
+
+    const bytes = await fs.readFile(result.outputPath);
+    const persistentUrl = await savePersistentLibraryAsset({
+      id:`video:${id}`,
+      kind:"video",
+      mediaType:"video",
+      label:`${String(job.category||"campaign").replaceAll("_"," ")} video`,
+      title:`${String(job.provider||"AI").toUpperCase()} generated video`,
+      mimeType:"video/mp4",
+      bytes,
+      model:job.model||job.provider||null,
+      prompt:job.prompt||null,
+      metadata:{jobId:id,provider:job.provider,category:job.category,resolution:job.resolution}
+    }).catch(()=>null);
+
     db.prepare("UPDATE video_jobs SET status='succeeded',output_path=?,error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(result.outputPath, id);
     if (options?.ensureCalendar !== false) {
       ensureAssetCalendarPost({
         sourceKey: `video:${id}`,
         title: `${String(job.category).replaceAll("_", " ")} · ${job.provider}`,
         contentType: job.category === "ugc" ? "ugc" : "cinematic",
-        mediaUrl: `/api/v1/video/${id}/file`,
+        mediaUrl: persistentUrl || `/api/v1/video/${id}/file`,
         mediaType: "video/mp4",
         caption: job.prompt?.slice(0, 1000) || "Generated campaign video",
         videoJobId: id
