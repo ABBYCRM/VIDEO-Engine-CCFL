@@ -4,6 +4,7 @@
 
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
+import { A2E_VIDEO_MODEL_IDS } from "@/lib/a2e-model-catalog";
 
 export type ProviderId = "veo" | "grok" | "a2e" | "hedra";
 
@@ -44,13 +45,7 @@ export const PROVIDERS: Record<ProviderId, {
     id: "a2e",
     label: "A2E AI multi-model",
     defaultModel: "seedance2.5",
-    modelChoices: [
-      "seedance2.5",
-      "wan3.0-video", "wan3.0-video-prime",
-      "kling3", "kling3-fast",
-      "veo3_fast", "veo3",
-      "sora2"
-    ],
+    modelChoices: A2E_VIDEO_MODEL_IDS,
     durationCap: 30,
     supportsImage: true,
     envKey: "A2E_API_KEY",
