@@ -67,10 +67,12 @@ export async function applyMigrationsIfNeeded(): Promise<{ ran: string[]; alread
         if (applied.has(file)) { already.push(file); continue; }
         const body = await fs.readFile(path.join(migrationsDir, file), "utf8");
         try {
-          await sql.begin(async (tx) => {
-            await tx.unsafe(body);
-            await tx`INSERT INTO _migrations(id) VALUES(${file})`;
-          });
+          // postgres.js's unsafe() runs multi-statement SQL correctly,
+          // but only outside a transaction. We do the migration itself
+          // outside a tx (CREATE TABLE IF NOT EXISTS is idempotent on
+          // its own) and only the bookkeeping insert goes through tx.
+          await sql.unsafe(body);
+          await sql`INSERT INTO _migrations(id) VALUES(${file})`;
           ran.push(file);
         } catch (e) {
           await sql.end({ timeout: 3 });
