@@ -42,14 +42,22 @@ export const PROVIDERS: Record<ProviderId, {
   },
   a2e: {
     id: "a2e",
-    label: "A2E AI (multi-model router)",
-    defaultModel: "veo3",
-    modelChoices: ["veo3", "veo3_fast", "wan", "wan-3.0", "kling", "seedance", "sora"],
-    durationCap: 8,
+    label: "A2E AI multi-model",
+    defaultModel: "veo3_fast",
+    // These map to distinct A2E developer API families, not one Veo shim.
+    // Legacy aliases remain so previously-saved settings continue to work.
+    modelChoices: [
+      "veo3_fast", "veo3",
+      "wan2.7", "wan", "wan-3.0",
+      "kling3", "kling3-fast", "kling",
+      "seedance2.5", "seedance",
+      "sora2", "sora"
+    ],
+    durationCap: 30,
     supportsImage: true,
     envKey: "A2E_API_KEY",
     settingsKey: "a2e_api_key",
-    healthUrl: "https://video.a2e.ai/api/v1/models"
+    healthUrl: "https://video.a2e.ai/api/v1/anchor/list"
   },
   hedra: {
     id: "hedra",
