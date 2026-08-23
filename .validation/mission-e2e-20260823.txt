@@ -1,0 +1,1 @@
+Mission-level E2E validation marker for unified Create, split-screen, A2E, NovaLuis Library persistence, Calendar, and Instagram publishing.
