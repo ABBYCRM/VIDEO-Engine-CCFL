@@ -77,7 +77,7 @@ export async function savePersistentLibraryAsset(input: SaveAssetInput): Promise
     ) VALUES (
       ${input.id}, ${input.kind}, ${input.mediaType}, ${input.label}, ${input.title}, ${input.mimeType},
       ${input.model ?? null}, ${input.prompt?.slice(0, 10000) ?? null}, ${bytes},
-      ${sql.json(input.metadata ?? {})}, NOW(), NOW()
+      ${sql.json((input.metadata ?? {}) as any)}, NOW(), NOW()
     )
     ON CONFLICT (id) DO UPDATE SET
       kind = EXCLUDED.kind,
