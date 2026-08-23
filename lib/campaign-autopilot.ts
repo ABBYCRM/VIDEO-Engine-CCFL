@@ -101,6 +101,10 @@ async function generateNext(){
       category:normalizeCategory(String(row.category||"ugc")),
       mission:variation,
       aspectRatio:"9:16",
+      // 720p is the cheap A2E tier (and a 50% coin saving vs 1080p).
+      // Operators can override per-slot by editing the job after creation
+      // or by setting their default resolution in Settings.
+      resolution:"720p",
       model:fallbackModel,
       avatarId: row.avatar_id || undefined,
       imageBase64: avatarRef?.imageBase64,

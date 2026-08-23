@@ -407,7 +407,9 @@ export async function startOneShot(input: A2eStartInput): Promise<string> {
   if (!res.ok) throw new Error(`A2E ${def.label} start HTTP ${res.status}: ${(await res.text()).slice(0, 400)}`);
   const json = await res.json();
   if (typeof json === "object" && json && "code" in json && Number((json as { code?: unknown }).code) !== 0) {
-    throw new Error(`A2E ${def.label} rejected task: ${String((json as { message?: unknown }).message || "Request failed")}`);
+    const j = json as { message?: unknown; msg?: unknown; err_message?: unknown };
+    const detail = j.err_message || j.msg || j.message || "Request failed";
+    throw new Error(`A2E ${def.label} rejected task: ${String(detail)}`);
   }
   const id = extractA2eId(json);
   if (!id) throw new Error(`A2E ${def.label} accepted the request but did not return a task ID required for polling.`);
