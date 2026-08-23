@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, ImageOff, RefreshCcw, RotateCcw, ShieldCheck, Sparkles, Trash2, Upload, Users, Wand2, X } from "lucide-react";
+import { AlertTriangle, Check, ImageOff, RefreshCcw, RotateCcw, ShieldCheck, Sparkles, Trash2, Upload, Users, Wand2, X, UserRound, Mic2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,12 @@ type Avatar = {
   turnaroundStatus: "draft" | "generating" | "incomplete" | "ready" | "failed";
   turnaroundModel: string | null;
   turnaroundError: string | null;
+  a2eTwinId: string | null;
+  a2eTwinAnchorId: string | null;
+  a2eTwinStatus: "idle" | "training" | "ready" | "failed";
+  a2eTwinError: string | null;
+  a2eTwinStartedAt: string | null;
+  a2eTwinFinishedAt: string | null;
   views: Record<ViewKey, AvatarViewStatus>;
 };
 
@@ -106,9 +112,16 @@ export default function AvatarsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const generating = avatars.some(a => a.turnaroundStatus === "generating" || VIEWS.some(v => a.views[v]?.generationStatus === "generating"));
+    const generating = avatars.some(a =>
+      a.a2eTwinStatus === "training" ||
+      a.turnaroundStatus === "generating" ||
+      VIEWS.some(v => a.views[v]?.generationStatus === "generating")
+    );
     if (!generating) return;
-    const timer = setInterval(load, 3500);
+    const timer = setInterval(async () => {
+      await Promise.all(avatars.filter(a => a.a2eTwinStatus === "training").map(a => fetch(`/api/admin/avatars/${encodeURIComponent(a.id)}/a2e-twin`, { cache: "no-store" }).catch(() => null)));
+      await load();
+    }, 3500);
     return () => clearInterval(timer);
   }, [avatars, load]);
 
@@ -192,6 +205,26 @@ export default function AvatarsPage() {
     }
   }
 
+  async function trainTwin(avatar: Avatar) {
+    if (wardrobeNeedsRegeneration(avatar) && avatar.views.front?.status !== "ready") {
+      setError(`${avatar.name} needs a campaign-safe canonical front view before A2E Video Twin training.`);
+      return;
+    }
+    if (avatar.a2eTwinStatus === "ready" && !confirm(`Retrain the A2E Video Twin for ${avatar.name}? The new training will replace the selected twin used by Create.`)) return;
+    setBusy(`${avatar.id}:twin`);
+    setError(null);
+    try {
+      const r = await fetch(`/api/admin/avatars/${encodeURIComponent(avatar.id)}/a2e-twin`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function remove(avatar: Avatar) {
     if (!confirm(`Delete ${avatar.name}?`)) return;
     setBusy(`${avatar.id}:delete`);
@@ -217,7 +250,7 @@ export default function AvatarsPage() {
       <div>
         <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-700"><Users size={16}/> Canonical identities</div>
         <h1 className="text-[34px] font-semibold leading-tight tracking-tight text-slate-900">Avatars</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">One identity per spokesperson. Reference photo first, then four canonical views used across campaign production.</p>
+        <p className="mt-1 max-w-3xl text-sm text-slate-600">One identity per spokesperson. Reference photo first, then four canonical views used across campaign production. A campaign-safe front view can also train a reusable A2E Video Twin.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
@@ -226,7 +259,7 @@ export default function AvatarsPage() {
     </div>
 
     <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-      <strong>Wardrobe rule.</strong> The default female spokesperson never uses beachwear in the canonical turnaround. Lifestyle/beach imagery may identify the person, but campaign-ready views must regenerate professional wardrobe.
+      <strong>Wardrobe rule.</strong> The default female spokesperson never uses beachwear in the canonical turnaround. Lifestyle/beach imagery may identify the person, but campaign-ready views and Video Twin training must use regenerated professional wardrobe.
     </div>
 
     {hasGeminiCapFailure && <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -239,7 +272,7 @@ export default function AvatarsPage() {
     <div className="mb-4 flex items-center justify-between text-sm text-slate-500"><span>{loading ? "Loading…" : `${avatars.length} avatar${avatars.length === 1 ? "" : "s"}`}</span><span>{currentProvider ? `${currentProvider.label}${currentProvider.supportsTurnaround ? " · turnaround ready" : " · portrait only"}` : "No image provider"}</span></div>
 
     <div className="grid gap-6 xl:grid-cols-2">
-      {avatars.map(avatar => <AvatarCard key={avatar.id} avatar={avatar} canTurnaround={canTurnaround} busy={busy} onUpload={upload} onGenerateAll={generateAll} onGenerateView={regenerate} onReset={resetFailures} onDelete={remove}/>) }
+      {avatars.map(avatar => <AvatarCard key={avatar.id} avatar={avatar} canTurnaround={canTurnaround} busy={busy} onUpload={upload} onGenerateAll={generateAll} onGenerateView={regenerate} onReset={resetFailures} onTrainTwin={trainTwin} onDelete={remove}/>) }
     </div>
 
     {!loading && avatars.length === 0 && <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center text-sm text-slate-500">No avatars are stored yet.</div>}
@@ -248,7 +281,7 @@ export default function AvatarsPage() {
   </main></AppShell></AuthGuard>;
 }
 
-function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGenerateView, onReset, onDelete }: {
+function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGenerateView, onReset, onTrainTwin, onDelete }: {
   avatar: Avatar;
   canTurnaround: boolean;
   busy: string | null;
@@ -256,6 +289,7 @@ function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGe
   onGenerateAll: (avatar: Avatar) => Promise<void>;
   onGenerateView: (avatar: Avatar, view: ViewKey) => Promise<void>;
   onReset: (avatar: Avatar) => Promise<void>;
+  onTrainTwin: (avatar: Avatar) => Promise<void>;
   onDelete: (avatar: Avatar) => Promise<void>;
 }) {
   const referenceInput = useRef<HTMLInputElement>(null);
@@ -265,6 +299,8 @@ function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGe
   const generatingCount = VIEWS.filter(v => avatar.views[v]?.generationStatus === "generating").length;
   const generating = generatingCount > 0 || avatar.turnaroundStatus === "generating";
   const warning = wardrobeNeedsRegeneration(avatar);
+  const twinSourceReady = avatar.views.front?.status === "ready" || (!warning && Boolean(avatar.referenceImage));
+  const twinBusy = busy === `${avatar.id}:twin` || avatar.a2eTwinStatus === "training";
 
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="mb-4 flex items-start justify-between gap-3">
@@ -288,6 +324,17 @@ function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGe
           <div className="mt-3 flex flex-wrap items-center gap-2"><Button onClick={() => onGenerateAll(avatar)} disabled={!avatar.referenceImage || generating || busy === `${avatar.id}:all` || !canTurnaround}><Wand2 size={14} className="mr-1"/>Generate all 4</Button>{failedCount > 0 && <Button variant="secondary" onClick={() => onReset(avatar)} disabled={busy === `${avatar.id}:reset`}><RefreshCcw size={14} className="mr-1"/>Clear failed state</Button>}<span className="text-[11px] text-violet-700">{readyCount}/4 ready{generatingCount ? ` · ${generatingCount} generating` : ""}{failedCount ? ` · ${failedCount} failed` : ""}</span></div>
           {!canTurnaround && <div className="mt-2 text-[11px] text-amber-800">Current image provider is not configured for identity-preserving turnaround edits. Manual view uploads remain available.</div>}
           {avatar.turnaroundError && <div className="mt-2 rounded-lg border border-rose-200 bg-white p-2 text-[11px] text-rose-700">{friendlyError(avatar.turnaroundError)}</div>}
+        </div>
+
+        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
+          <div className="flex items-start gap-2"><UserRound size={15} className="mt-0.5 shrink-0 text-sky-700"/><div className="flex-1"><div className="text-sm font-semibold text-sky-950">A2E Video Twin</div><div className="mt-1 text-xs text-sky-800">Train a reusable talking digital double from the campaign-safe canonical front. Create and split-screen can then animate this identity from driving audio.</div></div></div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={avatar.a2eTwinStatus === "ready" ? "secondary" : "default"} onClick={() => onTrainTwin(avatar)} disabled={!twinSourceReady || twinBusy}><Mic2 size={13} className={`mr-1 ${avatar.a2eTwinStatus === "training" ? "animate-pulse" : ""}`}/>{avatar.a2eTwinStatus === "training" ? "Training Video Twin…" : avatar.a2eTwinStatus === "ready" ? "Retrain Video Twin" : avatar.a2eTwinStatus === "failed" ? "Retry Video Twin" : "Train A2E Video Twin"}</Button>
+            <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${avatar.a2eTwinStatus === "ready" ? "bg-emerald-100 text-emerald-700" : avatar.a2eTwinStatus === "failed" ? "bg-rose-100 text-rose-700" : avatar.a2eTwinStatus === "training" ? "bg-amber-100 text-amber-800" : "bg-white text-slate-500"}`}>{avatar.a2eTwinStatus || "idle"}</span>
+          </div>
+          {!twinSourceReady && <div className="mt-2 text-[11px] text-amber-800">Generate or upload the professional canonical front view before training this identity.</div>}
+          {avatar.a2eTwinStatus === "ready" && <div className="mt-2 text-[11px] font-medium text-emerald-700"><Check size={11} className="mr-1 inline"/>Ready in Create as “A2E · Video Twin (trained avatar)”.</div>}
+          {avatar.a2eTwinError && <div className="mt-2 rounded-lg border border-rose-200 bg-white p-2 text-[11px] text-rose-700">{friendlyError(avatar.a2eTwinError)}</div>}
         </div>
       </div>
     </div>
