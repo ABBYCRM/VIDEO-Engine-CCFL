@@ -74,7 +74,7 @@ async function startProviderOperation(args: {
         audioMimeType: input.audioMimeType
       });
     } else {
-      operation = await a2e.startOneShot({ prompt, model, aspectRatio, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+      operation = await a2e.startOneShot({ prompt, model, aspectRatio, resolution, durationSeconds: input.durationSeconds, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     }
     db.prepare("UPDATE video_jobs SET provider_operation=?,status='running',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(operation, id);
   } catch (error) {
