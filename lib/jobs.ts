@@ -5,11 +5,13 @@ import { compileVeoPrompt } from "@/lib/prompt-compiler";
 import type { CampaignCategory } from "@/lib/prompts";
 import { getEngineSettings } from "@/lib/settings";
 import { PROVIDERS, getDefaultProvider, type ProviderId } from "@/lib/providers";
+import { getAvatar } from "@/lib/avatars";
 import { ensureAssetCalendarPost } from "@/lib/calendar-assets";
 import { savePersistentLibraryAsset } from "@/lib/persistent-library";
 import * as veo from "@/lib/veo";
 import * as grok from "@/lib/grok";
 import * as a2e from "@/lib/a2e";
+import * as a2eTwin from "@/lib/a2e-twin";
 import * as hedra from "@/lib/hedra";
 
 export type CreateJobInput = {
@@ -23,6 +25,7 @@ export type CreateJobInput = {
   resolution?: "720p" | "1080p" | "4k";
   model?: string;
   durationSeconds?: number;
+  avatarId?: string;
   imageBase64?: string;
   imageMimeType?: string;
   audioBase64?: string;
@@ -33,7 +36,8 @@ function modelForProvider(p: ProviderId, requested: string | undefined) {
   const def = PROVIDERS[p];
   if (requested && def.modelChoices.includes(requested)) return requested;
   const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get(`${p}_model`) as { value: string } | undefined)?.value;
-  return raw || def.defaultModel;
+  if (raw && def.modelChoices.includes(raw)) return raw;
+  return def.defaultModel;
 }
 
 function providerError(provider: ProviderId, error: unknown) {
@@ -64,9 +68,46 @@ async function startProviderOperation(args: {
     } else if (provider === "grok") {
       operation = await grok.startOneShot({ prompt, model, aspectRatio, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else if (provider === "hedra") {
-      operation = await hedra.startOneShot({ prompt, model, aspectRatio, resolution, durationSeconds: input.durationSeconds, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType, audioBase64: input.audioBase64, audioMimeType: input.audioMimeType });
+      operation = await hedra.startOneShot({
+        prompt,
+        model,
+        aspectRatio,
+        resolution,
+        durationSeconds: input.durationSeconds,
+        imageBase64: input.imageBase64,
+        imageMimeType: input.imageMimeType,
+        audioBase64: input.audioBase64,
+        audioMimeType: input.audioMimeType
+      });
+    } else if (model === "video-twin") {
+      if (!input.avatarId) throw new Error("A2E Video Twin requires a selected canonical avatar.");
+      const avatar = getAvatar(input.avatarId);
+      if (!avatar) throw new Error("Selected canonical avatar no longer exists.");
+      if (avatar.a2eTwinStatus !== "ready" || !avatar.a2eTwinAnchorId) {
+        throw new Error(`${avatar.name} does not have a ready A2E Video Twin. Train it from the Avatars page first.`);
+      }
+      if (!input.audioBase64 || !input.audioMimeType) {
+        throw new Error("A2E Video Twin needs driving audio. Upload narration/audio before generating.");
+      }
+      operation = await a2eTwin.startTwinVideo({
+        anchorId: avatar.a2eTwinAnchorId,
+        audioBase64: input.audioBase64,
+        audioMimeType: input.audioMimeType,
+        title: `${avatar.name} · VIDEO-Engine`,
+        resolution
+      });
     } else {
-      operation = await a2e.startOneShot({ prompt, model, aspectRatio, resolution, durationSeconds: input.durationSeconds, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+      operation = await a2e.startOneShot({
+        prompt,
+        model,
+        aspectRatio,
+        resolution,
+        durationSeconds: input.durationSeconds,
+        imageBase64: input.imageBase64,
+        imageMimeType: input.imageMimeType,
+        audioBase64: input.audioBase64,
+        audioMimeType: input.audioMimeType
+      });
     }
     db.prepare("UPDATE video_jobs SET provider_operation=?,status='running',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(operation, id);
   } catch (error) {
@@ -99,6 +140,7 @@ export async function refreshJob(id: string, options?: { ensureCalendar?: boolea
   try {
     let result: { done: false } | { done: true; outputPath: string };
     if (job.provider === "grok") result = await grok.pollOneShot(job.providerOperation, id);
+    else if (job.provider === "a2e" && job.model === "video-twin") result = await a2eTwin.pollTwinVideo(job.providerOperation, id);
     else if (job.provider === "a2e") result = await a2e.pollOneShot(job.providerOperation, id, job.resolution);
     else if (job.provider === "hedra") result = await hedra.pollOneShot(job.providerOperation, id, job.resolution);
     else result = await veo.pollOneShot(job.providerOperation, id);
