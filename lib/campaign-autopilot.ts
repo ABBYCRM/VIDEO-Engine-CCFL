@@ -10,7 +10,7 @@ import type { ProviderId } from "@/lib/providers";
 let started=false;
 let running=false;
 
-function normalizeCategory(value:string):CampaignCategory{
+export function normalizeCategory(value:string):CampaignCategory{
   if(value==="vehicle_accident")return "car_accident";
   if(value==="rideshare_accident")return "rideshare";
   if(value==="trucking_accident")return "trucking";
