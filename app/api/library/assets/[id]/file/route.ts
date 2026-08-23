@@ -8,7 +8,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const asset = await getPersistentLibraryAsset(id);
   if (!asset) return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   const safe = asset.title.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "generated-media";
-  return new NextResponse(asset.bytes, {
+  return new NextResponse(new Uint8Array(asset.bytes), {
     headers: {
       "content-type": asset.mimeType,
       "content-disposition": `inline; filename=\"${safe}\"`,
