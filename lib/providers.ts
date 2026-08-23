@@ -1,6 +1,6 @@
-// Provider-agnostic contract. Each adapter (veo, grok, a2e, hedra) implements
-// the start + poll + download flow. The job row stores which provider was
-// used so refreshJob() can route back to the right adapter on every poll.
+// Provider-agnostic contract. Each adapter implements start + poll + download.
+// The job row stores the selected provider/model so refreshJob() routes every
+// poll back to the same runtime and preserves model-specific behavior.
 
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
@@ -43,15 +43,13 @@ export const PROVIDERS: Record<ProviderId, {
   a2e: {
     id: "a2e",
     label: "A2E AI multi-model",
-    defaultModel: "veo3_fast",
-    // These map to distinct A2E developer API families, not one Veo shim.
-    // Legacy aliases remain so previously-saved settings continue to work.
+    defaultModel: "seedance2.5",
     modelChoices: [
+      "seedance2.5",
+      "wan3.0-video", "wan3.0-video-prime",
+      "kling3", "kling3-fast",
       "veo3_fast", "veo3",
-      "wan2.7", "wan", "wan-3.0",
-      "kling3", "kling3-fast", "kling",
-      "seedance2.5", "seedance",
-      "sora2", "sora"
+      "sora2"
     ],
     durationCap: 30,
     supportsImage: true,
@@ -73,7 +71,6 @@ export const PROVIDERS: Record<ProviderId, {
 };
 
 export function listProviderIds(): ProviderId[] { return ["veo", "grok", "a2e", "hedra"]; }
-
 export function getProviderKey(p: ProviderId): string {
   const def = PROVIDERS[p];
   const encrypted = (db.prepare("SELECT value FROM settings WHERE key = ?").get(def.settingsKey) as { value: string } | undefined)?.value;
@@ -82,12 +79,10 @@ export function getProviderKey(p: ProviderId): string {
   if (env) return env;
   throw new Error(`${def.label} API key is not configured`);
 }
-
 export function getProviderModel(p: ProviderId): string {
   const def = PROVIDERS[p];
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(`${p}_model`) as { value: string } | undefined)?.value || def.defaultModel;
 }
-
 export function getDefaultProvider(): ProviderId {
   const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get("default_provider") as { value: string } | undefined)?.value;
   if (raw === "grok" || raw === "a2e" || raw === "hedra" || raw === "veo") return raw;
