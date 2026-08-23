@@ -50,13 +50,17 @@ export async function applyMigrationsIfNeeded(): Promise<{ ran: string[]; alread
     const postgres = (await import("postgres")).default;
     const sql = postgres(process.env.DATABASE_URL, { ssl: "require", onnotice: () => {}, max: 1, idle_timeout: 5 });
     try {
+      // novaluis-pg is a shared cluster used by other apps (AURA-OMEGA,
+      // Bos-Omega, etc.) which already created their own `_migrations`
+      // table with a different schema. Use a namespaced table so we don't
+      // collide with theirs.
       await sql`
-        CREATE TABLE IF NOT EXISTS _migrations (
+        CREATE TABLE IF NOT EXISTS _video_engine_migrations (
           id TEXT PRIMARY KEY,
           applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
-      const applied = new Set((await sql`SELECT id FROM _migrations`).map((r: any) => r.id));
+      const applied = new Set((await sql`SELECT id FROM _video_engine_migrations`).map((r: any) => r.id));
       const migrationsDir = path.resolve(process.cwd(), "migrations");
       const files = (await fs.readdir(migrationsDir))
         .filter(f => /^[0-9]+_.*\.sql$/.test(f))
@@ -72,7 +76,7 @@ export async function applyMigrationsIfNeeded(): Promise<{ ran: string[]; alread
           // outside a tx (CREATE TABLE IF NOT EXISTS is idempotent on
           // its own) and only the bookkeeping insert goes through tx.
           await sql.unsafe(body);
-          await sql`INSERT INTO _migrations(id) VALUES(${file})`;
+          await sql`INSERT INTO _video_engine_migrations(id) VALUES(${file}) ON CONFLICT DO NOTHING`;
           ran.push(file);
         } catch (e) {
           await sql.end({ timeout: 3 });

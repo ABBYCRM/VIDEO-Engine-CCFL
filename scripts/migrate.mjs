@@ -35,7 +35,7 @@ const sql = postgres(url, { ssl: "require", onnotice: () => {}, max: 1 });
 try {
   // Ensure the bookkeeping table exists before we start.
   await sql`
-    CREATE TABLE IF NOT EXISTS _migrations (
+    CREATE TABLE IF NOT EXISTS _video_engine_migrations (
       id TEXT PRIMARY KEY,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -50,7 +50,7 @@ try {
   }
 
   const applied = new Set(
-    (await sql`SELECT id FROM _migrations`).map(r => r.id)
+    (await sql`SELECT id FROM _video_engine_migrations`).map(r => r.id)
   );
 
   for (const file of files) {

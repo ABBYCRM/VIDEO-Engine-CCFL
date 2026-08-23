@@ -47,12 +47,12 @@ async function runMigrationsOnce(): Promise<boolean> {
     const pg = await getPg();
     if (!pg) return false;
     try {
-      await pg`CREATE TABLE IF NOT EXISTS _migrations (
+      await pg`CREATE TABLE IF NOT EXISTS _video_engine_migrations (
         id TEXT PRIMARY KEY,
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`;
       const applied = new Set(
-        (await pg`SELECT id FROM _migrations`).map((r: any) => r.id)
+        (await pg`SELECT id FROM _video_engine_migrations`).map((r: any) => r.id)
       );
       const dir = path.resolve(process.cwd(), "migrations");
       let files: string[] = [];
