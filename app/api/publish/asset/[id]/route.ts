@@ -10,7 +10,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!verifyPublishedAsset(id, expires, sig)) return NextResponse.json({ error: "Invalid or expired media link" }, { status: 403 });
   const asset = await getPersistentLibraryAsset(id);
   if (!asset) return NextResponse.json({ error: "Asset not found" }, { status: 404 });
-  return new NextResponse(asset.bytes, {
+  return new NextResponse(new Uint8Array(asset.bytes), {
     headers: {
       "content-type": asset.mimeType,
       "cache-control": "public, max-age=300",
