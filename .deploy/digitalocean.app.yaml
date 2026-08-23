@@ -1,20 +1,8 @@
 # .deploy/digitalocean.app.yaml
-#
 # Declarative App Platform spec for VIDEO-Engine-CCFL.
-# No secrets are committed here — every value is either a literal
-# (PUBLIC_BASE_URL, DATABASE_NAME) or a placeholder that DO replaces
-# at apply time via `doctl apps spec set`.
-#
-# Apply with:
-#   doctl apps spec set <APP_ID> .deploy/digitalocean.app.yaml
-#   doctl apps create-deployment <APP_ID> --force-build
-#
-# Or use the "App-Level Environment Variables" page in the DO dashboard
-# to wire the SECRET values. The build is triggered automatically on
-# every push to the main branch.
+# Secrets remain in DigitalOcean runtime configuration, never Git.
 
 name: video-engine-ccfl
-
 region: nyc
 
 services:
@@ -23,21 +11,13 @@ services:
       repo: ABBYCRM/VIDEO-Engine-CCFL
       branch: main
       deploy_on_push: true
-
     dockerfile_path: Dockerfile
-
     instance_size_slug: basic-xxs
     instance_count: 1
     http_port: 3000
     health_check:
       http_path: /api/health
-
-    # Environment variables. Secrets are NOT committed; the DO dashboard
-    # stores the actual values and the runtime injection is automatic.
-    # If you set them via `doctl apps spec set --env KEY=VALUE`, make
-    # sure the value is the real secret, not a placeholder.
     envs:
-      # --- App security (GENERAL except where noted) ---
       - key: ADMIN_PASSWORD
         scope: RUN_TIME
         type: SECRET
@@ -63,7 +43,9 @@ services:
         type: GENERAL
         value: "production"
 
-      # --- Database (NovaLuis managed PG) ---
+      # NovaLuis is the durable Library/database boundary. Generated media is
+      # persisted in public.library_assets so App Platform redeploys cannot
+      # erase the Library. Local SQLite remains a dev/test compatibility layer.
       - key: DATABASE_URL
         scope: RUN_TIME
         type: SECRET
@@ -73,7 +55,6 @@ services:
         type: GENERAL
         value: "novaluis"
 
-      # --- Video generation providers ---
       - key: HEDRA_API_KEY
         scope: RUN_TIME
         type: SECRET
@@ -94,27 +75,18 @@ services:
         scope: RUN_TIME
         type: SECRET
         value: "REPLACE_WITH_GEMINI_KEY"
+      - key: A2E_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: "REPLACE_WITH_A2E_KEY"
 
-  # Worker placeholder — render worker (FFmpeg) is the next push after
-  # Spaces storage is wired. Spec it here when ready:
-  #
-  #  - name: video-engine-render-worker
-  #    github:
-  #      repo: ABBYCRM/VIDEO-Engine-CCFL
-  #      branch: main
-  #      deploy_on_push: true
-  #    dockerfile_path: Dockerfile.worker
-  #    instance_size_slug: basic-xxs
-  #    instance_count: 1
-  #    envs: [ ... share the same secret set ... ]
-
-# Database binding — DO attaches the NovaLuis cluster to the app so
-# the runtime can connect via DATABASE_URL. The cluster must already
-# exist (provisioned via the Databases page or API). Update
-# cluster_id to the real novaluis-pg cluster UUID.
+# Bind the existing NovaLuis managed PostgreSQL cluster to this app in the
+# DigitalOcean control plane. App Platform does not provide persistent local
+# volumes; DATABASE_URL must resolve to NovaLuis for production durability.
+# Example after the cluster UUID is known:
+# databases:
+#   - name: novaluis
+#     engine: PG
+#     version: "16"
+#     cluster_id: "REPLACE_WITH_NOVALUIS_CLUSTER_UUID"
 databases: []
-# Example when binding is supported on PUT:
-#  - name: novaluis
-#    engine: PG
-#    version: "16"
-#    cluster_id: "REPLACE_WITH_NOVALUIS_CLUSTER_UUID"
