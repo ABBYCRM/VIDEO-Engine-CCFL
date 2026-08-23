@@ -61,10 +61,8 @@ try {
     const body = await fs.readFile(path.join(migrationsDir, file), "utf8");
     console.log(`[migrate] → applying ${file} (${body.length} bytes)`);
     try {
-      await sql.begin(async (tx) => {
-        await tx.unsafe(body);
-        await tx`INSERT INTO _migrations(id) VALUES(${file})`;
-      });
+      await sql.unsafe(body);
+      await sql`INSERT INTO _migrations(id) VALUES(${file}) ON CONFLICT DO NOTHING`;
       console.log(`[migrate] ✓ ${file}`);
     } catch (e) {
       console.error(`[migrate] ✗ ${file} failed:`, e.message);
