@@ -8,6 +8,7 @@ import { getPreset } from "@/lib/avatar-presets";
 export type AvatarStatus = "draft" | "ready" | "archived";
 export type TurnaroundStatus = "draft" | "generating" | "incomplete" | "ready" | "failed";
 export type ViewGenStatus = "idle" | "generating" | "ready" | "failed";
+export type A2eTwinStatus = "idle" | "training" | "ready" | "failed";
 
 export type AvatarView = "front" | "left" | "right" | "back";
 export const VIEWS: AvatarView[] = ["front", "left", "right", "back"];
@@ -26,6 +27,12 @@ export type Avatar = {
   turnaroundStartedAt: string | null;
   turnaroundFinishedAt: string | null;
   turnaroundError: string | null;
+  a2eTwinId: string | null;
+  a2eTwinAnchorId: string | null;
+  a2eTwinStatus: A2eTwinStatus;
+  a2eTwinError: string | null;
+  a2eTwinStartedAt: string | null;
+  a2eTwinFinishedAt: string | null;
   views: Record<AvatarView, {
     file: string | null;
     status: "ready" | "missing";
@@ -34,6 +41,32 @@ export type Avatar = {
     generationError: string | null;
   }>;
 };
+
+type AvatarRow = {
+  id: string;
+  name: string;
+  gender: string;
+  archetype: string;
+  wardrobe_standard: string;
+  notes: string;
+  reference_image_path: string | null;
+  status: string;
+  turnaround_status: string;
+  turnaround_model: string | null;
+  turnaround_started_at: string | null;
+  turnaround_finished_at: string | null;
+  turnaround_error: string | null;
+  a2e_twin_id: string | null;
+  a2e_twin_anchor_id: string | null;
+  a2e_twin_status: string | null;
+  a2e_twin_error: string | null;
+  a2e_twin_started_at: string | null;
+  a2e_twin_finished_at: string | null;
+};
+
+const AVATAR_SELECT = `id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status,
+  turnaround_status,turnaround_model,turnaround_started_at,turnaround_finished_at,turnaround_error,
+  a2e_twin_id,a2e_twin_anchor_id,a2e_twin_status,a2e_twin_error,a2e_twin_started_at,a2e_twin_finished_at`;
 
 function readViewsForAvatars(ids: string[]): Map<string, Avatar["views"]> {
   if (ids.length === 0) return new Map();
@@ -78,55 +111,12 @@ function emptyView(): Avatar["views"][AvatarView] {
   return { file: null, status: "missing", generationStatus: "idle", generationModel: null, generationError: null };
 }
 
-export function listAvatars(): PublicAvatar[] {
-  const rows = db
-    .prepare(
-      "SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status,turnaround_status,turnaround_model,turnaround_started_at,turnaround_finished_at,turnaround_error FROM avatars ORDER BY name"
-    )
-    .all() as Array<{
-      id: string; name: string; gender: string; archetype: string; wardrobe_standard: string;
-      notes: string; reference_image_path: string | null; status: string;
-      turnaround_status: string; turnaround_model: string | null;
-      turnaround_started_at: string | null; turnaround_finished_at: string | null; turnaround_error: string | null;
-    }>;
-  const ids = rows.map((r) => r.id);
-  const views = readViewsForAvatars(ids);
-  return rows.map((r) => enrich({
-    id: r.id,
-    name: r.name,
-    gender: r.gender as Avatar["gender"],
-    archetype: r.archetype,
-    wardrobeStandard: r.wardrobe_standard,
-    notes: r.notes,
-    referenceImage: r.reference_image_path,
-    status: (r.status as AvatarStatus) || "draft",
-    turnaroundStatus: (r.turnaround_status as TurnaroundStatus) || "draft",
-    turnaroundModel: r.turnaround_model,
-    turnaroundStartedAt: r.turnaround_started_at,
-    turnaroundFinishedAt: r.turnaround_finished_at,
-    turnaroundError: r.turnaround_error,
-    views: views.get(r.id) || {
-      front: emptyView(), left: emptyView(), right: emptyView(), back: emptyView()
-    }
-  }));
+function validTwinStatus(value: string | null | undefined): A2eTwinStatus {
+  return value === "training" || value === "ready" || value === "failed" ? value : "idle";
 }
 
-export function getAvatar(id: string): PublicAvatar | null {
-  const row = db
-    .prepare(
-      "SELECT id,name,gender,archetype,wardrobe_standard,notes,reference_image_path,status,turnaround_status,turnaround_model,turnaround_started_at,turnaround_finished_at,turnaround_error FROM avatars WHERE id=?"
-    )
-    .get(id) as {
-      id: string; name: string; gender: string; archetype: string; wardrobe_standard: string;
-      notes: string; reference_image_path: string | null; status: string;
-      turnaround_status: string; turnaround_model: string | null;
-      turnaround_started_at: string | null; turnaround_finished_at: string | null; turnaround_error: string | null;
-    } | undefined;
-  if (!row) return null;
-  const views = readViewsForAvatars([id]).get(id) || {
-    front: emptyView(), left: emptyView(), right: emptyView(), back: emptyView()
-  };
-  return enrich({
+function rowToAvatar(row: AvatarRow, views: Avatar["views"]): Avatar {
+  return {
     id: row.id,
     name: row.name,
     gender: row.gender as Avatar["gender"],
@@ -140,14 +130,48 @@ export function getAvatar(id: string): PublicAvatar | null {
     turnaroundStartedAt: row.turnaround_started_at,
     turnaroundFinishedAt: row.turnaround_finished_at,
     turnaroundError: row.turnaround_error,
+    a2eTwinId: row.a2e_twin_id,
+    a2eTwinAnchorId: row.a2e_twin_anchor_id,
+    a2eTwinStatus: validTwinStatus(row.a2e_twin_status),
+    a2eTwinError: row.a2e_twin_error,
+    a2eTwinStartedAt: row.a2e_twin_started_at,
+    a2eTwinFinishedAt: row.a2e_twin_finished_at,
     views
-  });
+  };
+}
+
+export function listAvatars(): PublicAvatar[] {
+  const rows = db.prepare(`SELECT ${AVATAR_SELECT} FROM avatars ORDER BY name`).all() as AvatarRow[];
+  const ids = rows.map((r) => r.id);
+  const views = readViewsForAvatars(ids);
+  return rows.map((row) => enrich(rowToAvatar(row, views.get(row.id) || {
+    front: emptyView(), left: emptyView(), right: emptyView(), back: emptyView()
+  })));
+}
+
+export function getAvatar(id: string): PublicAvatar | null {
+  const row = db.prepare(`SELECT ${AVATAR_SELECT} FROM avatars WHERE id=?`).get(id) as AvatarRow | undefined;
+  if (!row) return null;
+  const views = readViewsForAvatars([id]).get(id) || {
+    front: emptyView(), left: emptyView(), right: emptyView(), back: emptyView()
+  };
+  return enrich(rowToAvatar(row, views));
 }
 
 export function updateAvatarReference(id: string, path: string | null): boolean {
   const result = db
     .prepare(
-      "UPDATE avatars SET reference_image_path=?, status=CASE WHEN ? IS NULL THEN 'draft' ELSE 'ready' END, updated_at=CURRENT_TIMESTAMP WHERE id=?"
+      `UPDATE avatars SET
+        reference_image_path=?,
+        status=CASE WHEN ? IS NULL THEN 'draft' ELSE 'ready' END,
+        a2e_twin_id=NULL,
+        a2e_twin_anchor_id=NULL,
+        a2e_twin_status='idle',
+        a2e_twin_error=NULL,
+        a2e_twin_started_at=NULL,
+        a2e_twin_finished_at=NULL,
+        updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`
     )
     .run(path, path, id);
   return result.changes > 0;
@@ -159,6 +183,38 @@ export function updateAvatarView(avatarId: string, view: AvatarView, path: strin
       "UPDATE avatar_views SET file_path=?, status=CASE WHEN ? IS NULL THEN 'missing' ELSE 'ready' END, updated_at=CURRENT_TIMESTAMP WHERE avatar_id=? AND view=?"
     )
     .run(path, path, avatarId, view);
+  return result.changes > 0;
+}
+
+export function markAvatarTwinTraining(id: string, trainingId: string) {
+  const result = db.prepare(
+    `UPDATE avatars SET a2e_twin_id=?,a2e_twin_anchor_id=NULL,a2e_twin_status='training',a2e_twin_error=NULL,
+      a2e_twin_started_at=CURRENT_TIMESTAMP,a2e_twin_finished_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`
+  ).run(trainingId, id);
+  return result.changes > 0;
+}
+
+export function markAvatarTwinReady(id: string, twinId: string, anchorId: string) {
+  const result = db.prepare(
+    `UPDATE avatars SET a2e_twin_id=?,a2e_twin_anchor_id=?,a2e_twin_status='ready',a2e_twin_error=NULL,
+      a2e_twin_finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`
+  ).run(twinId, anchorId, id);
+  return result.changes > 0;
+}
+
+export function markAvatarTwinFailed(id: string, error: string) {
+  const result = db.prepare(
+    `UPDATE avatars SET a2e_twin_status='failed',a2e_twin_error=?,a2e_twin_finished_at=CURRENT_TIMESTAMP,
+      updated_at=CURRENT_TIMESTAMP WHERE id=?`
+  ).run(error.slice(0, 2000), id);
+  return result.changes > 0;
+}
+
+export function clearAvatarTwin(id: string) {
+  const result = db.prepare(
+    `UPDATE avatars SET a2e_twin_id=NULL,a2e_twin_anchor_id=NULL,a2e_twin_status='idle',a2e_twin_error=NULL,
+      a2e_twin_started_at=NULL,a2e_twin_finished_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`
+  ).run(id);
   return result.changes > 0;
 }
 
@@ -201,6 +257,12 @@ export type PublicAvatar = {
   turnaroundStartedAt: string | null;
   turnaroundFinishedAt: string | null;
   turnaroundError: string | null;
+  a2eTwinId: string | null;
+  a2eTwinAnchorId: string | null;
+  a2eTwinStatus: A2eTwinStatus;
+  a2eTwinError: string | null;
+  a2eTwinStartedAt: string | null;
+  a2eTwinFinishedAt: string | null;
   views: Record<AvatarView, {
     file: string | null;
     status: "ready" | "missing";
