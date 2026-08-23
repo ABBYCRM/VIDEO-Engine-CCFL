@@ -1,12 +1,53 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+import { PgMirror } from "@/lib/db-pg-mirror";
 
 const dbPath = path.resolve(process.env.DATABASE_PATH || "./data/video-engine.db");
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const globalForDb = globalThis as unknown as { videoEngineDb?: Database.Database };
-export const db = globalForDb.videoEngineDb ?? new Database(dbPath);
-if (process.env.NODE_ENV !== "production") globalForDb.videoEngineDb = db;
+const sqlite = globalForDb.videoEngineDb ?? new Database(dbPath);
+if (process.env.NODE_ENV !== "production") globalForDb.videoEngineDb = sqlite;
+
+// Wrap the SQLite `db` so every write is mirrored to PG in the background
+// (fire-and-forget). Reads stay sync against SQLite. The PG mirror hydrates
+// the local SQLite on a fresh deploy via lib/db-hydrate.ts.
+type RunResult = { changes: number; lastInsertRowid?: number | bigint };
+
+// Kick off hydration from PG on first import (only does anything if PG
+// has rows and SQLite is empty). Safe to await later via hydrateFromPg.
+import("@/lib/db-hydrate").then((m) => m.hydrateFromPgIfEmpty()).catch(() => {});
+
+class Stmt {
+  constructor(private inner: Database.Statement, private sql: string) {}
+  get(...args: any[]) { return this.inner.get(...args); }
+  all(...args: any[]) { return this.inner.all(...args); }
+  run(...args: any[]): RunResult {
+    const r = this.inner.run(...args) as RunResult;
+    if (process.env.DATABASE_URL) {
+      // Fire-and-forget PG mirror.
+      void PgMirror.enqueueWrite(this.sql, args);
+    }
+    return r;
+  }
+  values<T = unknown>(...args: any[]): T[] { return (this.inner as any).values(...args) as T[]; }
+}
+class Db {
+  private inner: Database.Database;
+  constructor(s: Database.Database) { this.inner = s; }
+  prepare(sql: string): Stmt { return new Stmt(this.inner.prepare(sql), sql); }
+  exec(sql: string) {
+    this.inner.exec(sql);
+    if (process.env.DATABASE_URL) {
+      // Mirror raw exec blocks (used for CREATE TABLE / multi-statement
+      // DDL). Best-effort.
+      void PgMirror.enqueueWrite(sql, []);
+    }
+  }
+  pragma(name: string) { return this.inner.pragma(name); }
+  transaction<P extends any[], R>(fn: (...args: P) => R): (...args: P) => R { return this.inner.transaction(fn); }
+}
+export const db = new Db(sqlite);
 
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
