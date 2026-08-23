@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS avatars (
   turnaround_started_at TEXT,
   turnaround_finished_at TEXT,
   turnaround_error TEXT,
+  a2e_twin_id TEXT,
+  a2e_twin_anchor_id TEXT,
+  a2e_twin_status TEXT NOT NULL DEFAULT 'idle',
+  a2e_twin_error TEXT,
+  a2e_twin_started_at TEXT,
+  a2e_twin_finished_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -171,6 +177,16 @@ function ensureColumn(table: string, column: string, ddl: string) {
   if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
 try { ensureColumn("video_jobs", "provider", "provider TEXT NOT NULL DEFAULT 'veo'"); } catch {}
+for (const [column, ddl] of [
+  ["a2e_twin_id", "a2e_twin_id TEXT"],
+  ["a2e_twin_anchor_id", "a2e_twin_anchor_id TEXT"],
+  ["a2e_twin_status", "a2e_twin_status TEXT NOT NULL DEFAULT 'idle'"],
+  ["a2e_twin_error", "a2e_twin_error TEXT"],
+  ["a2e_twin_started_at", "a2e_twin_started_at TEXT"],
+  ["a2e_twin_finished_at", "a2e_twin_finished_at TEXT"]
+] as const) {
+  try { ensureColumn("avatars", column, ddl); } catch {}
+}
 
 function seedDefaultAvatars() {
   const row = db.prepare("SELECT COUNT(*) as n FROM avatars").get() as { n: number };
