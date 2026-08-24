@@ -219,6 +219,21 @@ function ensureColumn(table: string, column: string, ddl: string) {
 }
 try { ensureColumn("video_jobs", "provider", "provider TEXT NOT NULL DEFAULT 'veo'"); } catch {}
 for (const [column, ddl] of [
+  ["video_model", "video_model TEXT"],
+  ["upper_provider", "upper_provider TEXT"],
+  ["upper_model", "upper_model TEXT"],
+  ["split_percent", "split_percent INTEGER NOT NULL DEFAULT 35"],
+  ["split_relationship", "split_relationship TEXT NOT NULL DEFAULT 'anchor_field'"]
+] as const) {
+  try { ensureColumn("campaigns", column, ddl); } catch {}
+}
+for (const [column, ddl] of [
+  ["upper_job_id", "upper_job_id TEXT"],
+  ["lower_job_id", "lower_job_id TEXT"]
+] as const) {
+  try { ensureColumn("scheduled_posts", column, ddl); } catch {}
+}
+for (const [column, ddl] of [
   ["a2e_twin_id", "a2e_twin_id TEXT"],
   ["a2e_twin_anchor_id", "a2e_twin_anchor_id TEXT"],
   ["a2e_twin_status", "a2e_twin_status TEXT NOT NULL DEFAULT 'idle'"],

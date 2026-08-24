@@ -17,3 +17,25 @@ test("Create blocks campaign-unsafe identity reference and loads canonical front
 test("Still generation lands in media workflow and can publish to Instagram",async({page})=>{await stubBase(page);let ig:any=null;await page.route("**/api/internal/campaign-image",route=>route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({assetId:"img-1",assetUrl:"/generated/images/img-1.png",model:"black-forest-labs/flux.1-schnell",mimeType:"image/png"})}));await page.route("**/generated/images/img-1.png",route=>route.fulfill({status:200,contentType:"image/png",body:Buffer.from(ONE_PIXEL_PNG,"base64")}));await page.route("**/api/publish/instagram",async route=>{ig=await route.request().postDataJSON();return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({ok:true})})});await page.goto("/");await page.getByRole("button",{name:/Still image Generate a campaign still/i}).click();await page.getByRole("button",{name:"Generate still image"}).click();await expect(page.getByAltText("Generated campaign still")).toBeVisible();await expect(page.getByText(/Automatically added to Library \+ Calendar/)).toBeVisible();page.on("dialog",d=>d.accept());await page.getByRole("button",{name:"Post to Instagram now"}).click();expect(ig.mediaUrl).toBe("/generated/images/img-1.png");expect(ig.mediaType).toBe("image/png");});
 
 test("Auto mix flips Generate now and saves alternating Calendar plan",async({page})=>{await stubBase(page);let campaignPayload:any=null;await page.route("**/api/internal/generate",route=>route.fulfill({status:202,contentType:"application/json",body:JSON.stringify({job:{id:"job-create",status:"running"}})}));await page.route("**/api/v1/video/job-create",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({id:"job-create",status:"succeeded",fileUrl:"/api/v1/video/job-create/file"})}));await page.route("**/api/v1/video/job-create/file",route=>route.fulfill({status:200,contentType:"video/mp4",body:""}));await page.route("**/api/internal/campaign-image",route=>route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({assetId:"img-2",assetUrl:"/generated/images/img-2.png",model:"flux",mimeType:"image/png"})}));await page.route("**/generated/images/img-2.png",route=>route.fulfill({status:200,contentType:"image/png",body:Buffer.from(ONE_PIXEL_PNG,"base64")}));await page.route("**/api/campaigns",async route=>{campaignPayload=await route.request().postDataJSON();return route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({campaign:{id:"c1"},calendarCount:14})})});await page.goto("/");await page.getByRole("button",{name:/Auto mix Alternates Video/i}).click();await page.getByLabel("Campaign name").fill("Mixed PI campaign");await page.getByLabel("Fill Calendar for").selectOption("14");await page.getByRole("button",{name:"Generate next · Video"}).click();await expect(page.getByRole("button",{name:"Generate next · Still image"})).toBeVisible({timeout:10000});await page.getByRole("button",{name:"Generate next · Still image"}).click();await expect(page.getByRole("button",{name:"Generate next · Video"})).toBeVisible();await page.getByRole("button",{name:"Save campaign + fill Calendar"}).click();await expect(page.getByText(/14 Calendar slots created/)).toBeVisible();expect(campaignPayload.outputMode).toBe("auto_mix");expect(campaignPayload.planningHorizonDays).toBe(14);});
+
+test("Create podcast mode persists split-screen surface on Save campaign",async({page})=>{
+  await stubBase(page);
+  let campaignPayload:any=null;
+  await page.route("**/api/campaigns",async route=>{campaignPayload=await route.request().postDataJSON();return route.fulfill({status:201,contentType:"application/json",body:JSON.stringify({campaign:{id:"split-1"},calendarCount:7})})});
+  await page.goto("/");
+  await page.getByLabel("Content format").selectOption("podcast");
+  await expect(page.getByText("Split-screen surface")).toBeVisible();
+  await expect(page.getByText("Document it now")).toBeVisible();
+  await page.getByLabel("Split relationship").selectOption("question_answer");
+  await page.getByLabel("Upper AI engine").selectOption("veo");
+  await page.getByLabel("Top video height").fill("40");
+  await page.getByLabel("Campaign name").fill("Split surface campaign");
+  await expect(page.getByRole("link",{name:"Continue to two-lane production",exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Save campaign + fill Calendar"}).click();
+  await expect(page.getByText(/7 Calendar slots created/)).toBeVisible();
+  expect(campaignPayload.contentType).toBe("podcast");
+  expect(campaignPayload.splitRelationship).toBe("question_answer");
+  expect(campaignPayload.splitPercent).toBe(40);
+  expect(campaignPayload.upperProvider).toBe("veo");
+  expect(campaignPayload.videoProvider).toBe("veo");
+});

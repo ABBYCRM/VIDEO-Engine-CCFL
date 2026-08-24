@@ -2,10 +2,25 @@ import { db } from "@/lib/db";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { generateCampaignStill } from "@/lib/campaign-image";
-import { createJob, refreshJob } from "@/lib/jobs";
+import { createJob, getJob, refreshJob } from "@/lib/jobs";
 import { getAvatar } from "@/lib/avatars";
 import type { CampaignCategory } from "@/lib/prompts";
 import type { ProviderId } from "@/lib/providers";
+import { planSplitScreen } from "@/lib/nvidia/split-screen-planner";
+import { composeSplitJobs } from "@/lib/split-compose";
+import {
+  clampSplitPercent,
+  ensureSplitSurfaceColumns,
+  isProviderId,
+  laneModel,
+  nextLaneFallback,
+  normalizeSplitRelationship,
+  normalizeUpperProvider,
+  unattendedLaneProvider
+} from "@/lib/split-surface";
+import "@/lib/calendar-assets";
+
+ensureSplitSurfaceColumns();
 
 let started=false;
 let running=false;
@@ -17,12 +32,10 @@ export function normalizeCategory(value:string):CampaignCategory{
   if(value==="car_accident"||value==="rideshare"||value==="trucking"||value==="slip_fall"||value==="ugc")return value;
   return "ugc";
 }
-function provider(value:string):ProviderId{return value==="grok"||value==="a2e"||value==="hedra"?value:"veo";}
+function provider(value:string):ProviderId{return isProviderId(value)?value:"veo";}
 
 function fallbackProvider(failed:ProviderId):ProviderId|null{
-  if(failed==="a2e")return "grok";
-  if(failed==="grok")return "veo";
-  return null;
+  return nextLaneFallback(failed);
 }
 
 function isRecoverableProviderFailure(error:string){
@@ -66,27 +79,144 @@ async function loadAvatarReference(avatarId: string | null | undefined) {
   }
 }
 
-async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string}|null){
-  const variation=`${row.mission}\nCalendar variation: ${row.title}. Produce a distinct execution for this scheduled post while preserving the campaign message.`;
+function campaignSurface(row:any){
+  const lowerRequested=provider(String(row.video_provider||"veo"));
+  const upperRequested=normalizeUpperProvider(row.upper_provider, lowerRequested);
+  return {
+    splitPercent:clampSplitPercent(row.split_percent),
+    relationship:normalizeSplitRelationship(row.split_relationship),
+    lowerRequested,
+    upperRequested,
+    lower:unattendedLaneProvider(lowerRequested, row.video_model),
+    upper:unattendedLaneProvider(upperRequested, row.upper_model),
+    lowerModel:laneModel(unattendedLaneProvider(lowerRequested, row.video_model), row.video_model),
+    upperModel:laneModel(unattendedLaneProvider(upperRequested, row.upper_model), row.upper_model)
+  };
+}
+
+async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string}|null, extra?:{mission?:string;model?:string;script?:string;subject?:string}){
+  const variation=extra?.mission || `${row.mission}\nCalendar variation: ${row.title}. Produce a distinct execution for this scheduled post while preserving the campaign message.`;
   const job=await createJob({
     source:"admin",
     provider:chosen,
     category:normalizeCategory(String(row.category||"ugc")),
     mission:variation,
+    subject:extra?.subject,
+    script:extra?.script,
     aspectRatio:"9:16",
     resolution:"720p",
-    model: chosen === "a2e" ? (avatarRef ? "a2e-v2-i2v" : "seedance2.5") : undefined,
+    durationSeconds:8,
+    model: extra?.model || (chosen === "a2e" ? (avatarRef ? "a2e-v2-i2v" : "seedance2.5") : undefined),
     avatarId: row.avatar_id || undefined,
     imageBase64: avatarRef?.imageBase64,
     imageMimeType: avatarRef?.imageMimeType
   });
+  return job;
+}
+
+async function composeReadySplit(row:any, upper:any, lower:any){
+  if(!upper?.outputPath || !lower?.outputPath)throw new Error("Split-screen lanes finished without local video files.");
+  const composed=await composeSplitJobs({
+    upperPath:upper.outputPath,
+    lowerPath:lower.outputPath,
+    splitPercent:clampSplitPercent(row.split_percent),
+    title:row.title,
+    caption:String(row.caption||row.mission||"").slice(0,5000),
+    upperJobId:upper.id,
+    lowerJobId:lower.id
+  });
+  db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,source_asset_key=?,generation_status='ready',error=NULL,video_job_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+    composed.url, composed.mimeType, `composition:${composed.id}`, row.id
+  );
+}
+
+async function startSplitLanes(row:any, opts?:{upperProvider?:ProviderId;lowerProvider?:ProviderId}){
+  const surface=campaignSurface(row);
+  const upperProvider=opts?.upperProvider || surface.upper;
+  const lowerProvider=opts?.lowerProvider || surface.lower;
+  const avatarRef=await loadAvatarReference(row.avatar_id);
+  const avatarName=avatarRef?.avatar?.name||null;
+  const plan=await planSplitScreen({
+    category:normalizeCategory(String(row.category||"ugc")),
+    relationship:surface.relationship,
+    upperProvider,
+    lowerProvider,
+    upperSeconds:8,
+    lowerSeconds:8,
+    lowerAvatarName:avatarName,
+    mission:String(row.mission||""),
+    title:String(row.title||"")
+  });
+  const upperMission=`${plan.upper.mission}\nVisual direction: ${plan.upper.visualDirection}\nONE CONTINUOUS SHOT ONLY`;
+  const lowerMission=`${plan.lower.mission}\nVisual direction: ${plan.lower.visualDirection}\nONE CONTINUOUS SHOT ONLY`;
+  const upper=await startSlotJob(row, upperProvider, null, {mission:upperMission, model:laneModel(upperProvider, row.upper_model), script:plan.upper.script, subject:plan.upper.subject});
+  const lower=await startSlotJob(row, lowerProvider, avatarRef, {mission:lowerMission, model:laneModel(lowerProvider, row.video_model), script:plan.lower.script, subject:plan.lower.subject});
+  db.prepare(`UPDATE scheduled_posts SET upper_job_id=?,lower_job_id=?,video_job_id=NULL,generation_status='generating',error=NULL,caption=COALESCE(NULLIF(caption,''),?),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+    upper.id, lower.id, String(plan.caption||row.mission||"").slice(0,5000), row.id
+  );
+}
+
+async function recoverLane(row:any, lane:"upper"|"lower", failedProvider:ProviderId, error:string){
+  const next=isRecoverableProviderFailure(error)?fallbackProvider(failedProvider):null;
+  if(!next)return false;
+  const avatarRef=lane==="lower"?await loadAvatarReference(row.avatar_id):null;
+  const job=await startSlotJob(row, next, avatarRef, {
+    mission:`${row.mission}\nCalendar variation: ${row.title}. ${lane} lane fallback after ${failedProvider} failed.`,
+    model:laneModel(next)
+  });
+  const column=lane==="upper"?"upper_job_id":"lower_job_id";
+  db.prepare(`UPDATE scheduled_posts SET ${column}=?,generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(job.id, row.id);
+  return true;
+}
+
+async function finishSplit(row:any){
+  const upper=row.upper_job_id?await refreshJob(row.upper_job_id,{ensureCalendar:false}):null;
+  const lower=row.lower_job_id?await refreshJob(row.lower_job_id,{ensureCalendar:false}):null;
+  if((upper && !["succeeded","failed"].includes(upper.status)) || (lower && !["succeeded","failed"].includes(lower.status)))return true;
+  if(upper?.status==="failed"){
+    try{ if(await recoverLane(row,"upper", provider(String(upper.provider||"")), String(upper.error||""))) return true; }
+    catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id); return true; }
+    db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(upper.error||"Upper split-screen lane failed").slice(0,2000),row.id);
+    return true;
+  }
+  if(lower?.status==="failed"){
+    try{ if(await recoverLane(row,"lower", provider(String(lower.provider||"")), String(lower.error||""))) return true; }
+    catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id); return true; }
+    db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(lower.error||"Lower split-screen lane failed").slice(0,2000),row.id);
+    return true;
+  }
+  if(upper?.status==="succeeded" && lower?.status==="succeeded"){
+    try{
+      await composeReadySplit(row, upper, lower);
+    }catch(e){
+      db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id);
+    }
+    return true;
+  }
+  return true;
+}
+
+async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string}|null){
+  const job=await startSlotJob(row, chosen, avatarRef);
   db.prepare("UPDATE scheduled_posts SET video_job_id=?,generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(job.id,row.id);
   return job;
 }
 
 async function finishGenerating(){
-  const row=db.prepare(`SELECT sp.id,sp.video_job_id FROM scheduled_posts sp WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='generating' AND sp.video_job_id IS NOT NULL ORDER BY sp.scheduled_at ASC LIMIT 1`).get() as {id:string;video_job_id:string}|undefined;
+  const row=db.prepare(`
+    SELECT sp.id,sp.title,sp.caption,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.content_type,
+           c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,
+           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship
+    FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
+    WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='generating'
+    ORDER BY sp.scheduled_at ASC LIMIT 1
+  `).get() as any;
   if(!row)return false;
+  if(row.content_type==="podcast" || row.upper_job_id || row.lower_job_id){
+    await finishSplit(row);
+    return true;
+  }
+  if(!row.video_job_id)return false;
   const job=await refreshJob(row.video_job_id,{ensureCalendar:false});
   if(!job)return true;
   if(job.status==="succeeded"){
@@ -96,30 +226,52 @@ async function finishGenerating(){
   if(job.status!=="failed")return true;
   const next=fallbackProvider(provider(String(job.provider||"")));
   if(next && isRecoverableProviderFailure(String(job.error||""))){
-    const slot=db.prepare(`SELECT sp.id,sp.title,sp.caption,c.name as campaign_name,c.category,c.mission,c.avatar_id FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.id=?`).get(row.id) as any;
-    if(slot){
-      try{
-        await startSlotJob(slot, next, null);
-        return true;
-      }catch(e){
-        db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);
-        return true;
-      }
+    try{
+      await startSingleSlot(row, next, null);
+      return true;
+    }catch(e){
+      db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);
+      return true;
     }
   }
   db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(job.error||"Video generation failed").slice(0,2000),row.id);
   return true;
 }
 
+async function generateSplitSlot(row:any){
+  const upper=row.upper_job_id?getJob(row.upper_job_id):null;
+  const lower=row.lower_job_id?getJob(row.lower_job_id):null;
+  if(upper?.status==="succeeded" && lower?.status==="succeeded"){
+    try{ await composeReadySplit({...row, split_percent:row.split_percent}, upper, lower); }
+    catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id); }
+    return;
+  }
+  try{
+    await startSplitLanes(row);
+  }catch(e){
+    const surface=campaignSurface(row);
+    try{
+      await startSplitLanes(row,{upperProvider:fallbackProvider(surface.upper)||"grok",lowerProvider:fallbackProvider(surface.lower)||"grok"});
+    }catch(inner){
+      db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((inner instanceof Error?inner.message:String(inner)).slice(0,2000),row.id);
+    }
+  }
+}
+
 async function generateNext(){
   const row=db.prepare(`
-    SELECT sp.id,sp.title,sp.content_type,sp.caption,sp.generation_status,sp.error,c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider
+    SELECT sp.id,sp.title,sp.content_type,sp.caption,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,
+           c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,c.upper_provider,c.upper_model,c.split_percent,c.split_relationship
     FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
     WHERE sp.campaign_id IS NOT NULL
       AND sp.media_url IS NULL
+      AND sp.status!='published'
       AND (
-        (sp.generation_status='pending' AND sp.video_job_id IS NULL)
-        OR (sp.generation_status='failed' AND sp.error LIKE 'A2E%')
+        (sp.generation_status='pending' AND sp.video_job_id IS NULL AND sp.upper_job_id IS NULL)
+        OR (sp.generation_status='failed' AND (
+          (sp.content_type='podcast' AND (sp.upper_job_id IS NULL OR sp.error LIKE 'Split-screen compose%'))
+          OR (sp.content_type!='podcast' AND sp.error LIKE 'A2E%')
+        ))
       )
     ORDER BY sp.scheduled_at ASC,sp.created_at ASC
     LIMIT 1
@@ -134,6 +286,11 @@ async function generateNext(){
     }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
     return true;
   }
+  if(row.content_type==="podcast"){
+    db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+    await generateSplitSlot(row);
+    return true;
+  }
   const retryingA2e = row.generation_status === "failed";
   const chosenRequested=provider(String(row.video_provider||"veo"));
   const avatarRef = !retryingA2e && chosenRequested === "hedra" ? await loadAvatarReference(row.avatar_id) : null;
@@ -146,11 +303,11 @@ async function generateNext(){
   }
   try{
     db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
-    await startSlotJob(row, chosen, avatarRef);
+    await startSingleSlot(row, chosen, avatarRef);
   }catch(e){
     const next = fallbackProvider(chosen);
     if(next){
-      try{ await startSlotJob(row, next, null); return true; }
+      try{ await startSingleSlot(row, next, null); return true; }
       catch(inner){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((inner instanceof Error?inner.message:String(inner)).slice(0,2000),row.id); return true; }
     }
     db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);

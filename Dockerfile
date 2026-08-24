@@ -14,7 +14,10 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs && mkdir -p /app/data/videos && chown -R nextjs:nodejs /app
+RUN apk add --no-cache ffmpeg \
+  && addgroup -S nodejs && adduser -S nextjs -G nodejs \
+  && mkdir -p /app/data/videos /app/public/generated/compositions \
+  && chown -R nextjs:nodejs /app
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
