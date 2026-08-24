@@ -6,6 +6,7 @@
 //   - never throws on init (returns null if no key is configured)
 
 import { Composio } from "@composio/core";
+import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 
@@ -63,6 +64,51 @@ export function getComposio(): Composio {
   _client = new Composio({ apiKey: key });
   _clientKey = key;
   return _client;
+}
+
+export function getActiveConnectedAccountId(toolkit: string, userId = "admin"): string | null {
+  const row = db.prepare(
+    "SELECT connected_account_id FROM connected_accounts WHERE toolkit=? AND user_id=? AND UPPER(status)='ACTIVE' LIMIT 1"
+  ).get(toolkit, userId) as { connected_account_id: string } | undefined;
+  return row?.connected_account_id || null;
+}
+
+export async function syncConnectedAccounts() {
+  const USER_ID = "admin";
+  const client: any = getComposio();
+  const listed = await client.connectedAccounts.list();
+  const items: any[] = listed?.items ?? (Array.isArray(listed) ? listed : []);
+  const best = new Map<string, { id: string; toolkit: string; status: string; raw: unknown; updated: string; authConfigId?: string }>();
+  for (const it of items) {
+    const id = it?.id;
+    if (!id) continue;
+    const userId = it.user_id || it.userId || USER_ID;
+    if (userId !== USER_ID) continue;
+    const status = String(it.status || "").toUpperCase();
+    if (status !== "ACTIVE") continue;
+    const toolkitRaw = it.toolkit?.slug ?? it.toolkit?.name ?? it.toolkit;
+    if (!toolkitRaw) continue;
+    const meta = getToolkitMeta(String(toolkitRaw));
+    if (!COMPOSIO_TOOLKITS.some((t) => t.id === meta.id)) continue;
+    const updated = String(it.updated_at || it.updatedAt || "");
+    const authConfigId = it.auth_config?.id || it.authConfig?.id;
+    const prev = best.get(meta.id);
+    if (!prev || updated > prev.updated) {
+      best.set(meta.id, { id, toolkit: meta.id, status, raw: it, updated, authConfigId });
+    }
+  }
+  const rows = [...best.values()];
+  const insert = db.prepare(
+    "INSERT INTO connected_accounts(id, toolkit, connected_account_id, user_id, status, alias, raw_json, last_sync_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(toolkit, user_id) DO UPDATE SET connected_account_id=excluded.connected_account_id, status=excluded.status, raw_json=excluded.raw_json, last_sync_at=CURRENT_TIMESTAMP"
+  );
+  const tx = db.transaction((batch: typeof rows) => {
+    for (const row of batch) {
+      insert.run(crypto.randomUUID(), row.toolkit, row.id, USER_ID, row.status, null, JSON.stringify(row.raw));
+      if (row.authConfigId) setAuthConfigId(row.toolkit, String(row.authConfigId));
+    }
+  });
+  tx(rows);
+  return { mirrored: rows.length, accounts: rows.map((row) => ({ id: row.id, toolkit: row.toolkit, status: row.status })) };
 }
 
 // The toolkit catalog. Each one needs an auth config id in the dashboard

@@ -199,34 +199,38 @@ async function openaiImageGenerate(referencePath: string, model: string, prompt:
 }
 
 async function a2eImageGenerate(referencePath: string, model: string, prompt: string): Promise<GenerateResult> {
-  // A2E's GPT Image endpoint takes a reference image via URL, not base64.
-  // Workflow: upload reference via /r2/upload-presigned-url → get cdnUrl,
-  // then POST /userGptImage/start with input_images=[cdnUrl], then poll
-  // /userGptImage/detail/{id} until image_urls is populated.
-  // End-to-end this can take 30-120s for a single image, so use a 180s budget.
+  return generateA2eGptImage({ prompt, model, referencePath, aspectRatio: "2:3" });
+}
+
+export async function generateA2eGptImage(input: {
+  prompt: string;
+  model?: string;
+  referencePath?: string | null;
+  aspectRatio?: string;
+}): Promise<GenerateResult> {
   const TIMEOUT_MS = 180000;
   const POLL_MS = 2500;
-  const bytes = await fs.readFile(referencePath);
-  const mime = sniffImageMime(bytes, referencePath);
-  const b64 = bytes.toString("base64");
-  const cdnUrl = await uploadA2eBase64(b64, mime, "video-engine/avatar-references");
+  const model = input.model === "gpt-image-2" ? "gpt-image-2" : (input.model || "gpt-image-1.5");
+  const prompt = input.prompt;
+  const aspectRatio = input.aspectRatio || "9:16";
+  let inputImages: string[] | undefined;
+  if (input.referencePath) {
+    const bytes = await fs.readFile(input.referencePath);
+    const mime = sniffImageMime(bytes, input.referencePath);
+    inputImages = [await uploadA2eBase64(bytes.toString("base64"), mime, "video-engine/campaign-stills")];
+  }
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
   try {
     const startBody: Record<string, unknown> = {
-      name: `avatar-turnaround-${Date.now()}`,
+      name: `campaign-still-${Date.now()}`,
       prompt,
-      input_images: [cdnUrl],
-      model: model === "gpt-image-2" ? "gpt-image-2" : "gpt-image-1.5"
+      model,
+      aspect_ratio: aspectRatio
     };
-    // gpt-image-1.5 supports aspect_ratio + quality; gpt-image-2 supports resolution.
-    if (model === "gpt-image-2") {
-      startBody.resolution = "1K";
-      startBody.aspect_ratio = "2:3"; // portrait for canonical turnaround
-    } else {
-      startBody.aspect_ratio = "2:3";
-      startBody.quality = "high";
-    }
+    if (inputImages?.length) startBody.input_images = inputImages;
+    if (model === "gpt-image-2") startBody.resolution = "1K";
+    else startBody.quality = "high";
     const startRes = await fetch("https://video.a2e.ai/api/v1/userGptImage/start", {
       method: "POST",
       headers: { Authorization: `Bearer ${getImageApiKey()}`, "Content-Type": "application/json" },
@@ -235,17 +239,21 @@ async function a2eImageGenerate(referencePath: string, model: string, prompt: st
       signal: ac.signal
     });
     if (!startRes.ok) throw new ImageUpstreamError(`A2E GPT image start HTTP ${startRes.status}: ${(await startRes.text()).slice(0, 300)}`, startRes.status);
-    const startJson = await startRes.json() as { code?: number; data?: Array<{ _id?: string; current_status?: string; image_urls?: string[]; fail_reason?: string }> | { _id?: string; current_status?: string; image_urls?: string[]; fail_reason?: string }; error?: string };
+    const startJson = await startRes.json() as { code?: number; msg?: string; err_message?: string; error?: string; data?: Array<{ _id?: string; current_status?: string; image_urls?: string[]; image_url?: string; url_download?: string; fail_reason?: string; failed_message?: string }> | { _id?: string; current_status?: string; image_urls?: string[]; image_url?: string; url_download?: string; fail_reason?: string; failed_message?: string } };
+    if (startJson.code && startJson.code !== 0) throw new ImageUpstreamError(`A2E GPT image start failed: ${startJson.err_message || startJson.msg || startJson.error || startJson.code}`, 502);
     const records = Array.isArray(startJson.data) ? startJson.data : startJson.data ? [startJson.data] : [];
     const first = records[0];
     if (!first?._id) throw new ImageUpstreamError(`A2E GPT image start did not return a task id (code=${startJson.code}, error=${startJson.error ?? "?"})`, 502);
     const taskId = first._id;
-    const directUrl = first.image_urls?.[0];
+    const pickUrl = (row: { image_urls?: string[]; image_url?: string; url_download?: string; url_show?: string } | undefined) =>
+      row?.image_urls?.[0] || (row?.image_url && row.image_url.trim()) || (row?.url_download && row.url_download.trim()) || (row as { url_show?: string } | undefined)?.url_show || "";
+    const failText = (row: { current_status?: string; fail_reason?: string; failed_message?: string } | undefined) =>
+      `${row?.current_status || "failed"} (${row?.failed_message || row?.fail_reason || "no reason"})`;
     if (first.current_status && /fail|error|nfsw|nsfw/i.test(first.current_status)) {
-      throw new ImageUpstreamError(`A2E GPT image start returned failure status: ${first.current_status} (${first.fail_reason ?? "no reason"})`, 502);
+      throw new ImageUpstreamError(`A2E GPT image start returned failure status: ${failText(first)}`, 502);
     }
-    if (directUrl) return await downloadPngFromUrl(directUrl, model, prompt, ac.signal);
-    // Otherwise poll
+    const immediate = pickUrl(first);
+    if (immediate) return await downloadPngFromUrl(immediate, model, prompt, ac.signal);
     const deadline = Date.now() + TIMEOUT_MS;
     while (Date.now() < deadline) {
       if (ac.signal.aborted) break;
@@ -256,16 +264,13 @@ async function a2eImageGenerate(referencePath: string, model: string, prompt: st
         cache: "no-store",
         signal: ac.signal
       });
-      if (!detailRes.ok) {
-        // transient — keep polling until the deadline
-        continue;
-      }
-      const detail = await detailRes.json() as { code?: number; data?: { _id?: string; current_status?: string; image_urls?: string[]; fail_reason?: string } };
+      if (!detailRes.ok) continue;
+      const detail = await detailRes.json() as { data?: { _id?: string; current_status?: string; image_urls?: string[]; image_url?: string; url_download?: string; url_show?: string; fail_reason?: string; failed_message?: string } };
       const status = (detail.data?.current_status ?? "").toLowerCase();
-      const url = detail.data?.image_urls?.[0];
+      const url = pickUrl(detail.data);
       if (url) return await downloadPngFromUrl(url, model, prompt, ac.signal);
       if (status && /fail|error|nsfw|nfsw/.test(status)) {
-        throw new ImageUpstreamError(`A2E GPT image task failed: ${status} (${detail.data?.fail_reason ?? "no reason"})`, 502);
+        throw new ImageUpstreamError(`A2E GPT image task failed: ${failText(detail.data)}`, 502);
       }
     }
     throw new ImageUpstreamError(`A2E GPT image task did not complete within ${TIMEOUT_MS}ms`, 504);
