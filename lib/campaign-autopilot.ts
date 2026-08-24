@@ -24,6 +24,7 @@ ensureSplitSurfaceColumns();
 
 let started=false;
 let running=false;
+const queuedSlotIds=new Set<string>();
 
 export function normalizeCategory(value:string):CampaignCategory{
   if(value==="vehicle_accident")return "car_accident";
@@ -202,15 +203,17 @@ async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase6
   return job;
 }
 
-async function finishGenerating(){
-  const row=db.prepare(`
+async function finishGenerating(slotId?:string){
+  const statement=db.prepare(`
     SELECT sp.id,sp.title,sp.caption,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.content_type,
            c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,
            c.upper_provider,c.upper_model,c.split_percent,c.split_relationship
     FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
     WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='generating'
+      ${slotId?"AND sp.id=?":""}
     ORDER BY sp.scheduled_at ASC LIMIT 1
-  `).get() as any;
+  `);
+  const row=(slotId?statement.get(slotId):statement.get()) as any;
   if(!row)return false;
   if(row.content_type==="podcast" || row.upper_job_id || row.lower_job_id){
     await finishSplit(row);
@@ -246,20 +249,29 @@ async function generateSplitSlot(row:any){
     catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id); }
     return;
   }
+  const surface=campaignSurface(row);
+  const retryingA2e=row.generation_status==="failed"&&/A2E/i.test(String(row.error||""));
+  const initialUpper:ProviderId=retryingA2e&&surface.upper==="a2e"?"grok":surface.upper;
+  const initialLower:ProviderId=retryingA2e&&surface.lower==="a2e"?"grok":surface.lower;
   try{
-    await startSplitLanes(row);
+    await startSplitLanes(row,{upperProvider:initialUpper,lowerProvider:initialLower});
   }catch(e){
-    const surface=campaignSurface(row);
+    const fallbackUpper=fallbackProvider(initialUpper)||initialUpper;
+    const fallbackLower=fallbackProvider(initialLower)||initialLower;
+    if(fallbackUpper===initialUpper&&fallbackLower===initialLower){
+      db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);
+      return;
+    }
     try{
-      await startSplitLanes(row,{upperProvider:fallbackProvider(surface.upper)||"grok",lowerProvider:fallbackProvider(surface.lower)||"grok"});
+      await startSplitLanes(row,{upperProvider:fallbackUpper,lowerProvider:fallbackLower});
     }catch(inner){
       db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((inner instanceof Error?inner.message:String(inner)).slice(0,2000),row.id);
     }
   }
 }
 
-async function generateNext(){
-  const row=db.prepare(`
+async function generateNext(slotId?:string){
+  const statement=db.prepare(`
     SELECT sp.id,sp.title,sp.content_type,sp.caption,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,
            c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,c.upper_provider,c.upper_model,c.split_percent,c.split_relationship
     FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
@@ -273,9 +285,11 @@ async function generateNext(){
           OR (sp.content_type!='podcast' AND sp.error LIKE 'A2E%')
         ))
       )
+      ${slotId?"AND sp.id=?":""}
     ORDER BY sp.scheduled_at ASC,sp.created_at ASC
     LIMIT 1
-  `).get() as any;
+  `);
+  const row=(slotId?statement.get(slotId):statement.get()) as any;
   if(!row)return false;
   if(row.content_type==="image"){
     try{
@@ -315,10 +329,15 @@ async function generateNext(){
   return true;
 }
 
-export async function runCampaignAutopilotOnce(){
-  if(running)return{processed:0};running=true;
-  try{if(await finishGenerating())return{processed:1};if(await generateNext())return{processed:1};return{processed:0};}
-  finally{running=false;}
+export async function runCampaignAutopilotOnce(options:{slotId?:string}={}){
+  const slotId=options.slotId?.trim()||undefined;
+  if(running){if(slotId)queuedSlotIds.add(slotId);return{processed:0,queued:Boolean(slotId)};}running=true;
+  try{if(await finishGenerating(slotId))return{processed:1,queued:false};if(await generateNext(slotId))return{processed:1,queued:false};return{processed:0,queued:false};}
+  finally{
+    running=false;
+    const next=queuedSlotIds.values().next().value as string|undefined;
+    if(next){queuedSlotIds.delete(next);const timer=setTimeout(()=>{void runCampaignAutopilotOnce({slotId:next});},0);timer.unref?.();}
+  }
 }
 
 export function startCampaignAutopilotLoop(){

@@ -7,6 +7,7 @@ let running=false;
 
 async function publishRow(post:any){
   if(post.network==="instagram"){
+    if(post.generation_status&&post.generation_status!=="ready")throw new Error(`Media is ${post.generation_status}; it is not ready to publish`);
     if(!post.video_job_id&&!post.media_url)throw new Error("Auto-post requires generated media");
     return publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption});
   }
@@ -22,7 +23,7 @@ async function publishRow(post:any){
 export async function runCalendarPublisherOnce(){
   if(running)return{processed:0};running=true;let processed=0;
   try{
-    const rows=db.prepare("SELECT * FROM scheduled_posts WHERE auto_post=1 AND status='approved' AND scheduled_at<=? ORDER BY scheduled_at ASC LIMIT 10").all(new Date().toISOString()) as any[];
+    const rows=db.prepare("SELECT * FROM scheduled_posts WHERE auto_post=1 AND status='approved' AND scheduled_at<=? AND (generation_status IS NULL OR generation_status='ready') ORDER BY scheduled_at ASC LIMIT 10").all(new Date().toISOString()) as any[];
     for(const post of rows){
       try{await publishRow(post);db.prepare("UPDATE scheduled_posts SET status='published',published_at=?,error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(new Date().toISOString(),post.id);}
       catch(e){db.prepare("UPDATE scheduled_posts SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),post.id);}

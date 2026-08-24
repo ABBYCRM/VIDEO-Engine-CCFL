@@ -12,6 +12,7 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
   try{
     let result:any;
     if(post.network==="instagram"){
+      if(post.generation_status&&post.generation_status!=="ready")return NextResponse.json({error:`Media is ${post.generation_status}; wait for generation to finish before publishing`},{status:409});
       if(!post.video_job_id&&!post.media_url)return NextResponse.json({error:"Attach a generated image or video before publishing"},{status:409});
       result=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption});
     }else if(post.network==="website"){
