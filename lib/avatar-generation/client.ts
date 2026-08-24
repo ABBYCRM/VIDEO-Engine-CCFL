@@ -283,8 +283,16 @@ export async function generateA2eGptImage(input: {
 async function downloadPngFromUrl(url: string, model: string, prompt: string, signal: AbortSignal): Promise<GenerateResult> {
   const dl = await fetch(url, { signal });
   if (!dl.ok) throw new ImageUpstreamError(`A2E image download HTTP ${dl.status}`, dl.status);
-  const ab = await dl.arrayBuffer();
-  return { png: Buffer.from(ab), model, prompt };
+  const bytes = Buffer.from(await dl.arrayBuffer());
+  try {
+    // A2E may return JPEG or WebP bytes even when the task URL has no useful
+    // extension. Normalize every hosted result to a real PNG because avatar
+    // views and campaign stills persist this buffer with image/png metadata.
+    const sharp = (await import("sharp")).default;
+    return { png: await sharp(bytes).png().toBuffer(), model, prompt };
+  } catch {
+    throw new ImageUpstreamError("A2E returned an unreadable image payload", 502);
+  }
 }
 
 async function mockGenerate(opts: { avatarId: string; view: AvatarView }, model: string, prompt: string): Promise<GenerateResult> {

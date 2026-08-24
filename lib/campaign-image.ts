@@ -73,7 +73,7 @@ async function renderWithConfiguredProvider(prompt:string, referencePath:string|
 }
 
 export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean}){
-  const prompt=`Create one campaign-ready vertical social-media still. ${input.prompt}\nPhotorealistic unless the creative direction explicitly requests another style. No fabricated legal results, settlement amounts, testimonials, injuries, statistics, logos, or text artifacts.`;
+  const prompt=`Create one campaign-ready vertical editorial photograph for use in a social post. ${input.prompt}\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. Photorealistic unless the creative direction explicitly requests another style. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.`;
   let reference:string|null=null;
   if(input.avatarId){
     const avatar=db.prepare("SELECT id,name,reference_image_path FROM avatars WHERE id=?").get(input.avatarId) as {id:string;name:string;reference_image_path:string|null}|undefined;

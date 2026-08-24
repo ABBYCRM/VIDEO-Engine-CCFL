@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { stubAuthenticatedSession } from "./helpers";
 
+// DigitalOcean may cold-start between page visits. These deployment checks
+// intentionally cover several routes in one test, so use a live-safe budget.
+test.setTimeout(120_000);
+
 const imageProviders=[
   {id:"nvidia",label:"NVIDIA FLUX.2 Klein 4B",envVar:"NVIDIA_API_KEY",help:"Fresh portraits only on hosted endpoint.",models:["black-forest-labs/flux.2-klein-4b"],supportsTurnaround:false},
   {id:"gemini",label:"Google Gemini image generation",envVar:"GEMINI_API_KEY",help:"Reference editing.",models:["gemini-2.5-flash-image"],supportsTurnaround:true},
