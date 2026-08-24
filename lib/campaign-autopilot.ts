@@ -19,6 +19,16 @@ export function normalizeCategory(value:string):CampaignCategory{
 }
 function provider(value:string):ProviderId{return value==="grok"||value==="a2e"||value==="hedra"?value:"veo";}
 
+function fallbackProvider(failed:ProviderId):ProviderId|null{
+  if(failed==="a2e")return "grok";
+  if(failed==="grok")return "veo";
+  return null;
+}
+
+function isRecoverableProviderFailure(error:string){
+  return /A2E|rejected task|recharge|remaining time|Request failed|quota|insufficient|coins/i.test(error);
+}
+
 function resolveReferencePath(referenceImagePath: string) {
   if (referenceImagePath.startsWith("/avatars/")) return path.resolve(process.cwd(), "public", referenceImagePath.slice(1));
   if (referenceImagePath.startsWith("/public/")) return path.resolve(process.cwd(), referenceImagePath.slice(1));
@@ -41,7 +51,6 @@ async function loadAvatarReference(avatarId: string | null | undefined) {
   if (!avatarId) return null;
   const avatar = getAvatar(avatarId);
   if (!avatar) return null;
-  // Prefer the canonical front view if it's ready; fall back to the reference photo.
   const frontView = avatar.views?.front?.file;
   const sourcePath = frontView && avatar.views.front.status === "ready"
     ? frontView
@@ -57,18 +66,64 @@ async function loadAvatarReference(avatarId: string | null | undefined) {
   }
 }
 
+async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string}|null){
+  const variation=`${row.mission}\nCalendar variation: ${row.title}. Produce a distinct execution for this scheduled post while preserving the campaign message.`;
+  const job=await createJob({
+    source:"admin",
+    provider:chosen,
+    category:normalizeCategory(String(row.category||"ugc")),
+    mission:variation,
+    aspectRatio:"9:16",
+    resolution:"720p",
+    model: chosen === "a2e" ? (avatarRef ? "a2e-v2-i2v" : "seedance2.5") : undefined,
+    avatarId: row.avatar_id || undefined,
+    imageBase64: avatarRef?.imageBase64,
+    imageMimeType: avatarRef?.imageMimeType
+  });
+  db.prepare("UPDATE scheduled_posts SET video_job_id=?,generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(job.id,row.id);
+  return job;
+}
+
 async function finishGenerating(){
   const row=db.prepare(`SELECT sp.id,sp.video_job_id FROM scheduled_posts sp WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='generating' AND sp.video_job_id IS NOT NULL ORDER BY sp.scheduled_at ASC LIMIT 1`).get() as {id:string;video_job_id:string}|undefined;
   if(!row)return false;
   const job=await refreshJob(row.video_job_id,{ensureCalendar:false});
   if(!job)return true;
-  if(job.status==="succeeded")db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type='video/mp4',generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(`/api/v1/video/${row.video_job_id}/file`,row.id);
-  else if(job.status==="failed")db.prepare(`UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(String(job.error||"Video generation failed").slice(0,2000),row.id);
+  if(job.status==="succeeded"){
+    db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type='video/mp4',generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(`/api/v1/video/${row.video_job_id}/file`,row.id);
+    return true;
+  }
+  if(job.status!=="failed")return true;
+  const next=fallbackProvider(provider(String(job.provider||"")));
+  if(next && isRecoverableProviderFailure(String(job.error||""))){
+    const slot=db.prepare(`SELECT sp.id,sp.title,sp.caption,c.name as campaign_name,c.category,c.mission,c.avatar_id FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.id=?`).get(row.id) as any;
+    if(slot){
+      try{
+        await startSlotJob(slot, next, null);
+        return true;
+      }catch(e){
+        db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);
+        return true;
+      }
+    }
+  }
+  db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(job.error||"Video generation failed").slice(0,2000),row.id);
   return true;
 }
 
 async function generateNext(){
-  const row=db.prepare(`SELECT sp.id,sp.title,sp.content_type,sp.caption,c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='pending' AND sp.media_url IS NULL AND sp.video_job_id IS NULL ORDER BY sp.scheduled_at ASC,sp.created_at ASC LIMIT 1`).get() as any;
+  const row=db.prepare(`
+    SELECT sp.id,sp.title,sp.content_type,sp.caption,sp.generation_status,sp.error,c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider
+    FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
+    WHERE sp.campaign_id IS NOT NULL
+      AND sp.media_url IS NULL
+      AND (
+        (sp.generation_status='pending' AND sp.video_job_id IS NULL)
+        OR (sp.generation_status='failed' AND sp.error LIKE 'A2E%')
+      )
+    ORDER BY sp.scheduled_at ASC,sp.created_at ASC
+    LIMIT 1
+  `).get() as any;
   if(!row)return false;
   if(row.content_type==="image"){
     try{
@@ -79,39 +134,27 @@ async function generateNext(){
     }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
     return true;
   }
+  const retryingA2e = row.generation_status === "failed";
   const chosenRequested=provider(String(row.video_provider||"veo"));
-  // Hedra requires driving audio for every slot — unsuitable for unattended
-  // campaign autopilot. Auto-route to A2E v2 image-to-video (native audio,
-  // no driving audio file required) when the campaign's avatar has a
-  // canonical front view ready; otherwise fall through to text-to-video
-  // with Seedance 2.5 (also native audio).
-  const avatarRef = chosenRequested === "hedra" ? await loadAvatarReference(row.avatar_id) : null;
-  const chosen: ProviderId = chosenRequested === "hedra" && !avatarRef ? "a2e" : (chosenRequested === "hedra" ? "a2e" : chosenRequested);
-  const fallbackModel = chosen === "a2e" ? (avatarRef ? "a2e-v2-i2v" : "seedance2.5") : undefined;
-  if(chosenRequested==="hedra" && !avatarRef){
+  const avatarRef = !retryingA2e && chosenRequested === "hedra" ? await loadAvatarReference(row.avatar_id) : null;
+  const chosen: ProviderId = retryingA2e
+    ? "grok"
+    : (chosenRequested === "hedra" && !avatarRef ? "a2e" : (chosenRequested === "hedra" ? "a2e" : chosenRequested));
+  if(!retryingA2e && chosenRequested==="hedra" && !avatarRef){
     db.prepare("UPDATE scheduled_posts SET generation_status='pending_manual',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run("Hedra requires driving audio for each avatar video. The autopilot routed this slot to A2E (seedance2.5 native audio) but the campaign avatar has no canonical front view yet. Upload an identity reference and run Generate all 4 on the Avatars page, then Approve this slot to retry.",row.id);
     return true;
   }
   try{
     db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
-    const variation=`${row.mission}\nCalendar variation: ${row.title}. Produce a distinct execution for this scheduled post while preserving the campaign message.`;
-    const job=await createJob({
-      source:"admin",
-      provider:chosen,
-      category:normalizeCategory(String(row.category||"ugc")),
-      mission:variation,
-      aspectRatio:"9:16",
-      // 720p is the cheap A2E tier (and a 50% coin saving vs 1080p).
-      // Operators can override per-slot by editing the job after creation
-      // or by setting their default resolution in Settings.
-      resolution:"720p",
-      model:fallbackModel,
-      avatarId: row.avatar_id || undefined,
-      imageBase64: avatarRef?.imageBase64,
-      imageMimeType: avatarRef?.imageMimeType
-    });
-    db.prepare("UPDATE scheduled_posts SET video_job_id=?,generation_status='generating',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(job.id,row.id);
-  }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
+    await startSlotJob(row, chosen, avatarRef);
+  }catch(e){
+    const next = fallbackProvider(chosen);
+    if(next){
+      try{ await startSlotJob(row, next, null); return true; }
+      catch(inner){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((inner instanceof Error?inner.message:String(inner)).slice(0,2000),row.id); return true; }
+    }
+    db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);
+  }
   return true;
 }
 
