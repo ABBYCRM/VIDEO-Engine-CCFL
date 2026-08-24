@@ -51,6 +51,7 @@ type MediaInput = { base64: string; mime: string; name: string };
 type AvatarOption = {
   id: string;
   name: string;
+  gender?: string;
   referenceImage: string | null;
   wardrobeRegenerationPrompt?: string | null;
   a2eTwinId?: string | null;
@@ -181,6 +182,12 @@ export function GeneratorConsole() {
       void planCreative("car_accident", supportedInitial, def.id, "", "video", def.durations[def.durations.length - 1], a?.avatars || []);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (selectedAvatar || !avatars.length) return;
+    const preferred = avatars.find((a) => a.id === "male-attorney-01") || avatars.find((a) => a.gender === "male");
+    if (preferred) void chooseAvatar(preferred.id);
+  }, [avatars, selectedAvatar]);
 
   useEffect(() => {
     if (!job?.id || ["succeeded", "failed"].includes(job.status)) return;

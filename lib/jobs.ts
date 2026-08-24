@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import path from "node:path";
 import { db } from "@/lib/db";
 import { compileVeoPrompt } from "@/lib/prompt-compiler";
 import type { CampaignCategory } from "@/lib/prompts";
@@ -7,7 +8,7 @@ import { getEngineSettings } from "@/lib/settings";
 import { PROVIDERS, getDefaultProvider, type ProviderId } from "@/lib/providers";
 import { getAvatar } from "@/lib/avatars";
 import { ensureAssetCalendarPost } from "@/lib/calendar-assets";
-import { savePersistentLibraryAsset } from "@/lib/persistent-library";
+import { getPersistentLibraryAsset, savePersistentLibraryAsset } from "@/lib/persistent-library";
 import * as veo from "@/lib/veo";
 import * as grok from "@/lib/grok";
 import * as a2e from "@/lib/a2e";
@@ -119,7 +120,14 @@ export async function createJob(input: CreateJobInput) {
   const defaults = getEngineSettings();
   const provider: ProviderId = input.provider || defaults.defaultProvider || getDefaultProvider();
   const id = crypto.randomUUID();
-  const prompt = compileVeoPrompt(input);
+  const prompt = compileVeoPrompt({
+    category: input.category,
+    mission: input.mission,
+    subject: input.subject,
+    script: input.script,
+    identityLock: Boolean(input.imageBase64),
+    avatarName: input.avatarId ? getAvatar(input.avatarId)?.name : undefined
+  });
   const model = modelForProvider(provider, input.model);
   const aspectRatio = input.aspectRatio || defaults.aspectRatio;
   const resolution = input.resolution || defaults.resolution;
@@ -130,6 +138,33 @@ export async function createJob(input: CreateJobInput) {
 
 export function getJob(id: string) {
   return db.prepare("SELECT id,source,category,prompt,provider,model,aspect_ratio as aspectRatio,resolution,provider_operation as providerOperation,status,error,output_path as outputPath,created_at as createdAt,updated_at as updatedAt FROM video_jobs WHERE id=?").get(id) as any;
+}
+
+export async function ensureJobOutputPath(id: string) {
+  const job = getJob(id);
+  if (!job || job.status !== "succeeded") return null;
+  if (job.outputPath) {
+    try {
+      await fs.access(job.outputPath);
+      return job.outputPath as string;
+    } catch {}
+  }
+
+  const persistent = await getPersistentLibraryAsset(`video:${id}`).catch(() => null);
+  if (!persistent) return null;
+  const outDir = path.resolve(process.env.VIDEO_OUTPUT_DIR || "./data/videos");
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const outputPath = path.join(outDir, `${safeId}.mp4`);
+  const temporaryPath = `${outputPath}.${crypto.randomUUID()}.tmp`;
+  await fs.mkdir(outDir, { recursive: true });
+  try {
+    await fs.writeFile(temporaryPath, persistent.bytes);
+    await fs.rename(temporaryPath, outputPath);
+  } finally {
+    await fs.unlink(temporaryPath).catch(() => {});
+  }
+  db.prepare("UPDATE video_jobs SET output_path=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(outputPath, id);
+  return outputPath;
 }
 
 export async function refreshJob(id: string, options?: { ensureCalendar?: boolean }) {
