@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pingPg } from "@/lib/db-pg-bootstrap";
+import { getProviderKey, PROVIDERS, type ProviderId } from "@/lib/providers";
+import { getGeminiApiKey } from "@/lib/settings";
+import { getNvidiaApiKey } from "@/lib/nvidia";
 
 const TIMEOUT_MS = 6000;
 
@@ -12,59 +15,68 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<{ ok: boolean;
   ]);
 }
 
-async function pingVeo() {
-  const configured = Boolean(process.env.VEO_API_KEY);
-  if (!configured) return { configured: false, live: false, error: "no key configured" };
-  return { configured: true, live: true, status: 200, latencyMs: 0 };
-}
+async function pingVideoProvider(provider: ProviderId) {
+  let key: string;
+  try {
+    key = getProviderKey(provider);
+  } catch {
+    return { configured: false, live: false, error: "no key configured" };
+  }
 
-async function pingGrok() {
-  const configured = Boolean(process.env.XAI_API_KEY);
-  if (!configured) return { configured: false, live: false, error: "no key configured" };
+  const url = provider === "veo"
+    ? PROVIDERS.veo.healthUrl.replace("__KEY__", encodeURIComponent(key))
+    : PROVIDERS[provider].healthUrl;
+  const headers: Record<string, string> = provider === "veo"
+    ? { Accept: "application/json" }
+    : provider === "hedra"
+      ? { Authorization: `Key ${key}`, Accept: "application/json" }
+      : { Authorization: `Bearer ${key}`, Accept: "application/json" };
+  const isA2e = provider === "a2e";
   const t0 = Date.now();
   const r = await withTimeout(
-    fetch("https://api.x.ai/v1/models", { headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}` } }),
+    fetch(url, {
+      method: isA2e ? "POST" : "GET",
+      headers: isA2e ? { ...headers, "Content-Type": "application/json" } : headers,
+      body: isA2e ? "{}" : undefined,
+      cache: "no-store"
+    }),
     TIMEOUT_MS
   );
-  if (!r.ok) return { configured, live: false, error: r.error || "models endpoint failed", latencyMs: Date.now() - t0 };
-  return { configured, live: true, status: 200, latencyMs: Date.now() - t0 };
-}
-
-async function pingHedra() {
-  const configured = Boolean(process.env.HEDRA_API_KEY);
-  if (!configured) return { configured: false, live: false, error: "no key configured" };
-  const t0 = Date.now();
-  const authHeader = `Basic ${Buffer.from(process.env.HEDRA_API_KEY || "").toString("base64")}`;
-  const r = await withTimeout(
-    fetch("https://api.hedra.com/v3/jobs", { headers: { "X-API-Key": process.env.HEDRA_API_KEY || "", Authorization: authHeader } }),
-    TIMEOUT_MS
-  );
-  if (!r.ok) return { configured, live: false, error: r.error, latencyMs: Date.now() - t0 };
-  const status = (r.value as Response).status;
-  return { configured, live: status === 200, status, latencyMs: Date.now() - t0 };
+  if (!r.ok) return { configured: true, live: false, error: r.error, latencyMs: Date.now() - t0 };
+  const response = r.value as Response;
+  return {
+    configured: true,
+    live: response.ok,
+    status: response.status,
+    error: response.ok ? undefined : `HTTP ${response.status}`,
+    latencyMs: Date.now() - t0
+  };
 }
 
 async function pingNvidia() {
-  const configured = Boolean(process.env.NVIDIA_API_KEY);
-  if (!configured) return { configured: false, live: false, error: "no key configured" };
+  let key: string;
+  try {
+    key = getNvidiaApiKey();
+  } catch {
+    return { configured: false, live: false, error: "no key configured" };
+  }
   const t0 = Date.now();
   const r = await withTimeout(
-    fetch("https://integrate.api.nvidia.com/v1/models", { headers: { Authorization: `Bearer ${process.env.NVIDIA_API_KEY}` } }),
+    fetch("https://integrate.api.nvidia.com/v1/models", { headers: { Authorization: `Bearer ${key}` } }),
     TIMEOUT_MS
   );
-  if (!r.ok) return { configured, live: false, error: r.error, latencyMs: Date.now() - t0 };
-  const status = (r.value as Response).status;
-  return { configured, live: status === 200, status, latencyMs: Date.now() - t0 };
+  if (!r.ok) return { configured: true, live: false, error: r.error, latencyMs: Date.now() - t0 };
+  const response = r.value as Response;
+  return { configured: true, live: response.ok, status: response.status, error: response.ok ? undefined : `HTTP ${response.status}`, latencyMs: Date.now() - t0 };
 }
 
 async function pingComposio() {
-  const { isComposioConfigured } = await import("@/lib/composio/client");
+  const { getComposio, isComposioConfigured } = await import("@/lib/composio/client");
   const configured = isComposioConfigured();
   if (!configured) return { configured: false, live: false, error: "no key configured" };
   const t0 = Date.now();
   try {
-    const { Composio } = await import("@composio/core");
-    const client = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+    const client = getComposio();
     const r = await withTimeout(client.connectedAccounts.list({ userIds: ["admin"] }), TIMEOUT_MS);
     if (!r.ok) return { configured, live: false, error: r.error, latencyMs: Date.now() - t0 };
     return { configured, live: true, status: 200, latencyMs: Date.now() - t0 };
@@ -74,25 +86,33 @@ async function pingComposio() {
 }
 
 async function pingGemini() {
-  const configured = Boolean(process.env.GEMINI_API_KEY);
-  if (!configured) return { configured: false, live: false, error: "no key configured" };
+  let key: string;
+  try {
+    key = getGeminiApiKey();
+  } catch {
+    return { configured: false, live: false, error: "no key configured" };
+  }
   const t0 = Date.now();
   const r = await withTimeout(
-    fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`),
+    fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`),
     TIMEOUT_MS
   );
   if (!r.ok) {
-    const body = await (r.value as Response).text().catch(() => "");
-    const isCap = body.includes("RESOURCE_EXHAUSTED") || body.includes("spending cap");
-    return { configured, live: false, error: isCap ? "monthly spending cap reached" : (r.error || "models list failed"), latencyMs: Date.now() - t0 };
+    return { configured: true, live: false, error: r.error || "models endpoint failed", latencyMs: Date.now() - t0 };
   }
-  return { configured, live: true, status: 200, latencyMs: Date.now() - t0 };
+  const response = r.value as Response;
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    const isCap = body.includes("RESOURCE_EXHAUSTED") || body.includes("spending cap");
+    return { configured: true, live: false, status: response.status, error: isCap ? "monthly spending cap reached" : `HTTP ${response.status}`, latencyMs: Date.now() - t0 };
+  }
+  return { configured: true, live: true, status: response.status, latencyMs: Date.now() - t0 };
 }
 
 export async function GET() {
   const t0 = Date.now();
-  const [veo, grok, hedra, nvidia, composio, gemini, pg] = await Promise.all([
-    pingVeo(), pingGrok(), pingHedra(), pingNvidia(), pingComposio(), pingGemini(), pingPg()
+  const [veo, grok, a2e, hedra, nvidia, composio, gemini, pg] = await Promise.all([
+    pingVideoProvider("veo"), pingVideoProvider("grok"), pingVideoProvider("a2e"), pingVideoProvider("hedra"), pingNvidia(), pingComposio(), pingGemini(), pingPg()
   ]);
 
   let dbCheck: { ok: boolean; engine: "sqlite" | "none"; path: string; error?: string };
@@ -118,7 +138,7 @@ export async function GET() {
         app: { ok: true },
         database: dbCheck,
         database_postgres: pgSide,
-        providers: { veo, grok, hedra, nvidia, composio, gemini }
+        providers: { veo, grok, a2e, hedra, nvidia, composio, gemini }
       }
     });
   }
@@ -130,7 +150,7 @@ export async function GET() {
     checks: {
       app: { ok: true },
       database: dbCheck,
-      providers: { veo, grok, hedra, nvidia, composio, gemini }
+      providers: { veo, grok, a2e, hedra, nvidia, composio, gemini }
     }
   });
 }

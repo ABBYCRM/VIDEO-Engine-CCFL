@@ -18,11 +18,11 @@ test("Create sends the exact selected provider for Veo, Grok and A2E and accepts
   await page.route("**/api/v1/video/queued-*", route => route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({id:route.request().url().split("/").pop(),status:"running"})}));
   await page.goto("/");
   const cases=[
-    {card:"Google Veo 3.1 8s cinematic",generate:"Generate 8s with Google Veo 3.1",provider:"veo"},
-    {card:"xAI Grok Imagine up to 15s",generate:"Generate 15s with xAI Grok Imagine",provider:"grok"},
-    {card:"A2E AI router model dependent",generate:"Generate 8s with A2E AI router",provider:"a2e"}
+    {card:/Google Veo 3\.1.*8s cinematic/,generate:"Generate 8s with Google Veo 3.1",provider:"veo"},
+    {card:/xAI Grok Imagine.*up to 15s/,generate:"Generate 15s with xAI Grok Imagine",provider:"grok"},
+    {card:/A2E AI multi-model.*full hosted model catalog/,generate:"Generate 8s with A2E AI multi-model",provider:"a2e",model:"veo3_fast"}
   ] as const;
-  for(const item of cases){await page.getByRole("button",{name:item.card,exact:true}).click();await page.getByRole("button",{name:item.generate,exact:true}).click();await expect.poll(()=>payloads.some(p=>p.provider===item.provider)).toBeTruthy()}
+  for(const item of cases){await page.getByRole("button",{name:item.card}).click();if("model" in item)await page.getByLabel("Video model").selectOption(item.model);await page.getByRole("button",{name:item.generate,exact:true}).click();await expect.poll(()=>payloads.some(p=>p.provider===item.provider)).toBeTruthy()}
   expect(payloads.map(p=>p.provider)).toEqual(["veo","grok","a2e"]);await expect(page.getByText("This operation was aborted")).toHaveCount(0);
 });
 
@@ -31,7 +31,7 @@ test("Hedra path sends canonical image, driving audio and selected duration", as
   await page.route("**/api/internal/generate", async route => {payload=await route.request().postDataJSON();await route.fulfill({status:202,contentType:"application/json",body:JSON.stringify({job:{id:"hedra-queued",status:"queued"}})})});
   await page.route("**/api/v1/video/hedra-queued", route => route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({id:"hedra-queued",status:"running"})}));
   await page.goto("/");await page.getByRole("button",{name:"Hedra 15/30s avatar · audio driven",exact:true}).click();await page.getByLabel("Choose canonical avatar").selectOption("female-anchor-01");
-  await page.locator('input[type="file"][accept*="audio"]').setInputFiles({name:"voice.wav",mimeType:"audio/wav",buffer:Buffer.from([82,73,70,70,1,2,3,4])});await page.getByLabel("Hedra duration").selectOption("30");await page.getByRole("button",{name:"Generate 30s with Hedra",exact:true}).click();
+  await page.locator('input[type="file"][accept*="audio"]').setInputFiles({name:"voice.wav",mimeType:"audio/wav",buffer:Buffer.from([82,73,70,70,1,2,3,4])});await page.getByLabel("Video duration").selectOption("30");await page.getByRole("button",{name:"Generate 30s with Hedra",exact:true}).click();
   await expect.poll(()=>payload?.provider).toBe("hedra");expect(payload.imageBase64).toBeTruthy();expect(payload.imageMimeType).toBe("image/png");expect(payload.audioBase64).toBeTruthy();expect(payload.audioMimeType).toBe("audio/wav");expect(payload.durationSeconds).toBe(30);await expect(page.getByText("This operation was aborted")).toHaveCount(0);
 });
 

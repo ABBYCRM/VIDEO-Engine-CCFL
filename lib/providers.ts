@@ -50,7 +50,7 @@ export const PROVIDERS: Record<ProviderId, {
     supportsImage: true,
     envKey: "A2E_API_KEY",
     settingsKey: "a2e_api_key",
-    healthUrl: "https://video.a2e.ai/api/v1/anchor/list"
+    healthUrl: "https://video.a2e.ai/api/v1/anchor/tts_list"
   },
   hedra: {
     id: "hedra",
