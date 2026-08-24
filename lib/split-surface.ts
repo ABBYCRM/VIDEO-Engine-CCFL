@@ -78,7 +78,10 @@ export function laneModel(provider: ProviderId, requested?: string | null) {
   if (requested && requested.trim()) return requested.trim();
   if (provider === "grok") return "grok-imagine-video-1.5";
   if (provider === "veo") return "veo-3.1-generate-preview";
-  if (provider === "a2e") return "seedance2.5";
+  // Kling 3.0: A2E's most photorealistic human-motion model. Takes the
+  // avatar's reference photo as an image-to-video source (preserving
+  // identity) and always generates native audio at this version.
+  if (provider === "a2e") return "kling3";
   return undefined;
 }
 
