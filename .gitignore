@@ -12,3 +12,7 @@ npm-debug.log*
 
 tsconfig.tsbuildinfo
 .do_config_*.md
+
+/test-results/
+/playwright-report/
+/blob-report/
