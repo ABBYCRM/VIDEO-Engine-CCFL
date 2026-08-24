@@ -76,12 +76,11 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
   const prompt=`Create one campaign-ready vertical social-media still. ${input.prompt}\nPhotorealistic unless the creative direction explicitly requests another style. No fabricated legal results, settlement amounts, testimonials, injuries, statistics, logos, or text artifacts.`;
   let reference:string|null=null;
   if(input.avatarId){
-    const avatar=db.prepare("SELECT id,name,reference_image_path,wardrobe_regeneration_prompt FROM avatars WHERE id=?").get(input.avatarId) as {id:string;name:string;reference_image_path:string|null;wardrobe_regeneration_prompt:string|null}|undefined;
+    const avatar=db.prepare("SELECT id,name,reference_image_path FROM avatars WHERE id=?").get(input.avatarId) as {id:string;name:string;reference_image_path:string|null}|undefined;
     if(!avatar)throw new Error("Selected canonical avatar was not found");
     const front=db.prepare("SELECT file_path,status FROM avatar_views WHERE avatar_id=? AND view='front'").get(input.avatarId) as {file_path:string|null;status:string}|undefined;
     const raw=front?.status==="ready"&&front.file_path?front.file_path:avatar.reference_image_path;
     if(!raw)throw new Error(`${avatar.name} has no usable identity image`);
-    if(front?.status!=="ready"&&avatar.wardrobe_regeneration_prompt)throw new Error(`${avatar.name} requires a campaign-safe canonical front view before image/video production. Generate or upload the professional front view in Avatars first.`);
     reference=resolveReferencePath(raw);
   }
   const result=await renderWithConfiguredProvider(prompt,reference);
