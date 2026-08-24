@@ -135,7 +135,9 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
     aspectRatio:"9:16",
     resolution:"720p",
     durationSeconds:8,
-    model: extra?.model || (chosen === "a2e" ? (avatarRef ? "a2e-v2-i2v" : "seedance2.5") : undefined),
+    // Kling 3.0: A2E's most photorealistic human-motion model, used for both
+    // image-to-video (avatarRef present) and text-to-video.
+    model: extra?.model || (chosen === "a2e" ? "kling3" : undefined),
     avatarId: avatarRef?.avatarId || resolveCampaignAvatarId(row.avatar_id) || undefined,
     imageBase64: avatarRef?.imageBase64,
     imageMimeType: avatarRef?.imageMimeType

@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS avatar_generations (
   result_path TEXT,
   status TEXT NOT NULL,
   error TEXT,
+  latency_ms INTEGER,
   started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   finished_at TEXT
 );
@@ -243,6 +244,7 @@ for (const [column, ddl] of [
 ] as const) {
   try { ensureColumn("avatars", column, ddl); } catch {}
 }
+try { ensureColumn("avatar_generations", "latency_ms", "latency_ms INTEGER"); } catch {}
 
 function seedDefaultAvatars() {
   const row = db.prepare("SELECT COUNT(*) as n FROM avatars").get() as { n: number };

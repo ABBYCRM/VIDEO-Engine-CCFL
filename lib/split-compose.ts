@@ -53,9 +53,14 @@ export async function composeSplitScreenFile(input: {
   const { top, bottom } = evenHeight(input.splitPercent);
   const duration = 8;
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
+  // Both lanes are top-anchored (y=0): AI portrait framing puts the subject's
+  // head near the top of frame, so cropping down to the lane height from the
+  // top only ever discards the bottom (torso/background), never the head.
+  // A centered or offset crop here was slicing through the avatar's head at
+  // some split ratios and needed manual per-video readjustment.
   const filter = [
-    `[0:v]scale=720:${top}:force_original_aspect_ratio=increase,crop=720:${top},fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[ut]`,
-    `[1:v]scale=720:${bottom}:force_original_aspect_ratio=increase,crop=720:${bottom},fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[lb]`,
+    `[0:v]scale=720:${top}:force_original_aspect_ratio=increase,crop=720:${top}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[ut]`,
+    `[1:v]scale=720:${bottom}:force_original_aspect_ratio=increase,crop=720:${bottom}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[lb]`,
     `[ut][lb]vstack=inputs=2[v]`
   ].join(";");
   const base = [
