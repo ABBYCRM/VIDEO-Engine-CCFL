@@ -378,7 +378,7 @@ async function runOneView(avatarId: string, v: AvatarView) {
     const msg = e instanceof Error ? e.message : String(e);
     const finishedAt = new Date().toISOString();
     patchView(avatarId, v, { generation_status: "failed", generation_error: msg, generation_finished_at: finishedAt });
-    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error_message,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, getImageModel(), null, "failed", msg, startedAt.toISOString(), finishedAt);
+    db.prepare("INSERT INTO avatar_generations(id,avatar_id,view,model,prompt,status,error,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)").run(crypto.randomUUID(), avatarId, v, getImageModel(), "", "failed", msg, startedAt.toISOString(), finishedAt);
     return `${v}: ${msg}`;
   }
 }
