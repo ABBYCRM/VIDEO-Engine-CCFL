@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { generateCampaignStill } from "@/lib/campaign-image";
-import { createJob, getJob, refreshJob } from "@/lib/jobs";
+import { createJob, ensureJobOutputPath, getJob, refreshJob } from "@/lib/jobs";
 import { getAvatar } from "@/lib/avatars";
 import type { CampaignCategory } from "@/lib/prompts";
 import type { ProviderId } from "@/lib/providers";
@@ -116,10 +116,12 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
 }
 
 async function composeReadySplit(row:any, upper:any, lower:any){
-  if(!upper?.outputPath || !lower?.outputPath)throw new Error("Split-screen lanes finished without local video files.");
+  if(!upper?.id || !lower?.id)throw new Error("Split-screen lanes finished without job IDs.");
+  const [upperPath,lowerPath]=await Promise.all([ensureJobOutputPath(upper.id),ensureJobOutputPath(lower.id)]);
+  if(!upperPath||!lowerPath)throw new Error("Split-screen lane files could not be restored from persistent storage.");
   const composed=await composeSplitJobs({
-    upperPath:upper.outputPath,
-    lowerPath:lower.outputPath,
+    upperPath,
+    lowerPath,
     splitPercent:clampSplitPercent(row.split_percent),
     title:row.title,
     caption:String(row.caption||row.mission||"").slice(0,5000),
