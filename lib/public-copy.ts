@@ -3,70 +3,152 @@ const OPERATOR =
 
 export type PublicCopy = { hook: string; caption: string };
 
+const CTA = "CaseClosedFL.com connects you with the best attorneys in Florida — free consultation, no pressure.";
+
 const PACKAGES: Record<string, PublicCopy[]> = {
   car_accident: [
     {
-      hook: "After a crash, start here.",
+      hook: "This one thing changes everything after a crash.",
       caption:
-        "After a collision, document the scene only when it is safe. Save photos, exchange contact and insurance details, and keep relevant records.\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccidentSafety #KnowYourNextStep"
+        `Most people don't realize the first few minutes after a car accident can shape the entire outcome. If it's safe, document the scene, exchange contact and insurance info, and get checked out.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccident #CaseClosedFL`
     },
     {
-      hook: "Don't leave empty-handed.",
+      hook: "People still don't know this about car accidents.",
       caption:
-        "If everyone is safe, photograph vehicle positions, visible damage, and the roadway before anything is moved. Keep names, numbers, and insurance cards together.\n\nGeneral information only—not legal advice.\n\n#Florida #CrashTips #DocumentTheScene"
+        `Insurance companies move fast after a crash — and they're not working for you. Save your photos, records, and any witness info before it disappears.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #KnowYourRights #CaseClosedFL`
     },
     {
-      hook: "Safety first. Then the details.",
+      hook: "The mistake most drivers make after a crash.",
       caption:
-        "Check for injuries and call for help before you pick up a phone for photos. When it is safe, capture the scene, contacts, and insurance information so you are not relying on memory later.\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccident #StaySafe"
+        `Talking to the other insurance company before you talk to anyone else? That's the #1 mistake. Get safe, get documented, get informed first.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccidentTips #CaseClosedFL`
     },
     {
-      hook: "What to save after a collision.",
+      hook: "One call can change your entire case.",
       caption:
-        "Photos of the scene, driver and insurance details, and any witness contacts can disappear fast. Collect them only when it is safe, then get medical care if you need it.\n\nGeneral information only—not legal advice.\n\n#KnowYourNextStep #FloridaDrivers #AccidentInfo"
+        `Before you sign anything or say more than you have to, know who's actually in your corner.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccident #CaseClosedFL`
     },
     {
-      hook: "The scene changes fast.",
+      hook: "This is the one thing insurance adjusters hope you skip.",
       caption:
-        "Cars get towed. Debris gets cleared. Lighting changes. If it is safe, take photos before the roadway returns to normal, and keep a simple record of who you spoke with.\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccidentSafety #PreserveTheScene"
+        `A full record of the scene — photos, damage, contacts — is your strongest asset after a crash. Don't rely on memory.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccidentSafety #CaseClosedFL`
     },
     {
-      hook: "A calm next step.",
+      hook: "Still don't know your rights after a crash?",
       caption:
-        "You do not need a perfect statement on the roadside. Get to safety, document what you can, exchange information, and follow up with a medical check if anything feels off.\n\nGeneral information only—not legal advice.\n\n#Florida #AfterACrash #PracticalSteps"
+        `You're not alone — most people don't, until it's too late. Get the facts, get checked out, and get connected to real help.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #KnowYourNextStep #CaseClosedFL`
     },
     {
-      hook: "Keep the facts, not the guesswork.",
+      hook: "The clock starts the moment it happens.",
       caption:
-        "Write down time, location, weather, and who was involved while it is fresh. Save photos and insurance details. Skip guesses about fault on the spot.\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccident #KnowYourNextStep"
+        `Evidence disappears fast after a crash — the scene gets cleared, memories fade. Document what you can, safely, and don't wait to get advice.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CarAccident #CaseClosedFL`
     }
   ],
   rideshare: [
     {
-      hook: "Rideshare crash? Save this.",
+      hook: "This one thing matters most after a rideshare crash.",
       caption:
-        "After a rideshare collision, get to safety first. Then save the trip details, driver/vehicle info, photos if it is safe, and a record of who you contacted.\n\nGeneral information only—not legal advice.\n\n#RideshareSafety #Florida #KnowYourNextStep"
+        `Rideshare accidents involve extra layers — the driver's insurance, the platform's insurance, and yours. Get safe first, then document everything.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #RideshareAccident #CaseClosedFL`
+    },
+    {
+      hook: "People still don't know this about Uber and Lyft accidents.",
+      caption:
+        `Which insurance policy applies can depend on whether the driver was on a trip, waiting for one, or offline. Save your trip receipt and screenshots.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #Rideshare #CaseClosedFL`
+    },
+    {
+      hook: "The mistake riders make after a rideshare crash.",
+      caption:
+        `Accepting a quick settlement offer before you know the full picture can cost you later. Get informed before you sign anything.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #RideshareSafety #CaseClosedFL`
+    },
+    {
+      hook: "One decision after a rideshare crash can change everything.",
+      caption:
+        `Before you talk to the driver's insurance or the platform, know your options.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #Rideshare #CaseClosedFL`
+    },
+    {
+      hook: "This is what rideshare companies hope you don't ask.",
+      caption:
+        `Whether the app was active matters more than most riders realize. Save your ride history and any messages before they're gone.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #RideshareAccident #CaseClosedFL`
     }
   ],
   trucking: [
     {
-      hook: "Commercial crash scenes move fast.",
+      hook: "This one thing matters most after a truck accident.",
       caption:
-        "After a truck collision, safety comes first. If it is safe, photograph vehicle positions, nearby conditions, and identifying details before the scene is cleared.\n\nGeneral information only—not legal advice.\n\n#TruckAccident #Florida #DocumentTheScene"
+        `Commercial trucking crashes involve companies, insurers, and evidence that can vanish fast — data logs, dashcam footage, maintenance records. Document what you safely can.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #TruckAccident #CaseClosedFL`
+    },
+    {
+      hook: "People still don't know this about 18-wheeler crashes.",
+      caption:
+        `Trucking companies often send investigators to the scene within hours. Your own documentation matters just as much.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #TruckingAccident #CaseClosedFL`
+    },
+    {
+      hook: "The mistake people make after a commercial truck crash.",
+      caption:
+        `Waiting too long to preserve evidence — like driver logs or black box data — can mean it's gone for good. Act early.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #TruckAccident #CaseClosedFL`
+    },
+    {
+      hook: "One record can change a trucking case.",
+      caption:
+        `Photos of the scene, damage, and conditions can matter more than you'd expect in a commercial crash. Document safely, then get advice.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #Trucking #CaseClosedFL`
+    },
+    {
+      hook: "This is what trucking companies hope you skip.",
+      caption:
+        `Preserving the evidence before it's gone is one of the biggest factors in a commercial crash case. Don't wait.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #TruckAccident #CaseClosedFL`
     }
   ],
   slip_fall: [
     {
-      hook: "If you fall, document the condition.",
+      hook: "This one thing matters most after a fall.",
       caption:
-        "Once you are safe, photograph the area, lighting, and what caused the fall if it is still visible. Report it, get medical care if you need it, and keep those records.\n\nGeneral information only—not legal advice.\n\n#PremisesSafety #Florida #KnowYourNextStep"
+        `Conditions that caused a slip-and-fall can be fixed or cleared within hours. If it's safe, photograph what caused it before it's gone.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #SlipAndFall #CaseClosedFL`
+    },
+    {
+      hook: "People still don't know this about premises accidents.",
+      caption:
+        `Property owners have a duty to keep conditions safe — and evidence of a hazard matters. Document it, then get medical care.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #PremisesSafety #CaseClosedFL`
+    },
+    {
+      hook: "The mistake most people make after a fall.",
+      caption:
+        `Not reporting it right away can weaken your case later. Report it, document it, and get checked out.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #SlipAndFall #CaseClosedFL`
+    },
+    {
+      hook: "One photo can change everything after a fall.",
+      caption:
+        `The exact condition — wet floor, poor lighting, broken step — rarely stays the same for long. Capture it if it's safe to do so.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #PremisesAccident #CaseClosedFL`
+    },
+    {
+      hook: "This is what property owners hope you don't do.",
+      caption:
+        `Document the hazard, report the incident, and get medical attention — in that order of safety, not urgency.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #SlipAndFall #CaseClosedFL`
     }
   ],
   ugc: [
     {
-      hook: "One useful next step.",
+      hook: "This one thing people still don't know.",
       caption:
-        "Keep it practical: stay safe, save what you can document, and follow up. No hype, no invented results.\n\nGeneral information only—not legal advice.\n\n#KnowYourNextStep"
+        `Whatever happened, the smartest first move is almost always the same: get safe, get documented, get informed.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #KnowYourNextStep #CaseClosedFL`
+    },
+    {
+      hook: "People still don't know this simple step.",
+      caption:
+        `A little documentation now can save a lot of stress later. Keep it simple, keep it safe.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CaseClosedFL`
+    },
+    {
+      hook: "The one thing worth doing first.",
+      caption:
+        `Before anything else, make sure you're safe. Then document, then reach out for real answers.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CaseClosedFL`
+    },
+    {
+      hook: "This is the step most people skip.",
+      caption:
+        `Getting informed early changes everything about how the rest plays out. Don't guess — get real answers.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CaseClosedFL`
+    },
+    {
+      hook: "One decision. A different outcome.",
+      caption:
+        `The right first move is rarely complicated — it's just often skipped. Stay safe, stay documented, stay informed.\n\n${CTA}\n\nGeneral information only—not legal advice.\n\n#Florida #CaseClosedFL`
     }
   ]
 };
