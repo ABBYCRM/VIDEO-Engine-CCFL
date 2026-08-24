@@ -1,0 +1,7 @@
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS video_model TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS upper_provider TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS upper_model TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS split_percent INTEGER NOT NULL DEFAULT 35;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS split_relationship TEXT NOT NULL DEFAULT 'anchor_field';
+ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS upper_job_id TEXT;
+ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS lower_job_id TEXT;

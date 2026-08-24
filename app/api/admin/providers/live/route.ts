@@ -69,11 +69,18 @@ async function pingVideo(p: ProviderId): Promise<ProviderLive> {
   }
   const url = buildUrl(p, key);
   const headers = buildHeaders(p, key);
+  const isA2e = p === "a2e";
   const start = Date.now();
   try {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), 8000); // 8s per-provider budget
-    const r = await fetch(url, { method: "GET", headers, cache: "no-store", signal: ac.signal });
+    const r = await fetch(url, {
+      method: isA2e ? "POST" : "GET",
+      headers: isA2e ? { ...headers, "Content-Type": "application/json" } : headers,
+      body: isA2e ? "{}" : undefined,
+      cache: "no-store",
+      signal: ac.signal
+    });
     clearTimeout(t);
     const latency = Date.now() - start;
     return {

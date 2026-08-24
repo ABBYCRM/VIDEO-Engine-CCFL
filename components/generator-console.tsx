@@ -118,6 +118,10 @@ export function GeneratorConsole() {
   const [outputMode, setOutputMode] = useState<OutputMode>("video");
   const [autoNext, setAutoNext] = useState<"video" | "image">("video");
   const [contentFormat, setContentFormat] = useState("cinematic");
+  const [splitPercent, setSplitPercent] = useState(35);
+  const [splitRelationship, setSplitRelationship] = useState("anchor_field");
+  const [upperProvider, setUpperProvider] = useState<Exclude<ProviderId, "hedra">>("grok");
+  const [upperModel, setUpperModel] = useState(providerModels.grok[0].id);
   const [campaignName, setCampaignName] = useState("New campaign");
   const [website, setWebsite] = useState("");
   const [planningHorizonDays, setPlanningHorizonDays] = useState<3 | 7 | 14 | 30>(7);
@@ -336,6 +340,16 @@ export function GeneratorConsole() {
   function setFormat(next: string) {
     setContentFormat(next);
     if (next === "podcast" && outputMode === "image") setOutput("video");
+    if (next === "podcast") {
+      const nextUpper = provider === "hedra" ? "grok" : provider;
+      setUpperProvider(nextUpper);
+      setUpperModel(providerModels[nextUpper][0].id);
+    }
+  }
+
+  function changeUpperProvider(next: Exclude<ProviderId, "hedra">) {
+    setUpperProvider(next);
+    setUpperModel(providerModels[next][0].id);
   }
 
   async function generate() {
@@ -440,7 +454,11 @@ export function GeneratorConsole() {
           planningHorizonDays,
           autoPost,
           videoProvider: provider,
-          videoModel
+          videoModel,
+          upperProvider: contentFormat === "podcast" ? upperProvider : undefined,
+          upperModel: contentFormat === "podcast" ? upperModel : undefined,
+          splitPercent: contentFormat === "podcast" ? splitPercent : undefined,
+          splitRelationship: contentFormat === "podcast" ? splitRelationship : undefined
         })
       });
       const d = await r.json();
@@ -484,12 +502,15 @@ export function GeneratorConsole() {
     category,
     lowerProvider: provider,
     lowerModel: videoModel,
-    upperProvider: provider === "hedra" ? "veo" : provider,
+    upperProvider: contentFormat === "podcast" ? upperProvider : (provider === "hedra" ? "veo" : provider),
+    upperModel,
     avatar: selectedAvatar,
     campaignName,
     website,
     horizon: String(planningHorizonDays),
-    autoPost: autoPost ? "1" : "0"
+    autoPost: autoPost ? "1" : "0",
+    splitPercent: String(splitPercent),
+    relationship: splitRelationship
   });
   const splitHref = `/podcast-interview?${splitParams.toString()}`;
 
@@ -534,7 +555,21 @@ export function GeneratorConsole() {
       </div>
     </>}
 
-    {contentFormat === "podcast" && <section className="mt-6 rounded-2xl border-2 border-violet-300 bg-violet-50 p-5"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><div className="flex items-center gap-2 font-semibold text-violet-950"><Mic2 size={18} />Podcast / split-screen is selected</div><p className="mt-1 max-w-3xl text-sm text-violet-800">Your campaign subject, provider/model, canonical avatar, Calendar horizon and auto-post choice carry into the two-lane composer.</p></div><Link href={splitHref}><Button size="lg"><Mic2 size={16} className="mr-2" />Continue to two-lane production</Button></Link></div></section>}
+    {contentFormat === "podcast" && <section className="mt-6 rounded-2xl border-2 border-violet-300 bg-violet-50 p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 font-semibold text-violet-950"><Mic2 size={18} />Split-screen surface</div>
+          <p className="mt-1 max-w-3xl text-sm text-violet-800">Calendar autopilot generates two independent 8-second lanes, then composites them at this ratio. The Video engine above is the lower lane. Hedra/audio-driven lowers fall back to Grok when Calendar runs unattended.</p>
+        </div>
+        <Link href={splitHref}><Button size="lg"><Mic2 size={16} className="mr-2" />Continue to two-lane production</Button></Link>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <label className="grid gap-1 text-xs font-medium text-violet-900">Split relationship<select aria-label="Split relationship" value={splitRelationship} onChange={(e) => setSplitRelationship(e.target.value)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm"><option value="anchor_field">Studio anchor asks · field reporter answers</option><option value="question_answer">Upper asks · lower answers</option><option value="context_commentary">Upper context · lower explains</option><option value="reaction">Upper scenario · lower reacts</option><option value="parallel">Parallel complementary stories</option></select></label>
+        <label className="grid gap-1 text-xs font-medium text-violet-900">Upper engine<select aria-label="Upper AI engine" value={upperProvider} onChange={(e) => changeUpperProvider(e.target.value as Exclude<ProviderId, "hedra">)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm"><option value="grok">xAI Grok</option><option value="veo">Google Veo</option><option value="a2e">A2E multi-model</option></select></label>
+        <label className="grid gap-1 text-xs font-medium text-violet-900">Upper model<select aria-label="Upper video model" value={upperModel} onChange={(e) => setUpperModel(e.target.value)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm">{providerModels[upperProvider].map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+        <label className="grid gap-1 text-xs font-medium text-violet-900">Top lane height: {splitPercent}%<input aria-label="Top video height" type="range" min={25} max={45} value={splitPercent} onChange={(e) => setSplitPercent(Number(e.target.value))} className="mt-2 w-full"/></label>
+      </div>
+    </section>}
 
     <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
       <div className="soro-card p-5">

@@ -18,11 +18,11 @@ test("Create sends the exact selected provider for Veo, Grok and A2E and accepts
   await page.route("**/api/v1/video/queued-*", route => route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({id:route.request().url().split("/").pop(),status:"running"})}));
   await page.goto("/");
   const cases=[
-    {card:"Google Veo 3.1 8s cinematic",model:undefined,generate:"Generate 8s with Google Veo 3.1",provider:"veo"},
-    {card:"xAI Grok Imagine up to 15s",model:undefined,generate:"Generate 15s with xAI Grok Imagine",provider:"grok"},
-    {card:"A2E AI multi-model full hosted model catalog · up to 30s",model:"A2E · Seedance 2.5",generate:"Generate 30s with A2E AI multi-model",provider:"a2e"}
+    {card:/Google Veo 3\.1.*8s cinematic/,generate:"Generate 8s with Google Veo 3.1",provider:"veo"},
+    {card:/xAI Grok Imagine.*up to 15s/,generate:"Generate 15s with xAI Grok Imagine",provider:"grok"},
+    {card:/A2E AI multi-model.*full hosted model catalog/,generate:"Generate 8s with A2E AI multi-model",provider:"a2e",model:"veo3_fast"}
   ] as const;
-  for(const item of cases){await page.getByRole("button",{name:item.card,exact:true}).click();if(item.model)await page.getByLabel("Video model").selectOption({label:item.model});await page.getByRole("button",{name:item.generate,exact:true}).click();await expect.poll(()=>payloads.some(p=>p.provider===item.provider)).toBeTruthy()}
+  for(const item of cases){await page.getByRole("button",{name:item.card}).click();if("model" in item)await page.getByLabel("Video model").selectOption(item.model);await page.getByRole("button",{name:item.generate,exact:true}).click();await expect.poll(()=>payloads.some(p=>p.provider===item.provider)).toBeTruthy()}
   expect(payloads.map(p=>p.provider)).toEqual(["veo","grok","a2e"]);await expect(page.getByText("This operation was aborted")).toHaveCount(0);
 });
 

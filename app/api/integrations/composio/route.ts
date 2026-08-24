@@ -31,7 +31,8 @@ import {
   getToolkitMeta,
   isComposioConfigured,
   saveComposioApiKey,
-  setAuthConfigId
+  setAuthConfigId,
+  syncConnectedAccounts
 } from "@/lib/composio/client";
 
 const USER_ID = "admin"; // single-operator app; one user_id per workspace
@@ -68,6 +69,9 @@ function buildToolkitView() {
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (isComposioConfigured()) {
+    try { await syncConnectedAccounts(); } catch { /* keep the local snapshot if Composio is briefly unreachable */ }
+  }
   return NextResponse.json({
     configured: isComposioConfigured(),
     toolkits: buildToolkitView()

@@ -35,11 +35,12 @@ export async function uploadA2eBytes(bytes: Buffer, mime: string, prefix = "vide
   const presign = await fetch(`${A2E_BASE}/r2/upload-presigned-url`, {
     method: "POST",
     headers: a2eHeaders(),
-    body: JSON.stringify({ key, contentType: mime, contentLength: bytes.length, expiresIn: 900 }),
+    body: JSON.stringify({ key, contentType: mime, contentLength: bytes.length, expiresIn: 300 }),
     cache: "no-store"
   });
   if (!presign.ok) throw new Error(`A2E upload URL HTTP ${presign.status}: ${(await presign.text()).slice(0, 300)}`);
-  const payload = await presign.json() as { data?: { uploadUrl?: string; cdnUrl?: string } };
+  const payload = await presign.json() as { code?: number; msg?: string; err_message?: string; data?: { uploadUrl?: string; cdnUrl?: string } };
+  if (payload.code && payload.code !== 0) throw new Error(`A2E upload URL failed: ${payload.err_message || payload.msg || payload.code}`);
   const uploadUrl = payload.data?.uploadUrl;
   const cdnUrl = payload.data?.cdnUrl;
   if (!uploadUrl || !cdnUrl) throw new Error("A2E upload endpoint did not return uploadUrl and cdnUrl");
