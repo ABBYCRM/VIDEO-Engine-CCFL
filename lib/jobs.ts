@@ -148,8 +148,14 @@ export async function ensureJobOutputPath(id: string) {
   const outDir = path.resolve(process.env.VIDEO_OUTPUT_DIR || "./data/videos");
   const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
   const outputPath = path.join(outDir, `${safeId}.mp4`);
+  const temporaryPath = `${outputPath}.${crypto.randomUUID()}.tmp`;
   await fs.mkdir(outDir, { recursive: true });
-  await fs.writeFile(outputPath, persistent.bytes);
+  try {
+    await fs.writeFile(temporaryPath, persistent.bytes);
+    await fs.rename(temporaryPath, outputPath);
+  } finally {
+    await fs.unlink(temporaryPath).catch(() => {});
+  }
   db.prepare("UPDATE video_jobs SET output_path=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(outputPath, id);
   return outputPath;
 }
