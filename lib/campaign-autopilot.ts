@@ -7,7 +7,15 @@ import { getAvatar } from "@/lib/avatars";
 import type { CampaignCategory } from "@/lib/prompts";
 import type { ProviderId } from "@/lib/providers";
 import { planSplitScreen } from "@/lib/nvidia/split-screen-planner";
-import { composeSplitJobs } from "@/lib/split-compose";
+import { composeSplitSources } from "@/lib/split-compose";
+import { publicCaptionForSlot } from "@/lib/public-copy";
+import {
+  campaignUpperVideoIds,
+  ensureUpperVideoColumns,
+  materializeUpperVideo,
+  pickUpperVideoId,
+  resolveCampaignAvatarId
+} from "@/lib/upper-videos";
 import {
   clampSplitPercent,
   ensureSplitSurfaceColumns,
@@ -21,10 +29,15 @@ import {
 import "@/lib/calendar-assets";
 
 ensureSplitSurfaceColumns();
+ensureUpperVideoColumns();
 
 let started=false;
 let running=false;
 const queuedSlotIds=new Set<string>();
+
+const SLOT_SELECT=`sp.id,sp.title,sp.caption,sp.content_type,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.scheduled_at,
+           c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,
+           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.upper_video_ids`;
 
 export function normalizeCategory(value:string):CampaignCategory{
   if(value==="vehicle_accident")return "car_accident";
@@ -62,8 +75,9 @@ function sniffMime(bytes: Buffer, pathname: string): "image/png" | "image/jpeg" 
 }
 
 async function loadAvatarReference(avatarId: string | null | undefined) {
-  if (!avatarId) return null;
-  const avatar = getAvatar(avatarId);
+  const resolved = resolveCampaignAvatarId(avatarId);
+  if (!resolved) return null;
+  const avatar = getAvatar(resolved);
   if (!avatar) return null;
   const frontView = avatar.views?.front?.file;
   const sourcePath = frontView && avatar.views.front.status === "ready"
@@ -74,7 +88,7 @@ async function loadAvatarReference(avatarId: string | null | undefined) {
     const absolute = resolveReferencePath(sourcePath);
     const bytes = await fs.readFile(absolute);
     const mime = sniffMime(bytes, sourcePath);
-    return { imageBase64: bytes.toString("base64"), imageMimeType: mime, avatar };
+    return { imageBase64: bytes.toString("base64"), imageMimeType: mime, avatar, avatarId: resolved };
   } catch {
     return null;
   }
@@ -95,7 +109,21 @@ function campaignSurface(row:any){
   };
 }
 
-async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string}|null, extra?:{mission?:string;model?:string;script?:string;subject?:string}){
+function slotPublicCaption(row:any, plan?:{hook?:string;caption?:string}){
+  return publicCaptionForSlot({
+    category: normalizeCategory(String(row.category||"ugc")),
+    title: row.title,
+    hook: plan?.hook,
+    caption: plan?.caption || row.caption,
+    mission: row.mission
+  }).caption;
+}
+
+function stockUpperId(row:any){
+  return pickUpperVideoId(campaignUpperVideoIds(row), row.title);
+}
+
+async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string;avatarId?:string}|null, extra?:{mission?:string;model?:string;script?:string;subject?:string}){
   const variation=extra?.mission || `${row.mission}\nCalendar variation: ${row.title}. Produce a distinct execution for this scheduled post while preserving the campaign message.`;
   const job=await createJob({
     source:"admin",
@@ -108,28 +136,32 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
     resolution:"720p",
     durationSeconds:8,
     model: extra?.model || (chosen === "a2e" ? (avatarRef ? "a2e-v2-i2v" : "seedance2.5") : undefined),
-    avatarId: row.avatar_id || undefined,
+    avatarId: avatarRef?.avatarId || resolveCampaignAvatarId(row.avatar_id) || undefined,
     imageBase64: avatarRef?.imageBase64,
     imageMimeType: avatarRef?.imageMimeType
   });
   return job;
 }
 
-async function composeReadySplit(row:any, upper:any, lower:any){
-  if(!upper?.id || !lower?.id)throw new Error("Split-screen lanes finished without job IDs.");
-  const [upperPath,lowerPath]=await Promise.all([ensureJobOutputPath(upper.id),ensureJobOutputPath(lower.id)]);
-  if(!upperPath||!lowerPath)throw new Error("Split-screen lane files could not be restored from persistent storage.");
-  const composed=await composeSplitJobs({
+async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string}, lower:{id?:string;outputPath?:string}){
+  const stockId=stockUpperId(row);
+  const upperPath=stockId
+    ? await materializeUpperVideo(stockId)
+    : (upper.id ? await ensureJobOutputPath(upper.id) : upper.outputPath);
+  const lowerPath=lower.id ? await ensureJobOutputPath(lower.id) : lower.outputPath;
+  if(!upperPath || !lowerPath)throw new Error("Split-screen lane files could not be restored from persistent storage.");
+  const caption=slotPublicCaption(row);
+  const composed=await composeSplitSources({
     upperPath,
     lowerPath,
     splitPercent:clampSplitPercent(row.split_percent),
     title:row.title,
-    caption:String(row.caption||row.mission||"").slice(0,5000),
-    upperJobId:upper.id,
-    lowerJobId:lower.id
+    caption,
+    upperSource:stockId || upper.id,
+    lowerSource:lower.id
   });
-  db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,source_asset_key=?,generation_status='ready',error=NULL,video_job_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
-    composed.url, composed.mimeType, `composition:${composed.id}`, row.id
+  db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,source_asset_key=?,caption=?,generation_status='ready',error=NULL,video_job_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+    composed.url, composed.mimeType, `composition:${composed.id}`, caption, row.id
   );
 }
 
@@ -137,29 +169,39 @@ async function startSplitLanes(row:any, opts?:{upperProvider?:ProviderId;lowerPr
   const surface=campaignSurface(row);
   const upperProvider=opts?.upperProvider || surface.upper;
   const lowerProvider=opts?.lowerProvider || surface.lower;
+  const stockId=stockUpperId(row);
   const avatarRef=await loadAvatarReference(row.avatar_id);
   const avatarName=avatarRef?.avatar?.name||null;
   const plan=await planSplitScreen({
     category:normalizeCategory(String(row.category||"ugc")),
-    relationship:surface.relationship,
+    relationship:stockId?"context_commentary":surface.relationship,
     upperProvider,
     lowerProvider,
     upperSeconds:8,
     lowerSeconds:8,
     lowerAvatarName:avatarName,
     mission:String(row.mission||""),
-    title:String(row.title||"")
+    title:String(row.title||""),
+    upperIsStock:Boolean(stockId)
   });
-  const upperMission=`${plan.upper.mission}\nVisual direction: ${plan.upper.visualDirection}\nONE CONTINUOUS SHOT ONLY`;
+  const caption=slotPublicCaption(row, plan);
   const lowerMission=`${plan.lower.mission}\nVisual direction: ${plan.lower.visualDirection}\nONE CONTINUOUS SHOT ONLY`;
-  const upper=await startSlotJob(row, upperProvider, null, {mission:upperMission, model:laneModel(upperProvider, row.upper_model), script:plan.upper.script, subject:plan.upper.subject});
   const lower=await startSlotJob(row, lowerProvider, avatarRef, {mission:lowerMission, model:laneModel(lowerProvider, row.video_model), script:plan.lower.script, subject:plan.lower.subject});
-  db.prepare(`UPDATE scheduled_posts SET upper_job_id=?,lower_job_id=?,video_job_id=NULL,generation_status='generating',error=NULL,caption=COALESCE(NULLIF(caption,''),?),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
-    upper.id, lower.id, String(plan.caption||row.mission||"").slice(0,5000), row.id
+  if(stockId){
+    db.prepare(`UPDATE scheduled_posts SET upper_job_id=NULL,lower_job_id=?,video_job_id=NULL,generation_status='generating',error=NULL,caption=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+      lower.id, caption, row.id
+    );
+    return;
+  }
+  const upperMission=`${plan.upper.mission}\nVisual direction: ${plan.upper.visualDirection}\nONE CONTINUOUS SHOT ONLY`;
+  const upper=await startSlotJob(row, upperProvider, null, {mission:upperMission, model:laneModel(upperProvider, row.upper_model), script:plan.upper.script, subject:plan.upper.subject});
+  db.prepare(`UPDATE scheduled_posts SET upper_job_id=?,lower_job_id=?,video_job_id=NULL,generation_status='generating',error=NULL,caption=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+    upper.id, lower.id, caption, row.id
   );
 }
 
 async function recoverLane(row:any, lane:"upper"|"lower", failedProvider:ProviderId, error:string){
+  if(lane==="upper" && stockUpperId(row)) return false;
   const next=isRecoverableProviderFailure(error)?fallbackProvider(failedProvider):null;
   if(!next)return false;
   const avatarRef=lane==="lower"?await loadAvatarReference(row.avatar_id):null;
@@ -173,10 +215,11 @@ async function recoverLane(row:any, lane:"upper"|"lower", failedProvider:Provide
 }
 
 async function finishSplit(row:any){
+  const stockId=stockUpperId(row);
   const upper=row.upper_job_id?await refreshJob(row.upper_job_id,{ensureCalendar:false}):null;
   const lower=row.lower_job_id?await refreshJob(row.lower_job_id,{ensureCalendar:false}):null;
-  if((upper && !["succeeded","failed"].includes(upper.status)) || (lower && !["succeeded","failed"].includes(lower.status)))return true;
-  if(upper?.status==="failed"){
+  if((!stockId && upper && !["succeeded","failed"].includes(upper.status)) || (lower && !["succeeded","failed"].includes(lower.status)))return true;
+  if(!stockId && upper?.status==="failed"){
     try{ if(await recoverLane(row,"upper", provider(String(upper.provider||"")), String(upper.error||""))) return true; }
     catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id); return true; }
     db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(upper.error||"Upper split-screen lane failed").slice(0,2000),row.id);
@@ -188,9 +231,9 @@ async function finishSplit(row:any){
     db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(lower.error||"Lower split-screen lane failed").slice(0,2000),row.id);
     return true;
   }
-  if(upper?.status==="succeeded" && lower?.status==="succeeded"){
+  if(lower?.status==="succeeded" && (stockId || upper?.status==="succeeded")){
     try{
-      await composeReadySplit(row, upper, lower);
+      await composeReadySplit(row, stockId ? {id: stockId} : upper, lower);
     }catch(e){
       db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id);
     }
@@ -199,7 +242,7 @@ async function finishSplit(row:any){
   return true;
 }
 
-async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string}|null){
+async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string;avatarId?:string}|null){
   const job=await startSlotJob(row, chosen, avatarRef);
   db.prepare("UPDATE scheduled_posts SET video_job_id=?,generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(job.id,row.id);
   return job;
@@ -207,9 +250,7 @@ async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase6
 
 async function finishGenerating(slotId?:string){
   const statement=db.prepare(`
-    SELECT sp.id,sp.title,sp.caption,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.content_type,
-           c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,
-           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship
+    SELECT ${SLOT_SELECT}
     FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
     WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='generating'
       ${slotId?"AND sp.id=?":""}
@@ -225,7 +266,8 @@ async function finishGenerating(slotId?:string){
   const job=await refreshJob(row.video_job_id,{ensureCalendar:false});
   if(!job)return true;
   if(job.status==="succeeded"){
-    db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type='video/mp4',generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(`/api/v1/video/${row.video_job_id}/file`,row.id);
+    const caption=slotPublicCaption(row);
+    db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type='video/mp4',caption=?,generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(`/api/v1/video/${row.video_job_id}/file`,caption,row.id);
     return true;
   }
   if(job.status!=="failed")return true;
@@ -244,10 +286,11 @@ async function finishGenerating(slotId?:string){
 }
 
 async function generateSplitSlot(row:any){
+  const stockId=stockUpperId(row);
   const upper=row.upper_job_id?getJob(row.upper_job_id):null;
   const lower=row.lower_job_id?getJob(row.lower_job_id):null;
-  if(upper?.status==="succeeded" && lower?.status==="succeeded"){
-    try{ await composeReadySplit({...row, split_percent:row.split_percent}, upper, lower); }
+  if(lower?.status==="succeeded" && (stockId || upper?.status==="succeeded")){
+    try{ await composeReadySplit(row, stockId ? {id: stockId} : upper, lower); }
     catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id); }
     return;
   }
@@ -274,14 +317,13 @@ async function generateSplitSlot(row:any){
 
 async function generateNext(slotId?:string){
   const statement=db.prepare(`
-    SELECT sp.id,sp.title,sp.content_type,sp.caption,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,
-           c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,c.upper_provider,c.upper_model,c.split_percent,c.split_relationship
+    SELECT ${SLOT_SELECT}
     FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
     WHERE sp.campaign_id IS NOT NULL
       AND sp.media_url IS NULL
       AND sp.status!='published'
       AND (
-        (sp.generation_status='pending' AND sp.video_job_id IS NULL AND sp.upper_job_id IS NULL)
+        (sp.generation_status='pending' AND sp.video_job_id IS NULL AND sp.upper_job_id IS NULL AND sp.lower_job_id IS NULL)
         OR (sp.generation_status='failed' AND (
           (sp.content_type='podcast' AND (sp.upper_job_id IS NULL OR sp.error LIKE 'Split-screen compose%'))
           OR (sp.content_type!='podcast' AND sp.error LIKE 'A2E%')
@@ -297,8 +339,8 @@ async function generateNext(slotId?:string){
     try{
       db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
       const prompt=`Campaign: ${row.campaign_name}. ${row.mission}\nCalendar variation: ${row.title}. Create a distinct visual variation for this scheduled post, suitable for Instagram and consistent with the campaign.`;
-      const image=await generateCampaignStill({prompt,avatarId:row.avatar_id||null,createCalendarPost:false});
-      db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,caption=?,generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(image.assetUrl,image.mimeType,String(row.caption||row.mission||"").slice(0,5000),row.id);
+      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false});
+      db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,caption=?,generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(image.assetUrl,image.mimeType,slotPublicCaption(row),row.id);
     }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
     return true;
   }
@@ -309,7 +351,7 @@ async function generateNext(slotId?:string){
   }
   const retryingA2e = row.generation_status === "failed";
   const chosenRequested=provider(String(row.video_provider||"veo"));
-  const avatarRef = !retryingA2e && chosenRequested === "hedra" ? await loadAvatarReference(row.avatar_id) : null;
+  const avatarRef = !retryingA2e ? await loadAvatarReference(row.avatar_id) : null;
   const chosen: ProviderId = retryingA2e
     ? "grok"
     : (chosenRequested === "hedra" && !avatarRef ? "a2e" : (chosenRequested === "hedra" ? "a2e" : chosenRequested));
@@ -323,12 +365,27 @@ async function generateNext(slotId?:string){
   }catch(e){
     const next = fallbackProvider(chosen);
     if(next){
-      try{ await startSingleSlot(row, next, null); return true; }
+      try{ await startSingleSlot(row, next, avatarRef); return true; }
       catch(inner){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((inner instanceof Error?inner.message:String(inner)).slice(0,2000),row.id); return true; }
     }
     db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);
   }
   return true;
+}
+
+export function rewriteUnpublishedCaptions(campaignId?:string){
+  const rows = campaignId
+    ? db.prepare(`SELECT sp.id,sp.title,sp.caption,c.category,c.mission FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.campaign_id=? AND sp.status!='published'`).all(campaignId)
+    : db.prepare(`SELECT sp.id,sp.title,sp.caption,c.category,c.mission FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.status!='published'`).all();
+  let changed=0;
+  for(const row of rows as any[]){
+    const next=slotPublicCaption(row);
+    if(next && next !== String(row.caption||"")){
+      db.prepare("UPDATE scheduled_posts SET caption=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(next, row.id);
+      changed++;
+    }
+  }
+  return changed;
 }
 
 export async function runCampaignAutopilotOnce(options:{slotId?:string}={}){

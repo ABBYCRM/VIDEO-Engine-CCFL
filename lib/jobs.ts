@@ -120,7 +120,14 @@ export async function createJob(input: CreateJobInput) {
   const defaults = getEngineSettings();
   const provider: ProviderId = input.provider || defaults.defaultProvider || getDefaultProvider();
   const id = crypto.randomUUID();
-  const prompt = compileVeoPrompt(input);
+  const prompt = compileVeoPrompt({
+    category: input.category,
+    mission: input.mission,
+    subject: input.subject,
+    script: input.script,
+    identityLock: Boolean(input.imageBase64),
+    avatarName: input.avatarId ? getAvatar(input.avatarId)?.name : undefined
+  });
   const model = modelForProvider(provider, input.model);
   const aspectRatio = input.aspectRatio || defaults.aspectRatio;
   const resolution = input.resolution || defaults.resolution;

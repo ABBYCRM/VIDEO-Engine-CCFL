@@ -54,13 +54,23 @@ export async function composeSplitScreenFile(input: {
   const duration = 8;
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
   const filter = [
-    `[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1[u]`,
-    `[1:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1[l]`,
-    `[u]crop=720:${top}:0:${Math.max(0, Math.floor((1280 - top) / 2 / 2) * 2)}[ut]`,
-    `[l]crop=720:${bottom}:0:${Math.max(0, Math.floor((1280 - bottom) / 2 / 2) * 2)}[lb]`,
+    `[0:v]scale=720:${top}:force_original_aspect_ratio=increase,crop=720:${top},fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[ut]`,
+    `[1:v]scale=720:${bottom}:force_original_aspect_ratio=increase,crop=720:${bottom},fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[lb]`,
     `[ut][lb]vstack=inputs=2[v]`
   ].join(";");
-  const base = ["-y", "-i", input.upperPath, "-i", input.lowerPath, "-filter_complex", filter, "-map", "[v]", "-t", String(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart"];
+  const base = [
+    "-y",
+    "-stream_loop", "-1", "-t", String(duration), "-i", input.upperPath,
+    "-stream_loop", "-1", "-t", String(duration), "-i", input.lowerPath,
+    "-filter_complex", filter,
+    "-map", "[v]",
+    "-t", String(duration),
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-preset", "veryfast",
+    "-crf", "23",
+    "-movflags", "+faststart"
+  ];
   try {
     await run(ffmpeg, [...base, "-map", "1:a?", "-c:a", "aac", "-b:a", "128k", input.outputPath]);
   } catch {
@@ -104,14 +114,14 @@ export async function persistComposition(input: {
   return { id, url, mimeType: mime, title, splitPercent: split };
 }
 
-export async function composeSplitJobs(input: {
+export async function composeSplitSources(input: {
   upperPath: string;
   lowerPath: string;
   splitPercent: number;
   title: string;
   caption?: string;
-  upperJobId: string;
-  lowerJobId: string;
+  upperSource?: string;
+  lowerSource?: string;
 }) {
   const tmpPath = path.resolve(process.env.VIDEO_OUTPUT_DIR || "./data/videos", `split-${crypto.randomUUID()}.mp4`);
   await composeSplitScreenFile({
@@ -126,10 +136,31 @@ export async function composeSplitJobs(input: {
     bytes,
     title: input.title,
     caption: input.caption,
-    upperSource: input.upperJobId,
-    lowerSource: input.lowerJobId,
+    upperSource: input.upperSource,
+    lowerSource: input.lowerSource,
     splitPercent: input.splitPercent,
     mimeType: "video/mp4",
     model: "ffmpeg split-screen"
   });
 }
+
+export async function composeSplitJobs(input: {
+  upperPath: string;
+  lowerPath: string;
+  splitPercent: number;
+  title: string;
+  caption?: string;
+  upperJobId: string;
+  lowerJobId: string;
+}) {
+  return composeSplitSources({
+    upperPath: input.upperPath,
+    lowerPath: input.lowerPath,
+    splitPercent: input.splitPercent,
+    title: input.title,
+    caption: input.caption,
+    upperSource: input.upperJobId,
+    lowerSource: input.lowerJobId
+  });
+}
+
