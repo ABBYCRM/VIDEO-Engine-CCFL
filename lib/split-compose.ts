@@ -16,16 +16,29 @@ function evenHeight(splitPercent: number) {
   return { top, bottom: 1280 - top };
 }
 
-function run(cmd: string, args: string[]) {
+function run(cmd: string, args: string[], timeoutMs = 120_000) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
     let err = "";
-    child.stderr.on("data", (chunk) => { err += String(chunk); });
-    child.on("error", (error) => reject(new Error(`${cmd} is not available: ${error.message}`)));
+    let done = false;
+    let timer: NodeJS.Timeout | undefined;
+    const finish = (error?: Error) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      if (error) reject(error); else resolve();
+    };
+    child.stderr.on("data", (chunk) => { err = `${err}${String(chunk)}`.slice(-12_000); });
+    child.on("error", (error) => finish(new Error(`${cmd} is not available: ${error.message}`)));
     child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error((err || `${cmd} exited ${code}`).slice(-1800)));
+      if (code === 0) finish();
+      else finish(new Error((err || `${cmd} exited ${code}`).slice(-1800)));
     });
+    timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(new Error(`${cmd} timed out after ${Math.round(timeoutMs / 1000)} seconds`));
+    }, timeoutMs);
+    timer.unref?.();
   });
 }
 
@@ -38,7 +51,7 @@ export async function composeSplitScreenFile(input: {
 }) {
   const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
   const { top, bottom } = evenHeight(input.splitPercent);
-  const duration = Math.max(8, Math.min(8, Number(input.durationSeconds || 8)));
+  const duration = 8;
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
   const filter = [
     `[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=30,setsar=1[u]`,
@@ -49,7 +62,7 @@ export async function composeSplitScreenFile(input: {
   ].join(";");
   const base = ["-y", "-i", input.upperPath, "-i", input.lowerPath, "-filter_complex", filter, "-map", "[v]", "-t", String(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart"];
   try {
-    await run(ffmpeg, [...base, "-map", "1:a?", "-c:a", "aac", "-b:a", "128k", "-shortest", input.outputPath]);
+    await run(ffmpeg, [...base, "-map", "1:a?", "-c:a", "aac", "-b:a", "128k", input.outputPath]);
   } catch {
     await run(ffmpeg, [...base, "-an", input.outputPath]);
   }

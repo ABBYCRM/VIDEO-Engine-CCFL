@@ -34,6 +34,8 @@ type Post = {
   caption: string;
   contentType: Format;
   videoJobId?: string | null;
+  upperJobId?: string | null;
+  lowerJobId?: string | null;
   mediaUrl?: string | null;
   mediaType?: string | null;
   planningHorizonDays?: number | null;
@@ -46,6 +48,7 @@ type Post = {
   focusKeyword?: string | null;
   generationStatus?: string | null;
   siteId?: string | null;
+  campaignId?: string | null;
 };
 
 function startOfWeek(input: Date) {
@@ -67,7 +70,10 @@ function localInputValue(iso?: string) {
 }
 
 function canPublish(post: Post) {
-  if (post.network === "instagram") return Boolean(post.mediaUrl || post.videoJobId);
+  if (post.network === "instagram") return Boolean(
+    (!post.generationStatus || post.generationStatus === "ready") &&
+    (post.mediaUrl || post.videoJobId)
+  );
   if (post.network === "website") {
     return Boolean(
       post.siteId &&
@@ -162,6 +168,21 @@ export default function CalendarPage() {
     }
   }
 
+  async function retryGeneration(post: Post) {
+    setBusy(`${post.id}:retry`);
+    setError(null);
+    try {
+      const r = await fetch(`/api/calendar/${post.id}/retry-generation`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <AuthGuard>
       <AppShell>
@@ -184,7 +205,7 @@ export default function CalendarPage() {
             <Stat label="Needs approval" value={posts.filter(p => p.status === "pending").length}/>
             <Stat label="Approved" value={posts.filter(p => p.status === "approved").length}/>
             <Stat label="Auto-post enabled" value={posts.filter(p => p.autoPost).length}/>
-            <Stat label="Generated assets" value={posts.filter(p => p.mediaUrl || p.videoJobId || p.contentBody).length}/>
+            <Stat label="Generated assets" value={posts.filter(p => p.mediaUrl || p.videoJobId || p.upperJobId || p.lowerJobId || p.contentBody).length}/>
           </div>
 
           <div className="mb-4 flex items-center justify-between rounded-2xl border bg-white p-3">
@@ -220,6 +241,7 @@ export default function CalendarPage() {
                 const publishable = canPublish(post);
                 const autoCapable = post.network === "instagram" || post.network === "website";
                 const generating = post.generationStatus === "pending" || post.generationStatus === "generating";
+                const retryable = Boolean(post.campaignId) && (post.generationStatus === "failed" || post.generationStatus === "pending_manual");
                 return (
                   <article key={post.id} className="rounded-xl border p-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -234,13 +256,14 @@ export default function CalendarPage() {
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-700">{post.status}</span>
                       <div className="flex flex-wrap gap-2">
                         {post.status === "pending" && <Button size="sm" onClick={() => patch(post, { status: "approved" })} disabled={busy === post.id || generating}><Check size={13} className="mr-1"/>Approve</Button>}
+                        {retryable && <Button size="sm" variant="secondary" onClick={() => retryGeneration(post)} disabled={busy === `${post.id}:retry`}><RefreshCcw size={13} className={`mr-1 ${busy === `${post.id}:retry` ? "animate-spin" : ""}`}/>{busy === `${post.id}:retry` ? "Retrying…" : "Retry generation"}</Button>}
                         <Button size="sm" variant="secondary" onClick={() => patch(post, { autoPost: !post.autoPost, status: post.status === "pending" ? "approved" : post.status })} disabled={!autoCapable || busy === post.id || generating || (post.network === "website" && !post.contentBody?.trim())}>{post.autoPost ? "Disable auto" : "Enable auto"}</Button>
                         {publishable && <Button size="sm" variant="secondary" onClick={() => publish(post)} disabled={busy === `${post.id}:publish`}><Send size={13} className="mr-1"/>{busy === `${post.id}:publish` ? "Posting…" : "Post now"}</Button>}
                         <button onClick={() => remove(post)} aria-label={`Delete ${post.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"><Trash2 size={14}/></button>
                       </div>
                     </div>
                     {post.mediaUrl && <div className="mt-3">{String(post.mediaType || "").startsWith("video/") ? <video src={post.mediaUrl} controls className="max-h-52 rounded-lg bg-black"/> : <img src={post.mediaUrl} alt={`${post.title} attachment`} className="max-h-52 rounded-lg object-contain"/>}</div>}
-                    {post.videoJobId && !post.mediaUrl && <div className="mt-2 text-xs text-slate-500"><Play size={11} className="inline"/> Generated video attached</div>}
+                    {(post.videoJobId || post.upperJobId || post.lowerJobId) && !post.mediaUrl && generating && <div className="mt-2 text-xs text-slate-500"><Play size={11} className="inline"/> {post.contentType==="podcast"?"Two-lane generation in progress":"Video generation in progress"}</div>}
                     {post.contentBody && <div className="mt-3 max-h-32 overflow-hidden whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{post.contentBody.slice(0, 700)}{post.contentBody.length > 700 ? "…" : ""}</div>}
                   </article>
                 );
