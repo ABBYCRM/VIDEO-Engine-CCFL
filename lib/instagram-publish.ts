@@ -83,6 +83,7 @@ export async function publishInstagram(input: {
   mediaUrl?: string | null;
   mediaType?: string | null;
   caption?: string;
+  postType?: "feed" | "story";
 }) {
   const caption = String(input.caption || "").trim().slice(0, 2200);
   let mediaUrl = input.mediaUrl ? publishingUrl(input.mediaUrl) : null;
@@ -100,16 +101,18 @@ export async function publishInstagram(input: {
   if (!igUserId) throw new Error("Could not resolve the connected Instagram Business/Creator account id. Reconnect Instagram in Integrations.");
 
   const isVideo = String(mediaType || "").startsWith("video/");
+  const isStory = input.postType === "story";
   const containerArgs: Record<string, unknown> = {
     ig_user_id: igUserId,
     caption,
-    content_type: isVideo ? "reel" : "photo"
+    content_type: isStory ? "story" : isVideo ? "reel" : "photo"
   };
   if (isVideo) {
     containerArgs.video_url = mediaUrl;
-    containerArgs.media_type = "REELS";
+    containerArgs.media_type = isStory ? "STORIES" : "REELS";
   } else {
     containerArgs.image_url = mediaUrl;
+    if (isStory) containerArgs.media_type = "STORIES";
   }
 
   const created = await executeTool("INSTAGRAM_CREATE_MEDIA_CONTAINER", containerArgs);
