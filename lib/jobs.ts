@@ -27,6 +27,8 @@ export type CreateJobInput = {
   model?: string;
   durationSeconds?: number;
   avatarId?: string;
+  visualTemplate?: string;
+  language?: "english" | "spanish" | "mixed";
   imageBase64?: string;
   imageMimeType?: string;
   audioBase64?: string;
@@ -67,7 +69,16 @@ async function startProviderOperation(args: {
     if (provider === "veo") {
       operation = await veo.startOneShot({ prompt, model, aspectRatio, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else if (provider === "grok") {
-      operation = await grok.startOneShot({ prompt, model, aspectRatio, resolution, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
+      let imageUrl: string | undefined;
+      if (input.visualTemplate && input.visualTemplate !== "auto") {
+        const { visualTemplates } = await import("@/lib/visual-templates");
+        const tmpl = visualTemplates.find(t => t.id === input.visualTemplate);
+        if (tmpl?.image) {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://video-engine-ccfl-jpd37.ondigitalocean.app";
+          imageUrl = `${baseUrl}${tmpl.image}`;
+        }
+      }
+      operation = await grok.startOneShot({ prompt, model, aspectRatio, resolution, imageUrl, imageBase64: input.imageBase64, imageMimeType: input.imageMimeType });
     } else if (provider === "hedra") {
       operation = await hedra.startOneShot({
         prompt,
