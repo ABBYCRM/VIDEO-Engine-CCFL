@@ -1,5 +1,6 @@
 import { campaignTemplates, type CampaignCategory } from "@/lib/prompts";
 import { visualTemplates } from "@/lib/visual-templates";
+import { mandatoryPhoneVideoScript, mandatoryVideoContactDirective } from "@/lib/brand-contact";
 
 const MAX_CHARS = 3400;
 
@@ -47,7 +48,7 @@ export function compileVeoPrompt(input: {
   language?: LanguageMode;
 }) {
   const template = campaignTemplates[input.category];
-  const calibrated = calibrateScript(input.script);
+  const calibrated = calibrateScript(mandatoryPhoneVideoScript());
   const dialogue = calibrated.script
     ? `Dialogue, spoken exactly and naturally in 8 seconds: ${JSON.stringify(calibrated.script)}.`
     : "If speech is useful, keep it brief (15-20 words max), conversational, legally cautious, and non-promissory.";
@@ -63,6 +64,7 @@ export function compileVeoPrompt(input: {
     "ONE CONTINUOUS SHOT ONLY. No cuts, no montage, no scene changes, no time jump. Duration is exactly 8 seconds.",
     "Vertical social-ad realism unless request settings specify landscape. Photorealistic real-world smartphone footage, not CGI and not glossy TV-commercial imagery.",
     "CRITICAL: Any spoken dialogue MUST be 15-20 words maximum for natural 8-second delivery at normal speaking pace (130-150 WPM). Do not rush speech.",
+    mandatoryVideoContactDirective(),
     language,
     template.instruction,
     visualStyle,
