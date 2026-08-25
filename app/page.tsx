@@ -1,7 +1,5 @@
-import { AppShell } from "@/components/app-shell";
-import { AuthGuard } from "@/components/auth-guard";
-import { StudioTabs } from "@/components/studio-tabs";
+import { UnifiedCreateConsole } from "@/components/unified-create-console";
 
-export default function Home(){
-  return <AuthGuard><AppShell><StudioTabs/></AppShell></AuthGuard>;
+export default function Home() {
+  return <UnifiedCreateConsole />;
 }
