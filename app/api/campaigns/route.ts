@@ -18,7 +18,7 @@ ensureUpperVideoColumns();
 
 const CONTENT_TYPES=new Set(["podcast","ugc","newsroom","direct","cinematic"]);
 const OUTPUT_MODES=new Set(["video","image","auto_mix"]);
-const CAMPAIGN_SELECT=`id,name,category,website,mission,tone,platform,target_audience as targetAudience,avatar_id as avatarId,background_id as backgroundId,planning_horizon_days as planningHorizonDays,content_type as contentType,output_mode as outputMode,video_provider as videoProvider,video_model as videoModel,upper_provider as upperProvider,upper_model as upperModel,split_percent as splitPercent,split_relationship as splitRelationship,upper_video_ids as upperVideoIds,status,created_at as createdAt,updated_at as updatedAt`;
+const CAMPAIGN_SELECT=`id,name,category,website,mission,tone,platform,target_audience as targetAudience,avatar_id as avatarId,background_id as backgroundId,planning_horizon_days as planningHorizonDays,content_type as contentType,output_mode as outputMode,video_provider as videoProvider,video_model as videoModel,upper_provider as upperProvider,upper_model as upperModel,split_percent as splitPercent,split_relationship as splitRelationship,split_template as splitTemplate,upper_video_ids as upperVideoIds,status,created_at as createdAt,updated_at as updatedAt`;
 
 export async function GET(){
   if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -34,8 +34,8 @@ export async function POST(req:Request){
   const upperVideoIds=parseUpperVideoIds(body.upperVideoIds);
   if(!name||!category||!mission)return NextResponse.json({error:"Campaign name, category, and AI plan are required"},{status:400});if(![3,7,14,30].includes(horizon))return NextResponse.json({error:"Planning horizon must be 3, 7, 14, or 30 days"},{status:400});
   const id=crypto.randomUUID();
-  db.prepare(`INSERT INTO campaigns(id,name,category,website,mission,tone,platform,avatar_id,background_id,planning_horizon_days,content_type,output_mode,video_provider,video_model,upper_provider,upper_model,split_percent,split_relationship,upper_video_ids,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft')`).run(
-    id,name,category,website||null,mission,tone||null,platform||null,avatarId||null,backgroundId||null,horizon,contentType,outputMode,surface.videoProvider,surface.videoModel,surface.upperProvider,surface.upperModel,surface.splitPercent,surface.splitRelationship,upperVideoIds.length?JSON.stringify(upperVideoIds):null
+  db.prepare(`INSERT INTO campaigns(id,name,category,website,mission,tone,platform,avatar_id,background_id,planning_horizon_days,content_type,output_mode,video_provider,video_model,upper_provider,upper_model,split_percent,split_relationship,split_template,upper_video_ids,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft')`).run(
+    id,name,category,website||null,mission,tone||null,platform||null,avatarId||null,backgroundId||null,horizon,contentType,outputMode,surface.videoProvider,surface.videoModel,surface.upperProvider,surface.upperModel,surface.splitPercent,surface.splitRelationship,surface.splitTemplate,upperVideoIds.length?JSON.stringify(upperVideoIds):null
   );
   const calendarIds=createPlanningSlots({horizonDays:horizon,titlePrefix:name,contentType,outputMode:outputMode as "video"|"image"|"auto_mix",network:platform||"instagram",caption:"",campaignId:id,approvalMode:body.autoPost?"auto":"manual",cadence:"daily"});
   startCampaignAutopilotLoop();
