@@ -168,6 +168,17 @@ export default function CalendarPage() {
     }
   }
 
+  async function autoApproveAll() {
+    setBusy("auto-approve");
+    try {
+      const r = await fetch("/api/calendar/auto-approve", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setError(null);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
   async function retryGeneration(post: Post) {
     setBusy(`${post.id}:retry`);
     setError(null);
@@ -194,6 +205,7 @@ export default function CalendarPage() {
               <p className="mt-1 max-w-3xl text-sm text-slate-600">Generated blog articles, images and videos land here automatically. Review and edit them, approve them, publish immediately, or enable auto-post for connected Instagram and Website publishers. Planning supports 3, 7, 14 or 30 days.</p>
             </div>
             <div className="flex gap-2">
+              <Button variant="secondary" onClick={autoApproveAll} disabled={busy === "auto-approve"}>{busy === "auto-approve" ? "Approving…" : <><Check size={14} className="mr-2"/>Auto-approve & auto-post all</>}</Button>
               <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
               <Button onClick={() => setEditing("new")}><Plus size={14} className="mr-2"/>Add post</Button>
             </div>
