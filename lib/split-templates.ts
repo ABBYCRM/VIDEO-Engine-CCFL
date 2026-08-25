@@ -18,7 +18,7 @@ export type SplitTemplateId = "office-modern" | "office-warm" | "digital-grid";
 export type SplitBox = { x: number; y: number; w: number; h: number };
 
 export type AvatarBoxTemplateDef = {
-  id: SplitTemplateId;
+  id: string;
   layout: "avatar-box";
   label: string;
   assetPath: string;
@@ -28,7 +28,7 @@ export type AvatarBoxTemplateDef = {
 };
 
 export type DualBoxTemplateDef = {
-  id: SplitTemplateId;
+  id: string;
   layout: "dual-box";
   label: string;
   assetPath: string;
