@@ -2,103 +2,92 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Clapperboard, Globe, Megaphone, Plug, Settings as SettingsIcon } from "lucide-react";
+import { CalendarDays, Clapperboard, Image as ImageIcon, Settings as SettingsIcon } from "lucide-react";
 import { GeneratorConsole } from "@/components/generator-console";
-import { CampaignsConsole } from "@/components/campaigns-console";
-import { SitesConsole } from "@/components/sites-console";
-import { IntegrationsConsole } from "@/components/integrations-console";
-import { SettingsConsole } from "@/components/settings-console";
+import { CalendarPage } from "@/app/calendar/page";
+import { LibraryPage } from "@/app/library/page";
 
 const TABS = [
-  { id: "create", label: "Create", icon: Clapperboard },
-  { id: "campaigns", label: "Campaigns", icon: Megaphone },
-  { id: "sites", label: "Sites", icon: Globe },
-  { id: "connections", label: "Connections", icon: Plug },
+  { id: "create", label: "Studio", icon: Clapperboard },
+  { id: "gallery", label: "Gallery", icon: ImageIcon },
+  { id: "calendar", label: "Schedule", icon: CalendarDays },
   { id: "settings", label: "Settings", icon: SettingsIcon }
 ] as const;
 type TabId = typeof TABS[number]["id"];
-function isTabId(value: string | null): value is TabId {
-  return Boolean(value) && TABS.some((t) => t.id === value);
-}
-
-const CURL = `curl -X POST https://YOUR-DOMAIN/api/v1/video \\
-  -H "Authorization: Bearer ve_live_..." \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "category":"car_accident",
-    "mission":"Create a realistic PI awareness shot after a rear-end collision",
-    "aspectRatio":"9:16",
-    "resolution":"1080p"
-  }'`;
-
-function ApiDocs() {
-  return (
-    <div className="mt-8 border-t pt-6">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700"><BookOpen size={16} />API access</div>
-      <div className="space-y-4">
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-5">
-          <h3 className="font-medium">1. Create a token</h3>
-          <p className="mt-1 text-sm text-slate-600">Use the "VIDEO-Engine API tokens" card above. The raw token is shown once; only its SHA-256 hash is stored.</p>
-        </section>
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-5">
-          <h3 className="font-medium">2. Start a one-shot generation</h3>
-          <pre className="mt-3 overflow-x-auto rounded-xl bg-black/40 p-4 text-xs text-cyan-700">{CURL}</pre>
-          <p className="mt-3 text-sm text-slate-600">Categories: car_accident, rideshare, trucking, slip_fall, ugc. Optional fields: subject, script, imageBase64, imageMimeType, model, aspectRatio, resolution.</p>
-        </section>
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-5">
-          <h3 className="font-medium">3. Poll status</h3>
-          <pre className="mt-3 overflow-x-auto rounded-xl bg-black/40 p-4 text-xs">GET /api/v1/video/&lt;job-id&gt;{"\n"}Authorization: Bearer ve_live_...</pre>
-          <p className="mt-3 text-sm text-slate-600">The response contains status = running | succeeded | failed. On success, fileUrl points to the protected MP4 endpoint.</p>
-        </section>
-      </div>
-    </div>
-  );
-}
 
 function StudioTabsInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const fromUrl = sp.get("tab");
-  const [tab, setTab] = useState<TabId>(isTabId(fromUrl) ? fromUrl : "create");
-  useEffect(() => { if (isTabId(fromUrl) && fromUrl !== tab) setTab(fromUrl); }, [fromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [tab, setTab] = useState<TabId>(
+    fromUrl && TABS.some(t => t.id === fromUrl) ? (fromUrl as TabId) : "create"
+  );
+
+  useEffect(() => {
+    if (fromUrl && TABS.some(t => t.id === fromUrl) && fromUrl !== tab) {
+      setTab(fromUrl as TabId);
+    }
+  }, [fromUrl]);
 
   function go(next: TabId) {
     setTab(next);
-    const url = next === "create" ? "/" : `/?tab=${next}`;
-    router.replace(url, { scroll: false });
+    router.replace(next === "create" ? "/" : `/?tab=${next}`, { scroll: false });
   }
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => go(t.id)}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${active ? "bg-violet-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-100"}`}
-              aria-current={active ? "page" : undefined}
-            >
-              <Icon size={15} />{t.label}
-            </button>
-          );
-        })}
+    <div className="min-h-screen bg-black text-white">
+      <div className="border-b border-amber-900/30 bg-black/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
+              <Clapperboard size={16} className="text-black" />
+            </div>
+            <h1 className="text-lg font-bold tracking-wider bg-gradient-to-r from-amber-200 via-amber-400 to-amber-200 bg-clip-text text-transparent">
+              VIDEO ENGINE
+            </h1>
+          </div>
+          <div className="flex gap-1">
+            {TABS.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => go(t.id)}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                    active
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                      : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
-      {tab === "create" && <GeneratorConsole />}
-      {tab === "campaigns" && <CampaignsConsole onCreateNew={() => go("create")} />}
-      {tab === "sites" && <SitesConsole />}
-      {tab === "connections" && <IntegrationsConsole />}
-      {tab === "settings" && <div><SettingsConsole /><ApiDocs /></div>}
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {tab === "create" && <GeneratorConsole />}
+        {tab === "gallery" && <LibraryPage />}
+        {tab === "calendar" && <CalendarPage />}
+        {tab === "settings" && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-amber-100">Settings</h2>
+            <p className="text-slate-400">Configure API keys, avatars, and auto-post preferences.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 export function StudioTabs() {
   return (
-    <Suspense fallback={<div className="p-8 text-slate-500">Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center text-amber-400">Loading studio...</div>}>
       <StudioTabsInner />
     </Suspense>
   );
