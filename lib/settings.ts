@@ -98,3 +98,17 @@ export function saveEngineSettings(input: Partial<{
   if (input.hedraModel) setRaw("hedra_model", input.hedraModel);
   if (input.nvidiaModel && isNvidiaModelId(input.nvidiaModel)) setRaw("nvidia_model", input.nvidiaModel);
 }
+
+
+/* === LANGUAGE SETTINGS === */
+export type LanguageSetting = "english" | "spanish" | "mixed";
+
+export function getLanguageSetting(): LanguageSetting {
+  const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get("content_language") as { value: string } | undefined)?.value;
+  if (raw === "spanish" || raw === "mixed") return raw;
+  return "english";
+}
+
+export function saveLanguageSetting(lang: LanguageSetting) {
+  db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run("content_language", lang);
+}
