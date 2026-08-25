@@ -1,59 +1,81 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#F5F5F5"/>
-    </linearGradient>
-  </defs>
-  <!-- Background -->
-  <rect width="256" height="256" rx="48" ry="48" fill="url(#bg)"/>
-
-  <!-- Text: OI / MEU / CHAPA! stacked, top-left -->
-  <g font-family="Impact, 'Arial Black', sans-serif" font-weight="900" fill="#000">
-    <text x="22" y="48" font-size="36" letter-spacing="-1">OI</text>
-    <text x="22" y="84" font-size="36" letter-spacing="-1">MEU</text>
-    <text x="22" y="120" font-size="36" letter-spacing="-1">CHAPA!</text>
+  <rect width="256" height="256" fill="#FFFFFF"/>
+  
+  <!-- Text OI / MEU / CHAPA! - stacked, top-left, bold black -->
+  <g font-family="Impact, 'Arial Black', 'Helvetica Inserat', 'Bebop', sans-serif" font-weight="900" font-style="italic" fill="#000">
+    <text x="14" y="44" font-size="40" letter-spacing="-2">OI</text>
+    <text x="14" y="84" font-size="40" letter-spacing="-2">MEU</text>
+    <text x="14" y="124" font-size="40" letter-spacing="-2">CHAPA!</text>
   </g>
 
-  <!-- Wolf head silhouette (Looney Tunes style, sharp teeth bared) -->
-  <g transform="translate(56,96)">
-    <!-- White hair tuft on top -->
-    <path d="M 0 8 Q 12 -8 24 0 Q 36 -10 48 -2 Q 60 -8 70 4 L 80 14
-             Q 88 10 92 18 L 80 30 Q 86 26 90 34
-             L 70 38 L 50 36 L 28 38 L 8 34
-             Q 12 26 0 30 Q 6 18 0 8 Z" fill="#FFFFFF" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Wolf head positioned right side, lower half -->
+  <g transform="translate(72,108)">
+    <!-- White hair tuft on top of head (spiky) -->
+    <path d="M 0 4 
+             L 8 -12 L 14 -2 L 22 -16 L 30 -4 L 38 -18 L 46 -4 L 54 -14 L 62 -2 L 70 -16 L 78 -4 L 86 -12 L 94 0
+             L 100 8 L 96 16 L 86 18 L 70 20 L 50 22 L 30 20 L 14 18 L 4 16 L 0 8 Z" 
+          fill="#FFFFFF" stroke="#000" stroke-width="3" stroke-linejoin="round"/>
+    
+    <!-- Black wolf head (main body) -->
+    <path d="M 4 16
+             Q 0 28 4 42
+             Q 6 60 16 78
+             Q 30 96 50 102
+             L 90 102
+             Q 116 98 132 80
+             Q 144 64 144 42
+             Q 144 26 138 18
+             L 130 18
+             L 110 20 L 90 18 L 70 20 L 50 18 L 30 20 L 10 18 Z" 
+          fill="#000" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
+    
+    <!-- White hair tuft edge on top of head -->
+    <path d="M 4 16
+             L 14 6 L 24 12 L 36 4 L 48 10 L 60 2 L 72 10 L 84 2 L 96 10 L 108 4 L 120 12 L 130 6 L 138 18
+             L 130 20 L 110 22 L 90 20 L 70 22 L 50 20 L 30 22 L 10 20 L 4 16 Z" 
+          fill="#FFFFFF" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
 
-    <!-- Black head/face base -->
-    <path d="M 6 30 L 6 78 Q 8 110 26 134 Q 44 152 60 154
-             L 96 154 Q 112 152 124 140 Q 138 124 142 104
-             L 142 70 Q 138 60 130 60 L 110 62
-             L 90 60 L 70 62 L 50 60 L 30 62 L 12 60
-             Q 6 50 6 30 Z" fill="#000" stroke="#000" stroke-width="2" stroke-linejoin="round"/>
-
-    <!-- Angry eye -->
-    <ellipse cx="44" cy="92" rx="14" ry="12" fill="#FFFFFF" stroke="#000" stroke-width="2"/>
-    <circle cx="48" cy="94" r="5" fill="#000"/>
-    <circle cx="50" cy="91" r="1.5" fill="#FFF"/>
-    <!-- Angry eyebrow -->
-    <path d="M 28 78 L 60 84" stroke="#000" stroke-width="5" stroke-linecap="round" fill="none"/>
-
-    <!-- Nose -->
-    <ellipse cx="78" cy="100" rx="8" ry="6" fill="#000" stroke="#FFF" stroke-width="1"/>
-
-    <!-- Open mouth with sharp teeth -->
-    <path d="M 30 120 Q 36 138 50 144 Q 70 152 90 148 Q 110 144 120 134
-             Q 116 142 108 148 Q 88 160 60 158 Q 38 154 30 138 Z" fill="#5A1010" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
-
-    <!-- Teeth (sharp triangles) -->
-    <g fill="#FFFFFF" stroke="#000" stroke-width="1.2" stroke-linejoin="round">
-      <path d="M 36 126 L 42 144 L 48 128 Z"/>
-      <path d="M 50 130 L 56 150 L 62 132 Z"/>
-      <path d="M 66 132 L 72 152 L 78 134 Z"/>
-      <path d="M 82 132 L 88 150 L 94 132 Z"/>
-      <path d="M 98 130 L 104 146 L 110 130 Z"/>
+    <!-- White eye socket (left visible) -->
+    <ellipse cx="34" cy="44" rx="14" ry="13" fill="#FFFFFF" stroke="#000" stroke-width="2.5"/>
+    <!-- Yellow iris -->
+    <circle cx="38" cy="46" r="6" fill="#FFD700" stroke="#000" stroke-width="1"/>
+    <!-- Black pupil -->
+    <circle cx="40" cy="46" r="3" fill="#000"/>
+    
+    <!-- Angry eyebrow (thick angled black line above eye) -->
+    <path d="M 18 30 L 50 38" stroke="#000" stroke-width="6" stroke-linecap="round" fill="none"/>
+    
+    <!-- Black nose -->
+    <ellipse cx="76" cy="56" rx="10" ry="7" fill="#000" stroke="#000" stroke-width="1"/>
+    
+    <!-- Open mouth (dark red interior) -->
+    <path d="M 18 76
+             Q 16 90 26 100
+             Q 42 110 60 110
+             Q 80 112 100 108
+             Q 120 102 130 90
+             Q 124 100 116 104
+             L 18 76 Z" 
+          fill="#5C1010" stroke="#000" stroke-width="3" stroke-linejoin="round"/>
+    
+    <!-- Upper teeth row (sharp white triangles, top of mouth) -->
+    <g fill="#FFFFFF" stroke="#000" stroke-width="1.5" stroke-linejoin="round">
+      <path d="M 20 80 L 24 100 L 32 84 Z"/>
+      <path d="M 34 86 L 40 104 L 48 88 Z"/>
+      <path d="M 50 88 L 56 106 L 64 90 Z"/>
+      <path d="M 66 90 L 72 106 L 80 90 Z"/>
+      <path d="M 82 90 L 88 104 L 96 90 Z"/>
+      <path d="M 98 88 L 104 102 L 112 88 Z"/>
+      <path d="M 114 86 L 120 98 L 126 86 Z"/>
     </g>
-
-    <!-- Saliva/tooth glint -->
-    <path d="M 70 122 L 80 118" stroke="#FFF" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Lower teeth row (smaller, bottom of mouth) -->
+    <g fill="#FFFFFF" stroke="#000" stroke-width="1.2" stroke-linejoin="round">
+      <path d="M 32 110 L 36 100 L 40 110 Z"/>
+      <path d="M 48 112 L 52 102 L 56 112 Z"/>
+      <path d="M 64 112 L 68 102 L 72 112 Z"/>
+      <path d="M 80 110 L 84 100 L 88 110 Z"/>
+      <path d="M 96 108 L 100 100 L 104 108 Z"/>
+    </g>
   </g>
 </svg>
