@@ -8,7 +8,7 @@ import { generateCampaignStill } from "@/lib/campaign-image";
 import { saveGeneratedImage } from "@/lib/media-library";
 import { createJob, refreshJob } from "@/lib/jobs";
 import { ensureAssetCalendarPost, createPlanningSlots } from "@/lib/calendar-assets";
-import { runCampaignAutopilotOnce } from "@/lib/campaign-autopilot";
+import { runCampaignAutopilotOnce, startCampaignAutopilotLoop } from "@/lib/campaign-autopilot";
 import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
 
 const TABS = ["car_accident","rideshare","trucking","slip_fall","ugc"] as const;
@@ -37,6 +37,43 @@ const PROMPTS: Record<Tab, { focus: string; wardrobe: string }> = {
   }
 };
 
+const AUTOMATION_CATEGORIES = ["car_accident", "rideshare", "trucking", "slip_fall"] as const;
+type AutomationCategory = (typeof AUTOMATION_CATEGORIES)[number];
+const AUTOMATION_LABELS: Record<AutomationCategory, string> = { car_accident: "Vehicle accident", rideshare: "Rideshare accident", trucking: "Trucking accident", slip_fall: "Slip & fall" };
+
+function pickAutomationAvatarId(requestedId: string | null) {
+  if (requestedId && getAvatar(requestedId)?.status !== "archived") return requestedId;
+  const rows = db.prepare("SELECT id FROM avatars WHERE status != 'archived' ORDER BY CASE WHEN reference_image_path IS NULL THEN 1 ELSE 0 END, name ASC").all() as Array<{ id: string }>;
+  return rows[0]?.id || null;
+}
+
+function automationSchedule(index: number) {
+  const now = new Date();
+  if (index === 0) return new Date(now.getTime() + 5 * 60_000).toISOString();
+  const next = new Date(now.getTime() + index * 24 * 60 * 60_000);
+  next.setHours(10, 0, 0, 0);
+  return next.toISOString();
+}
+
+function queueInstagramCategoryAutomation(input: { requestedAvatarId: string | null; templateId: VisualTemplateId; prompt: string; language: string; provider: string; model: string; autoPost: boolean; }) {
+  const avatarId = pickAutomationAvatarId(input.requestedAvatarId);
+  const avatar = avatarId ? getAvatar(avatarId) : null;
+  const template = visualTemplates.find((item) => item.id === input.templateId) || visualTemplates[0];
+  const templateDirective = "promptHint" in template ? `VISUAL TEMPLATE: ${template.label}. ${template.promptHint}` : "VISUAL TEMPLATE: AUTO — choose the best environment and framing for each category, avatar, and creative brief.";
+  const languageDirective = input.language === "es" ? "LANGUAGE: All dialogue and on-screen text must be Spanish." : input.language === "mix" ? "LANGUAGE: Use natural bilingual English and Spanish." : "LANGUAGE: All dialogue and on-screen text must be English.";
+  const slots: Array<{ id: string; category: AutomationCategory; title: string; scheduledAt: string }> = [];
+  for (const [index, category] of AUTOMATION_CATEGORIES.entries()) {
+    const campaignId = crypto.randomUUID(); const slotId = crypto.randomUUID(); const label = AUTOMATION_LABELS[category]; const title = `${label} · Instagram automation`; const scheduledAt = automationSchedule(index);
+    const mission = [input.prompt ? `Creative brief: ${input.prompt}` : "Create an educational, trustworthy personal-injury awareness post.", `Category focus: ${PROMPTS[category].focus}`, templateDirective, avatar ? `Spokesperson: ${avatar.name}. Wardrobe: ${avatar.wardrobeStandard}.` : "Use a credible adult spokesperson.", languageDirective, "Create one continuous vertical 9:16 video suitable for a Reel and Story. No gore, no guarantees, no legal advice."].join("\n");
+    const caption = `${label}: practical information for Florida injury victims. General information only—not legal advice. #CaseClosedFL`;
+    db.prepare(`INSERT INTO campaigns(id,name,category,mission,platform,avatar_id,background_id,planning_horizon_days,content_type,output_mode,video_provider,video_model,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(campaignId, title, category, mission, "instagram", avatarId, template.id, 4, "cinematic", "video", input.provider, input.model, "active");
+    db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,campaign_id,planning_horizon_days,generation_status,category,media_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(slotId, title, "instagram", scheduledAt, input.autoPost ? "approved" : "pending", input.autoPost ? 1 : 0, caption, "cinematic", campaignId, 4, "pending", category, "video/mp4");
+    slots.push({ id: slotId, category, title, scheduledAt });
+  }
+  startCampaignAutopilotLoop(); setTimeout(() => { void runCampaignAutopilotOnce(); }, 0);
+  return { avatar: avatar ? { id: avatar.id, name: avatar.name } : null, template: { id: template.id, label: template.label }, slots };
+}
+
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
@@ -63,6 +100,10 @@ export async function POST(req: Request) {
     const templateDirective = "promptHint" in selectedTemplate
       ? `VISUAL TEMPLATE: ${selectedTemplate.label}. ${selectedTemplate.promptHint}`
       : "VISUAL TEMPLATE: AUTO — choose the most effective environment and framing for the campaign category, spokesperson, and creative brief.";
+    if (body.automationMode === "category-run") {
+      const automation = queueInstagramCategoryAutomation({ requestedAvatarId: avatarId, templateId, prompt: body.prompt ? String(body.prompt).trim() : "", language, provider: providerChoice, model, autoPost: approvalMode === "auto" });
+      return NextResponse.json({ automation: true, message: "Queued one calendar post for each core category. Each ready video will publish as one Reel and one Story.", ...automation }, { status: 201 });
+    }
     const userPrompt = body.prompt ? String(body.prompt).trim() : "";
 
     const tabMeta = PROMPTS[tab];
