@@ -296,7 +296,7 @@ export default function CalendarPage() {
                         {post.error && <div className="mt-1 text-xs text-rose-700">{post.error}</div>}
                       </div>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-700">{post.status}</span>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex min-w-0 flex-wrap gap-2">
                         {post.status === "pending" && <Button size="sm" onClick={() => patch(post, { status: "approved" })} disabled={busy === post.id || generating}><Check size={13} className="mr-1"/>Approve</Button>}
                         {retryable && <Button size="sm" variant="secondary" onClick={() => retryGeneration(post)} disabled={busy === `${post.id}:retry`}><RefreshCcw size={13} className={`mr-1 ${busy === `${post.id}:retry` ? "animate-spin" : ""}`}/>{busy === `${post.id}:retry` ? "Retrying…" : "Retry generation"}</Button>}
                         <Button size="sm" variant="secondary" onClick={() => patch(post, { autoPost: !post.autoPost, status: post.status === "pending" ? "approved" : post.status })} disabled={!autoCapable || busy === post.id || generating || (post.network === "website" && !post.contentBody?.trim())}>{post.autoPost ? "Disable auto" : "Enable auto"}</Button>

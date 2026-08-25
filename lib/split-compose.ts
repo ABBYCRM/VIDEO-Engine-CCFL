@@ -5,7 +5,9 @@ import path from "node:path";
 import { db } from "@/lib/db";
 import { savePersistentLibraryAsset } from "@/lib/persistent-library";
 import { clampSplitDuration, clampSplitPercent } from "@/lib/split-surface";
-import { getSplitTemplate, type SplitTemplateId } from "@/lib/split-templates";
+import { type SplitTemplateId } from "@/lib/split-templates";
+import { resolveSplitTemplate, getCustomSplitTemplate } from "@/lib/custom-split-templates";
+import { CASE_CLOSED_PHONE, CASE_CLOSED_URL } from "@/lib/brand-contact";
 
 db.exec(`CREATE TABLE IF NOT EXISTS generated_compositions(id TEXT PRIMARY KEY,title TEXT NOT NULL,file_path TEXT NOT NULL,mime_type TEXT NOT NULL,upper_source TEXT,lower_source TEXT,split_percent INTEGER NOT NULL DEFAULT 33,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);CREATE INDEX IF NOT EXISTS idx_generated_compositions_created_at ON generated_compositions(created_at);`);
 
@@ -47,14 +49,20 @@ export async function composeSplitScreenFile(input: {
 }) {
   const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
   const duration = clampSplitDuration(input.durationSeconds);
-  const template = getSplitTemplate(input.templateId);
-  const templatePath = path.resolve(process.cwd(), "public", template.assetPath.replace(/^\//, ""));
+  const template = resolveSplitTemplate(input.templateId);
+  const custom = getCustomSplitTemplate(template.id);
+  const templatePath = custom ? path.resolve(custom.filePath) : path.resolve(process.cwd(), "public", template.assetPath.replace(/^\//, ""));
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
   // cover-crop a lane's video (top-anchored, so a portrait subject's head
   // is never cut) to exactly fill a box without stretching it.
   const coverCrop = (streamIn: string, box: { w: number; h: number }, streamOut: string) =>
     `[${streamIn}]scale=${box.w}:${box.h}:force_original_aspect_ratio=increase,crop=${box.w}:${box.h}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[${streamOut}]`;
   let filter: string;
+  const bannerH = Math.round(template.canvasH * 0.075);
+  const bannerY = Math.round(template.canvasH * 0.03);
+  const fontSize = Math.max(18, Math.round(template.canvasW * 0.035));
+  const fontPath = process.env.FONT_PATH || "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+  const banner = `drawbox=x=0:y=${bannerY}:w=iw:h=${bannerH}:color=black@0.68:t=fill,drawtext=fontfile='${fontPath}':text='${CASE_CLOSED_URL}  ·  ${CASE_CLOSED_PHONE}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=${bannerY}+((${bannerH}-text_h)/2)[v]`;
   if (template.layout === "avatar-box") {
     // The upper AI video cover-crops the whole canvas as the permanent
     // background layer. The avatar's own video (with its own generated
@@ -67,7 +75,8 @@ export async function composeSplitScreenFile(input: {
       coverCrop("0:v", { w: template.canvasW, h: template.canvasH }, "bg"),
       coverCrop("1:v", box, "av"),
       `[bg][av]overlay=x=${box.x}:y=${box.y}[stacked]`,
-      `[stacked][2:v]overlay=x=0:y=0:format=auto[v]`
+      `[stacked][2:v]overlay=x=0:y=0:format=auto[composed]`,
+      `[composed]${banner}`
     ].join(";");
   } else {
     // Dual-box: the upper and lower lanes each cover-crop into their own
@@ -78,7 +87,8 @@ export async function composeSplitScreenFile(input: {
       coverCrop("0:v", upperBox, "uv"),
       coverCrop("1:v", lowerBox, "lv"),
       `[2:v][uv]overlay=x=${upperBox.x}:y=${upperBox.y}[stacked]`,
-      `[stacked][lv]overlay=x=${lowerBox.x}:y=${lowerBox.y}:format=auto[v]`
+      `[stacked][lv]overlay=x=${lowerBox.x}:y=${lowerBox.y}:format=auto[composed]`,
+      `[composed]${banner}`
     ].join(";");
   }
   const base = [
