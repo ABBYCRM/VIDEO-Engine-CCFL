@@ -62,7 +62,6 @@ export async function POST(req: Request) {
     ].filter(Boolean).join("\n");
 
     const results: any = {
-      prompt: finalPrompt,
       tab,
       avatarId,
       avatarGender,
@@ -85,9 +84,8 @@ export async function POST(req: Request) {
       // Save to library
       const saved = await saveGeneratedImage({
         base64: still.base64,
-        source: "unified-create",
+        source: "api",
         model: still.model,
-        prompt: finalPrompt,
         mimeType: "image/png",
         createCalendarPost: false
       });
@@ -99,15 +97,15 @@ export async function POST(req: Request) {
     // Step 2: Create the video job (A2E - hyper realism)
     try {
       const job = await createJob({
-        source: "unified-create",
+        source: "api",
         category: tab === "ugc" ? "ugc" : tab,
+        mission: finalPrompt,
         provider: "a2e",
         model,
         aspectRatio: "9:16",
         resolution: "1080p",
-        prompt: finalPrompt,
-        avatarId: avatarId || null,
-        referenceImage: results.imageAsset?.url || null,
+        avatarId: avatarId ?? undefined,
+        imageBase64: results.imageAsset?.base64 ?? undefined,
       });
       results.videoJobId = job.id;
       results.videoStatus = job.status;
