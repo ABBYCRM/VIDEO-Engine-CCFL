@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- Rounded square background with the brand gradient -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B1220"/>
+      <stop offset="55%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+
+    <!-- Cyan→purple gradient on the duck body -->
+    <linearGradient id="duck" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="55%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+
+    <!-- Subtle inner highlight on the body -->
+    <radialGradient id="shine" cx="0.35" cy="0.3" r="0.6">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0.0"/>
+    </radialGradient>
+
+    <!-- Film-strip orange beak -->
+    <linearGradient id="beak" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FB923C"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+
+    <!-- Shadow under the duck -->
+    <radialGradient id="shadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.0"/>
+    </radialGradient>
+
+    <!-- Reusable film-strip perforation for the beak -->
+    <pattern id="perf" x="0" y="0" width="14" height="18" patternUnits="userSpaceOnUse">
+      <rect width="14" height="18" fill="url(#beak)"/>
+      <rect x="3" y="3" width="8" height="3" rx="1" fill="#0F172A" opacity="0.85"/>
+      <rect x="3" y="12" width="8" height="3" rx="1" fill="#0F172A" opacity="0.85"/>
+    </pattern>
+  </defs>
+
+  <!-- Rounded-square badge -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="none" stroke="url(#duck)" stroke-width="2" opacity="0.35"/>
+
+  <!-- Floor shadow under the duck -->
+  <ellipse cx="128" cy="210" rx="78" ry="9" fill="url(#shadow)"/>
+
+  <!-- Duck body (rounded teardrop) -->
+  <path d="
+    M 64 156
+    C 48 142, 52 110, 84 100
+    C 96 80, 124 76, 146 90
+    C 174 84, 202 102, 204 130
+    C 206 156, 188 178, 160 184
+    C 134 192, 96 188, 78 178
+    C 68 174, 64 168, 64 156
+    Z"
+    fill="url(#duck)"/>
+
+  <!-- Soft top highlight on body -->
+  <path d="
+    M 84 116
+    C 104 102, 142 100, 168 110
+    C 152 102, 124 100, 104 110
+    C 96 114, 88 118, 84 116 Z"
+    fill="url(#shine)"/>
+
+  <!-- Wing curl -->
+  <path d="
+    M 110 154
+    C 130 140, 168 142, 184 160
+    C 168 174, 138 178, 116 170
+    C 108 168, 106 160, 110 154 Z"
+    fill="#0F172A" opacity="0.25"/>
+
+  <!-- Tail feather flick -->
+  <path d="
+    M 200 132
+    C 214 124, 222 130, 218 144
+    C 214 152, 206 150, 200 144 Z"
+    fill="url(#duck)"/>
+
+  <!-- Head bump (rounded) -->
+  <circle cx="84" cy="108" r="34" fill="url(#duck)"/>
+
+  <!-- Head shine -->
+  <ellipse cx="74" cy="96" rx="14" ry="8" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- Eye -->
+  <circle cx="74" cy="104" r="6" fill="#0F172A"/>
+  <circle cx="72" cy="102" r="2" fill="#FFFFFF"/>
+
+  <!-- Beak — film-strip pattern with a clapperboard top edge -->
+  <g transform="translate(38 116) rotate(-8)">
+    <rect x="0" y="6" width="58" height="22" rx="6" fill="url(#perf)"/>
+    <!-- Clapperboard stick on top of the beak -->
+    <rect x="-4" y="0" width="60" height="10" rx="2" fill="#0F172A"/>
+    <polygon points="6,0 14,0 18,10 10,10" fill="#FB923C"/>
+    <polygon points="22,0 30,0 34,10 26,10" fill="#FB923C"/>
+    <polygon points="38,0 46,0 50,10 42,10" fill="#FB923C"/>
+  </g>
+
+  <!-- Tiny "REC" dot in the upper-right to nod at the video theme -->
+  <g>
+    <circle cx="206" cy="48" r="9" fill="#EF4444"/>
+    <circle cx="206" cy="48" r="9" fill="none" stroke="#FCA5A5" stroke-width="2" opacity="0.6"/>
+    <text x="206" y="52" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">REC</text>
+  </g>
+</svg>

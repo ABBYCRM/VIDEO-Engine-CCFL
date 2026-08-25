@@ -1,111 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <!-- Rounded square background with the brand gradient -->
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0B1220"/>
-      <stop offset="55%" stop-color="#0F172A"/>
-      <stop offset="100%" stop-color="#1E1B4B"/>
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F5F5F5"/>
     </linearGradient>
-
-    <!-- Cyan→purple gradient on the duck body -->
-    <linearGradient id="duck" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#22D3EE"/>
-      <stop offset="55%" stop-color="#38BDF8"/>
-      <stop offset="100%" stop-color="#A78BFA"/>
-    </linearGradient>
-
-    <!-- Subtle inner highlight on the body -->
-    <radialGradient id="shine" cx="0.35" cy="0.3" r="0.6">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
-      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0.0"/>
-    </radialGradient>
-
-    <!-- Film-strip orange beak -->
-    <linearGradient id="beak" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FB923C"/>
-      <stop offset="100%" stop-color="#F59E0B"/>
-    </linearGradient>
-
-    <!-- Shadow under the duck -->
-    <radialGradient id="shadow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0.45"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.0"/>
-    </radialGradient>
-
-    <!-- Reusable film-strip perforation for the beak -->
-    <pattern id="perf" x="0" y="0" width="14" height="18" patternUnits="userSpaceOnUse">
-      <rect width="14" height="18" fill="url(#beak)"/>
-      <rect x="3" y="3" width="8" height="3" rx="1" fill="#0F172A" opacity="0.85"/>
-      <rect x="3" y="12" width="8" height="3" rx="1" fill="#0F172A" opacity="0.85"/>
-    </pattern>
   </defs>
+  <!-- Background -->
+  <rect width="256" height="256" rx="48" ry="48" fill="url(#bg)"/>
 
-  <!-- Rounded-square badge -->
-  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
-  <rect x="8" y="8" width="240" height="240" rx="56" fill="none" stroke="url(#duck)" stroke-width="2" opacity="0.35"/>
-
-  <!-- Floor shadow under the duck -->
-  <ellipse cx="128" cy="210" rx="78" ry="9" fill="url(#shadow)"/>
-
-  <!-- Duck body (rounded teardrop) -->
-  <path d="
-    M 64 156
-    C 48 142, 52 110, 84 100
-    C 96 80, 124 76, 146 90
-    C 174 84, 202 102, 204 130
-    C 206 156, 188 178, 160 184
-    C 134 192, 96 188, 78 178
-    C 68 174, 64 168, 64 156
-    Z"
-    fill="url(#duck)"/>
-
-  <!-- Soft top highlight on body -->
-  <path d="
-    M 84 116
-    C 104 102, 142 100, 168 110
-    C 152 102, 124 100, 104 110
-    C 96 114, 88 118, 84 116 Z"
-    fill="url(#shine)"/>
-
-  <!-- Wing curl -->
-  <path d="
-    M 110 154
-    C 130 140, 168 142, 184 160
-    C 168 174, 138 178, 116 170
-    C 108 168, 106 160, 110 154 Z"
-    fill="#0F172A" opacity="0.25"/>
-
-  <!-- Tail feather flick -->
-  <path d="
-    M 200 132
-    C 214 124, 222 130, 218 144
-    C 214 152, 206 150, 200 144 Z"
-    fill="url(#duck)"/>
-
-  <!-- Head bump (rounded) -->
-  <circle cx="84" cy="108" r="34" fill="url(#duck)"/>
-
-  <!-- Head shine -->
-  <ellipse cx="74" cy="96" rx="14" ry="8" fill="#FFFFFF" opacity="0.35"/>
-
-  <!-- Eye -->
-  <circle cx="74" cy="104" r="6" fill="#0F172A"/>
-  <circle cx="72" cy="102" r="2" fill="#FFFFFF"/>
-
-  <!-- Beak — film-strip pattern with a clapperboard top edge -->
-  <g transform="translate(38 116) rotate(-8)">
-    <rect x="0" y="6" width="58" height="22" rx="6" fill="url(#perf)"/>
-    <!-- Clapperboard stick on top of the beak -->
-    <rect x="-4" y="0" width="60" height="10" rx="2" fill="#0F172A"/>
-    <polygon points="6,0 14,0 18,10 10,10" fill="#FB923C"/>
-    <polygon points="22,0 30,0 34,10 26,10" fill="#FB923C"/>
-    <polygon points="38,0 46,0 50,10 42,10" fill="#FB923C"/>
+  <!-- Text: OI / MEU / CHAPA! stacked, top-left -->
+  <g font-family="Impact, 'Arial Black', sans-serif" font-weight="900" fill="#000">
+    <text x="22" y="48" font-size="36" letter-spacing="-1">OI</text>
+    <text x="22" y="84" font-size="36" letter-spacing="-1">MEU</text>
+    <text x="22" y="120" font-size="36" letter-spacing="-1">CHAPA!</text>
   </g>
 
-  <!-- Tiny "REC" dot in the upper-right to nod at the video theme -->
-  <g>
-    <circle cx="206" cy="48" r="9" fill="#EF4444"/>
-    <circle cx="206" cy="48" r="9" fill="none" stroke="#FCA5A5" stroke-width="2" opacity="0.6"/>
-    <text x="206" y="52" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">REC</text>
+  <!-- Wolf head silhouette (Looney Tunes style, sharp teeth bared) -->
+  <g transform="translate(56,96)">
+    <!-- White hair tuft on top -->
+    <path d="M 0 8 Q 12 -8 24 0 Q 36 -10 48 -2 Q 60 -8 70 4 L 80 14
+             Q 88 10 92 18 L 80 30 Q 86 26 90 34
+             L 70 38 L 50 36 L 28 38 L 8 34
+             Q 12 26 0 30 Q 6 18 0 8 Z" fill="#FFFFFF" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
+
+    <!-- Black head/face base -->
+    <path d="M 6 30 L 6 78 Q 8 110 26 134 Q 44 152 60 154
+             L 96 154 Q 112 152 124 140 Q 138 124 142 104
+             L 142 70 Q 138 60 130 60 L 110 62
+             L 90 60 L 70 62 L 50 60 L 30 62 L 12 60
+             Q 6 50 6 30 Z" fill="#000" stroke="#000" stroke-width="2" stroke-linejoin="round"/>
+
+    <!-- Angry eye -->
+    <ellipse cx="44" cy="92" rx="14" ry="12" fill="#FFFFFF" stroke="#000" stroke-width="2"/>
+    <circle cx="48" cy="94" r="5" fill="#000"/>
+    <circle cx="50" cy="91" r="1.5" fill="#FFF"/>
+    <!-- Angry eyebrow -->
+    <path d="M 28 78 L 60 84" stroke="#000" stroke-width="5" stroke-linecap="round" fill="none"/>
+
+    <!-- Nose -->
+    <ellipse cx="78" cy="100" rx="8" ry="6" fill="#000" stroke="#FFF" stroke-width="1"/>
+
+    <!-- Open mouth with sharp teeth -->
+    <path d="M 30 120 Q 36 138 50 144 Q 70 152 90 148 Q 110 144 120 134
+             Q 116 142 108 148 Q 88 160 60 158 Q 38 154 30 138 Z" fill="#5A1010" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
+
+    <!-- Teeth (sharp triangles) -->
+    <g fill="#FFFFFF" stroke="#000" stroke-width="1.2" stroke-linejoin="round">
+      <path d="M 36 126 L 42 144 L 48 128 Z"/>
+      <path d="M 50 130 L 56 150 L 62 132 Z"/>
+      <path d="M 66 132 L 72 152 L 78 134 Z"/>
+      <path d="M 82 132 L 88 150 L 94 132 Z"/>
+      <path d="M 98 130 L 104 146 L 110 130 Z"/>
+    </g>
+
+    <!-- Saliva/tooth glint -->
+    <path d="M 70 122 L 80 118" stroke="#FFF" stroke-width="3" stroke-linecap="round"/>
   </g>
 </svg>
