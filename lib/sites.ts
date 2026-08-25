@@ -51,7 +51,7 @@ ensureColumn("publish_secret_encrypted","publish_secret_encrypted TEXT");
 export type Site = {
   id:string; name:string; url:string; cms:string; language:string; targetAudience:string; brandVoice:string;
   topicFocus:string; keywords:string; articleLength:string; cadence:string; approvalMode:string; imageEnabled:boolean;
-  imageStyle:string; imageAspectRatio:string; internalLinking:boolean; externalLinks:boolean; cta:string;
+  imageStyle:string; imageAspectRatio:string; internalLinking:boolean; externalLinks:boolean; cta:string; phoneNumber:string|null;
   publishMode:string; publishEndpoint:string|null; publishUsername:string|null; publishConfigured:boolean;
   verifiedAt:string|null; lastSeenAt:string|null; status:string; createdAt:string; updatedAt:string; bridgeToken?:string;
 };
@@ -61,7 +61,7 @@ function map(row:any):Site {
     id:row.id,name:row.name,url:row.url,cms:row.cms,language:row.language,targetAudience:row.target_audience,
     brandVoice:row.brand_voice,topicFocus:row.topic_focus,keywords:row.keywords,articleLength:row.article_length,
     cadence:row.cadence,approvalMode:row.approval_mode,imageEnabled:Boolean(row.image_enabled),imageStyle:row.image_style,
-    imageAspectRatio:row.image_aspect_ratio,internalLinking:Boolean(row.internal_linking),externalLinks:Boolean(row.external_links),cta:row.cta,
+    imageAspectRatio:row.image_aspect_ratio,internalLinking:Boolean(row.internal_linking),externalLinks:Boolean(row.external_links),cta:row.cta,phoneNumber:row.phone_number||null,
     publishMode:row.publish_mode||"unconfigured",publishEndpoint:row.publish_endpoint||null,publishUsername:row.publish_username||null,
     publishConfigured:Boolean(row.publish_endpoint&&row.publish_secret_encrypted),verifiedAt:row.verified_at,lastSeenAt:row.last_seen_at,
     status:row.status,createdAt:row.created_at,updatedAt:row.updated_at
@@ -83,14 +83,14 @@ export function createSite(input:any){
   if(!["http:","https:"].includes(url.protocol)) throw new Error("Website URL must use http or https");
   const cleanUrl=`${url.protocol}//${url.host}`;
   const publishSecret=String(input.publishSecret||"").trim();
-  db.prepare(`INSERT INTO sites(id,name,url,cms,language,target_audience,brand_voice,topic_focus,keywords,article_length,cadence,approval_mode,image_enabled,image_style,image_aspect_ratio,internal_linking,external_links,cta,bridge_token_hash,bridge_token_encrypted,publish_mode,publish_endpoint,publish_username,publish_secret_encrypted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+  db.prepare(`INSERT INTO sites(id,name,url,cms,language,target_audience,brand_voice,topic_focus,keywords,article_length,cadence,approval_mode,image_enabled,image_style,image_aspect_ratio,internal_linking,external_links,cta,bridge_token_hash,bridge_token_encrypted,publish_mode,publish_endpoint,publish_username,publish_secret_encrypted,phone_number) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     id,String(input.name||url.hostname).trim().slice(0,120),cleanUrl,String(input.cms||"custom"),String(input.language||"en").slice(0,20),
     String(input.targetAudience||"").slice(0,2000),String(input.brandVoice||"").slice(0,3000),String(input.topicFocus||"").slice(0,3000),
     String(input.keywords||"").slice(0,3000),String(input.articleLength||"long"),String(input.cadence||"daily"),String(input.approvalMode||"manual"),
     input.imageEnabled===false?0:1,String(input.imageStyle||"hyper-realistic"),String(input.imageAspectRatio||"16:9"),input.internalLinking===false?0:1,
     input.externalLinks===false?0:1,String(input.cta||"").slice(0,2000),crypto.createHash("sha256").update(token).digest("hex"),encryptSecret(token),
     String(input.publishMode||"unconfigured"),input.publishEndpoint?String(input.publishEndpoint).trim().slice(0,1000):null,
-    input.publishUsername?String(input.publishUsername).trim().slice(0,300):null,publishSecret?encryptSecret(publishSecret):null
+    input.publishUsername?String(input.publishUsername).trim().slice(0,300):null,publishSecret?encryptSecret(publishSecret):null,input.phoneNumber?String(input.phoneNumber).trim().slice(0,40):null
   );
   return {...getSite(id)!,bridgeToken:token};
 }
@@ -122,3 +122,4 @@ export function markBridgeSeen(token:string,referer:string|null){
   db.prepare(`UPDATE sites SET last_seen_at=?, verified_at=CASE WHEN ?=1 THEN COALESCE(verified_at,?) ELSE verified_at END, status=CASE WHEN ?=1 THEN 'active' ELSE status END, updated_at=? WHERE id=?`).run(now,verified?1:0,now,verified?1:0,now,row.id);
   return true;
 }
+ensureColumn("phone_number","phone_number TEXT");
