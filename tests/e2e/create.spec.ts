@@ -28,14 +28,14 @@ test("Create podcast mode persists split-screen surface on Save campaign",async(
   await expect(page.getByText("Document it now")).toBeVisible();
   await page.getByLabel("Split relationship").selectOption("question_answer");
   await page.getByLabel("Upper AI engine").selectOption("veo");
-  await page.getByLabel("Top video height").fill("40");
+  await page.getByLabel("Split-screen frame template").selectOption("office-warm");
   await page.getByLabel("Campaign name").fill("Split surface campaign");
   await expect(page.getByRole("link",{name:"Continue to two-lane production",exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Save campaign + fill Calendar"}).click();
   await expect(page.getByText(/7 Calendar slots created/)).toBeVisible();
   expect(campaignPayload.contentType).toBe("podcast");
   expect(campaignPayload.splitRelationship).toBe("question_answer");
-  expect(campaignPayload.splitPercent).toBe(40);
+  expect(campaignPayload.splitTemplate).toBe("office-warm");
   expect(campaignPayload.upperProvider).toBe("veo");
   expect(campaignPayload.videoProvider).toBe("veo");
 });
