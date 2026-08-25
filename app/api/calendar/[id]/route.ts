@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { ensureBrandContactInCaption } from "@/lib/brand-contact";
 import "@/lib/calendar-assets";
 const NETWORKS=new Set(["instagram","facebook","youtube","tiktok","linkedin","website"]),STATUSES=new Set(["draft","pending","approved","published","failed"]),FORMATS=new Set(["podcast","ugc","newsroom","direct","cinematic","image","blog"]);
 function rowToPost(row:any){return{id:row.id,title:row.title,network:row.network,scheduledAt:row.scheduled_at,status:row.status,autoPost:Boolean(row.auto_post),caption:row.caption,contentType:row.content_type||"ugc",videoJobId:row.video_job_id,upperJobId:row.upper_job_id,lowerJobId:row.lower_job_id,mediaUrl:row.media_url,mediaType:row.media_type,sourceAssetKey:row.source_asset_key,siteId:row.site_id,campaignId:row.campaign_id,planningHorizonDays:row.planning_horizon_days,contentBody:row.content_body,seoTitle:row.seo_title,metaDescription:row.meta_description,slug:row.slug,focusKeyword:row.focus_keyword,generationStatus:row.generation_status||"ready",connectedAccountId:row.connected_account_id,publishedAt:row.published_at,error:row.error,createdAt:row.created_at,updatedAt:row.updated_at};}
@@ -16,7 +17,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
   const generationStatus=body.generationStatus===undefined?current.generation_status:String(body.generationStatus);
   const error=body.error===undefined?current.error:(body.error?String(body.error).slice(0,2000):null);
   db.prepare(`UPDATE scheduled_posts SET title=?,network=?,scheduled_at=?,status=?,auto_post=?,caption=?,content_type=?,connected_account_id=?,media_url=?,media_type=?,site_id=?,campaign_id=?,planning_horizon_days=?,content_body=?,seo_title=?,meta_description=?,slug=?,focus_keyword=?,generation_status=?,video_job_id=?,error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
-    title,network,scheduledAt,status,body.autoPost===undefined?current.auto_post:body.autoPost?1:0,body.caption===undefined?current.caption:String(body.caption).slice(0,5000),contentType,
+    title,network,scheduledAt,status,body.autoPost===undefined?current.auto_post:body.autoPost?1:0,body.caption===undefined?current.caption:ensureBrandContactInCaption(String(body.caption)).slice(0,5000),contentType,
     body.connectedAccountId===undefined?current.connected_account_id:(body.connectedAccountId?String(body.connectedAccountId):null),mediaUrl,mediaType,body.siteId===undefined?current.site_id:(body.siteId?String(body.siteId):null),body.campaignId===undefined?current.campaign_id:(body.campaignId?String(body.campaignId):null),body.planningHorizonDays===undefined?current.planning_horizon_days:Number(body.planningHorizonDays)||null,
     body.contentBody===undefined?current.content_body:(body.contentBody?String(body.contentBody):null),body.seoTitle===undefined?current.seo_title:(body.seoTitle?String(body.seoTitle).slice(0,180):null),body.metaDescription===undefined?current.meta_description:(body.metaDescription?String(body.metaDescription).slice(0,300):null),body.slug===undefined?current.slug:(body.slug?String(body.slug).slice(0,180):null),body.focusKeyword===undefined?current.focus_keyword:(body.focusKeyword?String(body.focusKeyword).slice(0,180):null),generationStatus,videoJobId,error,id
   );

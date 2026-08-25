@@ -18,6 +18,9 @@ ensureColumn("generation_status","generation_status TEXT NOT NULL DEFAULT 'ready
 ensureColumn("upper_job_id","upper_job_id TEXT");
 ensureColumn("lower_job_id","lower_job_id TEXT");
 ensureColumn("category","category TEXT");
+ensureColumn("instagram_reel_id","instagram_reel_id TEXT");
+ensureColumn("instagram_story_id","instagram_story_id TEXT");
+ensureColumn("publishing_at","publishing_at TEXT");
 try{db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_posts_source_asset_key ON scheduled_posts(source_asset_key) WHERE source_asset_key IS NOT NULL");}catch{}
 
 export function ensureAssetCalendarPost(input:{

@@ -12,13 +12,18 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { ComposioAuthError, getComposio, getToolkitMeta } from "@/lib/composio/client";
+import { verifyOAuthState } from "@/lib/auth";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status") || "failed";
   const connectedAccountId = url.searchParams.get("connected_account_id") || url.searchParams.get("connectedAccountId");
   const toolkit = url.searchParams.get("toolkit") || "";
-  const userId = url.searchParams.get("user_id") || "admin";
+  const state = url.searchParams.get("state");
+  const userId = "admin";
+  if (!toolkit || !verifyOAuthState(state, toolkit)) {
+    return NextResponse.redirect(new URL("/integrations?connected=failed&reason=invalid_oauth_state", req.url));
+  }
   const reason = url.searchParams.get("reason") || url.searchParams.get("error") || "";
 
   if (!connectedAccountId || status === "failed") {

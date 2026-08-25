@@ -69,10 +69,11 @@ async function runMigrationsOnce(): Promise<boolean> {
         try {
           await pg.begin(async (tx: any) => {
             await tx.unsafe(body);
-            await tx`INSERT INTO _migrations(id) VALUES(${file})`;
+            await tx`INSERT INTO _video_engine_migrations(id) VALUES(${file})`;
           });
         } catch (e) {
           console.warn(`[pg-mirror] migration ${file} failed:`, (e as Error).message);
+          return false;
         }
       }
       return true;

@@ -20,7 +20,7 @@
 
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { requireAdmin } from "@/lib/auth";
+import { createOAuthState, requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   COMPOSIO_TOOLKITS,
@@ -116,7 +116,8 @@ export async function POST(req: Request) {
     const url = new URL(req.url);
     const proto = req.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
     const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || url.host;
-    const callbackUrl = `${proto}://${host}/api/integrations/callback?toolkit=${encodeURIComponent(meta.id)}&user_id=${encodeURIComponent(USER_ID)}`;
+    const state = createOAuthState(meta.id);
+    const callbackUrl = `${proto}://${host}/api/integrations/callback?toolkit=${encodeURIComponent(meta.id)}&state=${encodeURIComponent(state)}`;
 
     try {
       const link = await client.connectedAccounts.link(USER_ID, authConfigId, {
