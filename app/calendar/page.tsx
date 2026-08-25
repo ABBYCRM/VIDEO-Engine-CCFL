@@ -179,6 +179,18 @@ export default function CalendarPage() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
   }
+  async function clearCalendar() {
+    if (!window.confirm("Delete EVERY item on the calendar? This cannot be undone.")) return;
+    setBusy("clear-calendar");
+    try {
+      const r = await fetch("/api/calendar/clear", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setError(null);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
   async function retryGeneration(post: Post) {
     setBusy(`${post.id}:retry`);
     setError(null);
@@ -206,6 +218,7 @@ export default function CalendarPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" onClick={autoApproveAll} disabled={busy === "auto-approve"}>{busy === "auto-approve" ? "Approving…" : <><Check size={14} className="mr-2"/>Auto-approve & auto-post all</>}</Button>
+              <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={clearCalendar} disabled={busy === "clear-calendar"}>{busy === "clear-calendar" ? "Clearing…" : <><Trash2 size={14} className="mr-2"/>Clear calendar</>}</Button>
               <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
               <Button onClick={() => setEditing("new")}><Plus size={14} className="mr-2"/>Add post</Button>
             </div>
