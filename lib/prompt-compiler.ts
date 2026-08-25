@@ -19,7 +19,7 @@ export function getLanguageInstruction(mode: LanguageMode): string {
 function getTemplateHint(templateId?: string): string {
   if (!templateId || templateId === "auto") return "";
   const tmpl = visualTemplates.find(t => t.id === templateId);
-  if (!tmpl || !tmpl.promptHint) return "";
+  if (!tmpl || !("promptHint" in tmpl) || !tmpl.promptHint) return "";
   return `VISUAL STYLE: ${tmpl.promptHint}. The subject should be framed within the scene naturally, as if recorded on a smartphone in this environment.`;
 }
 
