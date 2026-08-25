@@ -9,7 +9,7 @@ import { getSplitTemplate, isSplitTemplateId, SPLIT_TEMPLATES } from "@/lib/spli
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const builtIn = SPLIT_TEMPLATES.map(t => ({ id: t.id, label: t.label, layout: t.layout, baseTemplateId: t.id, previewUrl: t.assetPath, ...t }));
+  const builtIn = SPLIT_TEMPLATES.map(t => ({ ...t, baseTemplateId: t.id, previewUrl: t.assetPath }));
   const custom = listCustomSplitTemplates().map(t => {
     const base = getSplitTemplate(t.baseTemplateId);
     return { ...base, id: t.id, label: t.label, baseTemplateId: t.baseTemplateId, previewUrl: `/api/split-templates/${t.id}/file`, assetPath: `/api/split-templates/${t.id}/file` };

@@ -71,7 +71,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   }
 ];
 
-export const DEFAULT_SPLIT_TEMPLATE_ID: SplitTemplateId = SPLIT_TEMPLATES[0].id;
+export const DEFAULT_SPLIT_TEMPLATE_ID: SplitTemplateId = "office-modern";
 
 export function isSplitTemplateId(value: unknown): value is SplitTemplateId {
   return typeof value === "string" && SPLIT_TEMPLATES.some((t) => t.id === value);
