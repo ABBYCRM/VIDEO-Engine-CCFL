@@ -1,4 +1,5 @@
 import { campaignTemplates, type CampaignCategory } from "@/lib/prompts";
+import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { getA2eModel } from "@/lib/a2e-model-catalog";
 
