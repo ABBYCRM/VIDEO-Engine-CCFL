@@ -17,6 +17,7 @@ import {
   resolveCampaignAvatarId
 } from "@/lib/upper-videos";
 import {
+  clampSplitDuration,
   clampSplitPercent,
   ensureSplitSurfaceColumns,
   isProviderId,
@@ -35,9 +36,13 @@ let started=false;
 let running=false;
 const queuedSlotIds=new Set<string>();
 
-const SLOT_SELECT=`sp.id,sp.title,sp.caption,sp.content_type,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.scheduled_at,
-           c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,
-           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.split_template,c.upper_video_ids`;
+const SLOT_SELECT=`sp.id,sp.title,sp.caption,sp.content_type,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.scheduled_at,sp.category as slot_category,
+           c.name as campaign_name,c.category as campaign_category,c.mission,c.avatar_id,c.video_provider,c.video_model,
+           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.split_template,c.split_duration_seconds,c.upper_video_ids`;
+
+function slotCategory(row:any){
+  return String(row.slot_category || row.campaign_category || "ugc");
+}
 
 export function normalizeCategory(value:string):CampaignCategory{
   if(value==="vehicle_accident")return "car_accident";
@@ -111,7 +116,7 @@ function campaignSurface(row:any){
 
 function slotPublicCaption(row:any, plan?:{hook?:string;caption?:string}){
   return publicCaptionForSlot({
-    category: normalizeCategory(String(row.category||"ugc")),
+    category: normalizeCategory(slotCategory(row)),
     title: row.title,
     hook: plan?.hook,
     caption: plan?.caption || row.caption,
@@ -128,16 +133,16 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
   const job=await createJob({
     source:"admin",
     provider:chosen,
-    category:normalizeCategory(String(row.category||"ugc")),
+    category:normalizeCategory(slotCategory(row)),
     mission:variation,
     subject:extra?.subject,
     script:extra?.script,
     aspectRatio:"9:16",
     resolution:"720p",
-    durationSeconds:8,
-    // Kling 3.0: A2E's most photorealistic human-motion model, used for both
-    // image-to-video (avatarRef present) and text-to-video.
-    model: extra?.model || (chosen === "a2e" ? "kling3" : undefined),
+    durationSeconds:clampSplitDuration(row.split_duration_seconds),
+    // Wan 3.0: A2E's model with the widest duration range (3-30s), needed
+    // since split-screen lanes now run 15-30s instead of a rushed 8s clip.
+    model: extra?.model || (chosen === "a2e" ? laneModel("a2e") : undefined),
     avatarId: avatarRef?.avatarId || resolveCampaignAvatarId(row.avatar_id) || undefined,
     imageBase64: avatarRef?.imageBase64,
     imageMimeType: avatarRef?.imageMimeType
@@ -158,6 +163,7 @@ async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string},
     lowerPath,
     splitPercent:clampSplitPercent(row.split_percent),
     templateId:row.split_template,
+    durationSeconds:clampSplitDuration(row.split_duration_seconds),
     title:row.title,
     caption,
     upperSource:stockId || upper.id,
@@ -175,13 +181,14 @@ async function startSplitLanes(row:any, opts?:{upperProvider?:ProviderId;lowerPr
   const stockId=stockUpperId(row);
   const avatarRef=await loadAvatarReference(row.avatar_id);
   const avatarName=avatarRef?.avatar?.name||null;
+  const duration=clampSplitDuration(row.split_duration_seconds);
   const plan=await planSplitScreen({
-    category:normalizeCategory(String(row.category||"ugc")),
+    category:normalizeCategory(slotCategory(row)),
     relationship:stockId?"context_commentary":surface.relationship,
     upperProvider,
     lowerProvider,
-    upperSeconds:8,
-    lowerSeconds:8,
+    upperSeconds:duration,
+    lowerSeconds:duration,
     lowerAvatarName:avatarName,
     mission:String(row.mission||""),
     title:String(row.title||""),
@@ -378,8 +385,8 @@ async function generateNext(slotId?:string){
 
 export function rewriteUnpublishedCaptions(campaignId?:string){
   const rows = campaignId
-    ? db.prepare(`SELECT sp.id,sp.title,sp.caption,c.category,c.mission FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.campaign_id=? AND sp.status!='published'`).all(campaignId)
-    : db.prepare(`SELECT sp.id,sp.title,sp.caption,c.category,c.mission FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.status!='published'`).all();
+    ? db.prepare(`SELECT sp.id,sp.title,sp.caption,sp.category as slot_category,c.category as campaign_category,c.mission FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.campaign_id=? AND sp.status!='published'`).all(campaignId)
+    : db.prepare(`SELECT sp.id,sp.title,sp.caption,sp.category as slot_category,c.category as campaign_category,c.mission FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id WHERE sp.status!='published'`).all();
   let changed=0;
   for(const row of rows as any[]){
     const next=slotPublicCaption(row);

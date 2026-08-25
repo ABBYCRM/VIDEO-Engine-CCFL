@@ -15,6 +15,7 @@ export type UpperProviderId = Exclude<ProviderId, "hedra">;
 
 export const DEFAULT_SPLIT_PERCENT = 35;
 export const DEFAULT_SPLIT_RELATIONSHIP: SplitRelationship = "anchor_field";
+export const DEFAULT_SPLIT_DURATION_SECONDS = 20;
 
 function ensureCampaignColumn(name: string, ddl: string) {
   try {
@@ -30,12 +31,21 @@ export function ensureSplitSurfaceColumns() {
   ensureCampaignColumn("split_percent", "split_percent INTEGER NOT NULL DEFAULT 35");
   ensureCampaignColumn("split_relationship", "split_relationship TEXT NOT NULL DEFAULT 'anchor_field'");
   ensureCampaignColumn("split_template", `split_template TEXT NOT NULL DEFAULT '${DEFAULT_SPLIT_TEMPLATE_ID}'`);
+  ensureCampaignColumn("split_duration_seconds", `split_duration_seconds INTEGER NOT NULL DEFAULT ${DEFAULT_SPLIT_DURATION_SECONDS}`);
 }
 
 export function clampSplitPercent(value: unknown) {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_SPLIT_PERCENT;
   return Math.max(25, Math.min(45, Math.round(n)));
+}
+
+// Split-screen lanes should never be rushed: 15-30 seconds gives the
+// avatar/context enough time to actually deliver the message.
+export function clampSplitDuration(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_SPLIT_DURATION_SECONDS;
+  return Math.max(15, Math.min(30, Math.round(n)));
 }
 
 export function normalizeSplitRelationship(value: unknown): SplitRelationship {
@@ -80,10 +90,11 @@ export function laneModel(provider: ProviderId, requested?: string | null) {
   if (requested && requested.trim()) return requested.trim();
   if (provider === "grok") return "grok-imagine-video-1.5";
   if (provider === "veo") return "veo-3.1-generate-preview";
-  // Kling 3.0: A2E's most photorealistic human-motion model. Takes the
-  // avatar's reference photo as an image-to-video source (preserving
-  // identity) and always generates native audio at this version.
-  if (provider === "a2e") return "kling3";
+  // Wan 3.0: A2E's model with the widest duration range (3-30s), needed
+  // since split-screen lanes now run 15-30s instead of a rushed 8s clip.
+  // Takes the avatar's reference photo as an image-to-video source
+  // (preserving identity).
+  if (provider === "a2e") return "wan3.0-video";
   return undefined;
 }
 
@@ -91,6 +102,7 @@ export type SplitSurface = {
   splitPercent: number;
   splitRelationship: SplitRelationship;
   splitTemplate: SplitTemplateId;
+  splitDurationSeconds: number;
   videoProvider: ProviderId;
   videoModel: string | null;
   upperProvider: UpperProviderId;
@@ -104,6 +116,7 @@ export function parseSplitSurface(body: any, fallbackLower: string): SplitSurfac
     splitPercent: clampSplitPercent(body.splitPercent),
     splitRelationship: normalizeSplitRelationship(body.splitRelationship),
     splitTemplate: isSplitTemplateId(body.splitTemplate) ? body.splitTemplate : DEFAULT_SPLIT_TEMPLATE_ID,
+    splitDurationSeconds: clampSplitDuration(body.splitDurationSeconds),
     videoProvider,
     videoModel: body.videoModel ? String(body.videoModel).slice(0, 120) : null,
     upperProvider,

@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { savePersistentLibraryAsset } from "@/lib/persistent-library";
-import { clampSplitPercent } from "@/lib/split-surface";
+import { clampSplitDuration, clampSplitPercent } from "@/lib/split-surface";
 import { getSplitTemplate, type SplitTemplateId } from "@/lib/split-templates";
 
 db.exec(`CREATE TABLE IF NOT EXISTS generated_compositions(id TEXT PRIMARY KEY,title TEXT NOT NULL,file_path TEXT NOT NULL,mime_type TEXT NOT NULL,upper_source TEXT,lower_source TEXT,split_percent INTEGER NOT NULL DEFAULT 33,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);CREATE INDEX IF NOT EXISTS idx_generated_compositions_created_at ON generated_compositions(created_at);`);
@@ -46,24 +46,41 @@ export async function composeSplitScreenFile(input: {
   durationSeconds?: number;
 }) {
   const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
-  const duration = 8;
+  const duration = clampSplitDuration(input.durationSeconds);
   const template = getSplitTemplate(input.templateId);
-  const box = template.avatarBox;
   const templatePath = path.resolve(process.cwd(), "public", template.assetPath.replace(/^\//, ""));
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
-  // The upper AI video is cover-cropped (top-anchored, so a portrait
-  // subject's head is never cut) to fill the whole canvas as the
-  // background layer. The avatar's video is separately cover-cropped
-  // (also top-anchored) to exactly fill the template's avatar box, then
-  // composited into that hole. The selected branded template — permanent
-  // office backdrop + gold frame, opaque everywhere except the avatar box
-  // and the area above the backdrop — goes on top of both.
-  const filter = [
-    `[0:v]scale=${template.canvasW}:${template.canvasH}:force_original_aspect_ratio=increase,crop=${template.canvasW}:${template.canvasH}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[bg]`,
-    `[1:v]scale=${box.w}:${box.h}:force_original_aspect_ratio=increase,crop=${box.w}:${box.h}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[av]`,
-    `[bg][av]overlay=x=${box.x}:y=${box.y}[stacked]`,
-    `[stacked][2:v]overlay=x=0:y=0:format=auto[v]`
-  ].join(";");
+  // cover-crop a lane's video (top-anchored, so a portrait subject's head
+  // is never cut) to exactly fill a box without stretching it.
+  const coverCrop = (streamIn: string, box: { w: number; h: number }, streamOut: string) =>
+    `[${streamIn}]scale=${box.w}:${box.h}:force_original_aspect_ratio=increase,crop=${box.w}:${box.h}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[${streamOut}]`;
+  let filter: string;
+  if (template.layout === "avatar-box") {
+    // The upper AI video cover-crops the whole canvas as the permanent
+    // background layer. The avatar's own video (with its own generated
+    // background) cover-crops separately into the template's avatar box.
+    // The selected branded template — permanent office backdrop + gold
+    // frame, opaque everywhere except the avatar box and the area above
+    // the backdrop — goes on top of both.
+    const box = template.avatarBox;
+    filter = [
+      coverCrop("0:v", { w: template.canvasW, h: template.canvasH }, "bg"),
+      coverCrop("1:v", box, "av"),
+      `[bg][av]overlay=x=${box.x}:y=${box.y}[stacked]`,
+      `[stacked][2:v]overlay=x=0:y=0:format=auto[v]`
+    ].join(";");
+  } else {
+    // Dual-box: the upper and lower lanes each cover-crop into their own
+    // framed box over the static template artwork (no lane fills the
+    // whole canvas).
+    const { upperBox, lowerBox } = template;
+    filter = [
+      coverCrop("0:v", upperBox, "uv"),
+      coverCrop("1:v", lowerBox, "lv"),
+      `[2:v][uv]overlay=x=${upperBox.x}:y=${upperBox.y}[stacked]`,
+      `[stacked][lv]overlay=x=${lowerBox.x}:y=${lowerBox.y}:format=auto[v]`
+    ].join(";");
+  }
   const base = [
     "-y",
     "-stream_loop", "-1", "-t", String(duration), "-i", input.upperPath,
@@ -126,6 +143,7 @@ export async function composeSplitSources(input: {
   lowerPath: string;
   splitPercent: number;
   templateId?: SplitTemplateId | string | null;
+  durationSeconds?: number;
   title: string;
   caption?: string;
   upperSource?: string;
@@ -137,6 +155,7 @@ export async function composeSplitSources(input: {
     lowerPath: input.lowerPath,
     splitPercent: input.splitPercent,
     templateId: input.templateId,
+    durationSeconds: input.durationSeconds,
     outputPath: tmpPath
   });
   const bytes = await fs.readFile(tmpPath);
@@ -158,6 +177,7 @@ export async function composeSplitJobs(input: {
   lowerPath: string;
   splitPercent: number;
   templateId?: SplitTemplateId | string | null;
+  durationSeconds?: number;
   title: string;
   caption?: string;
   upperJobId: string;
@@ -168,6 +188,7 @@ export async function composeSplitJobs(input: {
     lowerPath: input.lowerPath,
     splitPercent: input.splitPercent,
     templateId: input.templateId,
+    durationSeconds: input.durationSeconds,
     title: input.title,
     caption: input.caption,
     upperSource: input.upperJobId,
