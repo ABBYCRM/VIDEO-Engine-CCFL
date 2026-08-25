@@ -9,6 +9,7 @@ import { saveGeneratedImage } from "@/lib/media-library";
 import { createJob, refreshJob } from "@/lib/jobs";
 import { ensureAssetCalendarPost, createPlanningSlots } from "@/lib/calendar-assets";
 import { runCampaignAutopilotOnce } from "@/lib/campaign-autopilot";
+import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
 
 const TABS = ["car_accident","rideshare","trucking","slip_fall","ugc"] as const;
 type Tab = (typeof TABS)[number];
@@ -53,8 +54,15 @@ export async function POST(req: Request) {
     const durationSeconds = Number.isFinite(Number(body.durationSeconds)) && [2,3,5,6,8,10,12,15,20,25,30].includes(Number(body.durationSeconds)) ? Number(body.durationSeconds) : defaultDuration;
     // Language support: 'en', 'es', or 'mix' (English + Spanish in same video)
     const language = ["en","es","mix"].includes(body.language) ? body.language : "mix";
-    // Visual template: "auto" lets AI pick the best fit based on category & avatar
-    const templateId = ["auto","office-modern","office-warm","digital-grid"].includes(body.templateId) ? body.templateId : "auto";
+    // Visual template: auto lets AI choose from every available visual template.
+    const requestedTemplateId = typeof body.templateId === "string" ? body.templateId : "auto";
+    const templateId: VisualTemplateId = visualTemplates.some((template) => template.id === requestedTemplateId)
+      ? requestedTemplateId as VisualTemplateId
+      : "auto";
+    const selectedTemplate = visualTemplates.find((template) => template.id === templateId) || visualTemplates[0];
+    const templateDirective = "promptHint" in selectedTemplate
+      ? `VISUAL TEMPLATE: ${selectedTemplate.label}. ${selectedTemplate.promptHint}`
+      : "VISUAL TEMPLATE: AUTO — choose the most effective environment and framing for the campaign category, spokesperson, and creative brief.";
     const userPrompt = body.prompt ? String(body.prompt).trim() : "";
 
     const tabMeta = PROMPTS[tab];
@@ -70,6 +78,7 @@ export async function POST(req: Request) {
 
     const finalPrompt = [
       userPrompt,
+      templateDirective,
       `Category focus: ${tabMeta.focus}`,
       avatar ? `Spokesperson: ${avatar.name} (${avatarGender}). Wardrobe: ${wardrobe}.` : `Spokesperson gender: ${avatarGender}. Wardrobe: ${wardrobe}.`,
       langDirective,
@@ -80,6 +89,8 @@ export async function POST(req: Request) {
       tab,
       avatarId,
       avatarGender,
+      templateId,
+      templateLabel: selectedTemplate.label,
       model,
       horizonDays,
       outputMode,
@@ -215,11 +226,12 @@ export async function GET() {
       { id: "grok", label: "xAI · Grok Imagine Video", defaultModel: "grok-imagine-video-1.5", defaultDuration: 8 }
     ],
     durations: [2, 3, 5, 6, 8, 10, 12, 15, 20, 25, 30],
-    templates: [
-      { id: "auto", label: "Auto (AI picks best fit)" },
-      { id: "office-modern", label: "Office — Modern" },
-      { id: "office-warm", label: "Office — Warm" },
-      { id: "digital-grid", label: "Digital Grid" }
-    ]
+    templates: visualTemplates.map((template) => ({
+      id: template.id,
+      label: template.label,
+      description: template.description,
+      image: template.image,
+      isAuto: template.id === "auto"
+    }))
   });
 }
