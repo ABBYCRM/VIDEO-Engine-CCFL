@@ -193,7 +193,7 @@ export async function POST(req: Request) {
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Return the list of avatars for the bottom picker
-  const rows = db.prepare("SELECT id, name, gender, archetype, status, reference_image FROM avatars WHERE status != 'archived' ORDER BY name").all() as any[];
+  const rows = db.prepare("SELECT id, name, gender, archetype, status, reference_image_path FROM avatars WHERE status != 'archived' ORDER BY name").all() as any[];
   return NextResponse.json({
     tabs: TABS,
     prompts: PROMPTS,
@@ -202,7 +202,7 @@ export async function GET() {
       name: r.name,
       gender: r.gender,
       archetype: r.archetype,
-      hasReference: Boolean(r.reference_image)
+      hasReference: Boolean(r.reference_image_path)
     })),
     horizonOptions: [3, 7, 14, 30],
     outputModes: ["image", "video", "auto_mix"],
