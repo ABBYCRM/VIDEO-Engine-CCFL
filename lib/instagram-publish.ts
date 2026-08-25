@@ -105,7 +105,7 @@ export async function publishInstagram(input: {
   const containerArgs: Record<string, unknown> = {
     ig_user_id: igUserId,
     caption,
-    content_type: isStory ? "story" : isVideo ? "reel" : "photo"
+    content_type: isStory ? (isVideo ? "video" : "photo") : isVideo ? "reel" : "photo"
   };
   if (isVideo) {
     containerArgs.video_url = mediaUrl;
