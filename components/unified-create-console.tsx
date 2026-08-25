@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
 
 type Tab = "car_accident" | "rideshare" | "trucking" | "slip_fall" | "ugc";
 const TABS: { id: Tab; label: string; emoji: string; description: string }[] = [
@@ -50,7 +51,7 @@ export function UnifiedCreateConsole() {
   const [provider, setProvider] = useState("a2e");
   const [duration, setDuration] = useState(15); // A2E Seedance 15-30s; Grok Imagine 8s
   const [language, setLanguage] = useState("mix"); // en | es | mix
-  const [templateId, setTemplateId] = useState("auto"); // auto | office-modern | office-warm | digital-grid
+  const [templateId, setTemplateId] = useState<VisualTemplateId>("auto");
 
   const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [busy, setBusy] = useState(false);
@@ -242,15 +243,7 @@ export function UnifiedCreateConsole() {
                     <option value="es">Spanish only (Español)</option>
                   </select>
                 </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium text-slate-700">Visual template</span>
-                  <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-                    <option value="auto">Auto (AI picks the best fit)</option>
-                    <option value="office-modern">Modern office · blue glass frame</option>
-                    <option value="office-warm">Warm office · bookshelf & skyline</option>
-                    <option value="digital-grid">Digital grid · dual frame (top + bottom)</option>
-                  </select>
-                </label>
+
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium text-slate-700">Output mix</span>
                   <select value={outputMode} onChange={e => setOutputMode(e.target.value as any)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
@@ -267,6 +260,34 @@ export function UnifiedCreateConsole() {
                   </select>
                 </label>
               </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/40 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Visual template</div>
+                  <p className="mt-0.5 text-xs text-slate-500">Choose a branded setting, or let AI pick the best fit for this brief.</p>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-violet-700">{templateId === "auto" ? "AI picks for you" : "Fixed selection"}</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visualTemplates.map(template => {
+                  const selected = templateId === template.id;
+                  return (
+                    <button key={template.id} type="button" onClick={() => setTemplateId(template.id)} className={cn("overflow-hidden rounded-xl border bg-white text-left transition", selected ? "border-violet-500 ring-2 ring-violet-200" : "border-slate-200 hover:border-violet-300")}>
+                      <div className="relative h-24 overflow-hidden bg-slate-900">
+                        {template.image ? <img src={template.image} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center gap-2 bg-gradient-to-br from-violet-700 via-indigo-700 to-slate-900 text-white"><Sparkles size={24} /><span className="text-xs font-semibold">AI SELECT</span></div>}
+                        {selected && <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-violet-600 text-white"><Check size={14} /></span>}
+                      </div>
+                      <div className="p-3">
+                        <div className="text-sm font-semibold text-slate-900">{template.label}</div>
+                        <div className="mt-1 text-[11px] leading-snug text-slate-500">{template.description}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {templateId === "auto" && <p className="mt-3 text-xs text-violet-700">Auto uses the campaign category, avatar, and creative brief to choose the most suitable visual environment.</p>}
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
