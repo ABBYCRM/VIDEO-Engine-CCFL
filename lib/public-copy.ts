@@ -1,9 +1,11 @@
+import { BRAND_CAPTION_CTA, ensureBrandContactInCaption } from "@/lib/brand-contact";
+
 const OPERATOR =
   /ONE CONTINUOUS SHOT|Calendar variation|Campaign mission|professional wardrobe|newsroom credibility|8-second attention|attention-grabbing hook|Comprehensive campaign for|Fill Calendar|visual direction|wardrobe standard|canonical spokesperson|Generate a campaign|Photorealistic vertical|Subject\/reference objective|operator language|AI language|Raise awareness about|educate, build trust|drive consultation/i;
 
 export type PublicCopy = { hook: string; caption: string };
 
-const CTA = "CaseClosedFL.com connects you with the best attorneys in Florida — free consultation, no pressure.";
+const CTA = BRAND_CAPTION_CTA;
 
 const PACKAGES: Record<string, PublicCopy[]> = {
   car_accident: [
@@ -195,5 +197,7 @@ export function publicCaptionForSlot(input: {
   if (!/not legal advice/i.test(caption)) {
     caption = `${caption.trim()}\n\nGeneral information only—not legal advice.`;
   }
+  caption = ensureBrandContactInCaption(caption);
+  if (caption.length > 2200) caption = ensureBrandContactInCaption(caption.slice(0, 1900)) + "\n\nGeneral information only—not legal advice.";
   return { hook: hook.slice(0, 120), caption: caption.slice(0, 2200) };
 }

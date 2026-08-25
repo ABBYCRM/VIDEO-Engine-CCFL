@@ -10,6 +10,8 @@ import { createJob, refreshJob } from "@/lib/jobs";
 import { ensureAssetCalendarPost, createPlanningSlots } from "@/lib/calendar-assets";
 import { runCampaignAutopilotOnce, startCampaignAutopilotLoop } from "@/lib/campaign-autopilot";
 import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
+import { mandatoryVideoContactDirective } from "@/lib/brand-contact";
+import { publicCaptionForSlot } from "@/lib/public-copy";
 
 const TABS = ["car_accident","rideshare","trucking","slip_fall","ugc"] as const;
 type Tab = (typeof TABS)[number];
@@ -47,15 +49,16 @@ function pickAutomationAvatarId(requestedId: string | null) {
   return rows[0]?.id || null;
 }
 
-function automationSchedule(index: number) {
-  const now = new Date();
-  if (index === 0) return new Date(now.getTime() + 5 * 60_000).toISOString();
-  const next = new Date(now.getTime() + index * 24 * 60 * 60_000);
+function automationSchedule(index: number, horizonDays: number) {
+  const total = AUTOMATION_CATEGORIES.length;
+  const dayOffset = total <= 1 ? 1 : 1 + Math.round(index * (horizonDays - 1) / (total - 1));
+  const next = new Date();
+  next.setDate(next.getDate() + dayOffset);
   next.setHours(10, 0, 0, 0);
   return next.toISOString();
 }
 
-function queueInstagramCategoryAutomation(input: { requestedAvatarId: string | null; templateId: VisualTemplateId; prompt: string; language: string; provider: string; model: string; autoPost: boolean; }) {
+function queueInstagramCategoryAutomation(input: { requestedAvatarId: string | null; templateId: VisualTemplateId; prompt: string; language: string; provider: string; model: string; autoPost: boolean; horizonDays: number; }) {
   const avatarId = pickAutomationAvatarId(input.requestedAvatarId);
   const avatar = avatarId ? getAvatar(avatarId) : null;
   const template = visualTemplates.find((item) => item.id === input.templateId) || visualTemplates[0];
@@ -63,11 +66,11 @@ function queueInstagramCategoryAutomation(input: { requestedAvatarId: string | n
   const languageDirective = input.language === "es" ? "LANGUAGE: All dialogue and on-screen text must be Spanish." : input.language === "mix" ? "LANGUAGE: Use natural bilingual English and Spanish." : "LANGUAGE: All dialogue and on-screen text must be English.";
   const slots: Array<{ id: string; category: AutomationCategory; title: string; scheduledAt: string }> = [];
   for (const [index, category] of AUTOMATION_CATEGORIES.entries()) {
-    const campaignId = crypto.randomUUID(); const slotId = crypto.randomUUID(); const label = AUTOMATION_LABELS[category]; const title = `${label} · Instagram automation`; const scheduledAt = automationSchedule(index);
-    const mission = [input.prompt ? `Creative brief: ${input.prompt}` : "Create an educational, trustworthy personal-injury awareness post.", `Category focus: ${PROMPTS[category].focus}`, templateDirective, avatar ? `Spokesperson: ${avatar.name}. Wardrobe: ${avatar.wardrobeStandard}.` : "Use a credible adult spokesperson.", languageDirective, "Create one continuous vertical 9:16 video suitable for a Reel and Story. No gore, no guarantees, no legal advice."].join("\n");
-    const caption = `${label}: practical information for Florida injury victims. General information only—not legal advice. #CaseClosedFL`;
-    db.prepare(`INSERT INTO campaigns(id,name,category,mission,platform,avatar_id,background_id,planning_horizon_days,content_type,output_mode,video_provider,video_model,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(campaignId, title, category, mission, "instagram", avatarId, template.id, 4, "cinematic", "video", input.provider, input.model, "active");
-    db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,campaign_id,planning_horizon_days,generation_status,category,media_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(slotId, title, "instagram", scheduledAt, input.autoPost ? "approved" : "pending", input.autoPost ? 1 : 0, caption, "cinematic", campaignId, 4, "pending", category, "video/mp4");
+    const campaignId = crypto.randomUUID(); const slotId = crypto.randomUUID(); const label = AUTOMATION_LABELS[category]; const title = `${label} · Instagram automation`; const scheduledAt = automationSchedule(index, input.horizonDays);
+    const mission = [input.prompt ? `Creative brief: ${input.prompt}` : "Create an educational, trustworthy personal-injury awareness post.", `Category focus: ${PROMPTS[category].focus}`, templateDirective, avatar ? `Spokesperson: ${avatar.name}. Wardrobe: ${avatar.wardrobeStandard}.` : "Use a credible adult spokesperson.", languageDirective, mandatoryVideoContactDirective(), "Create one continuous vertical 9:16 video suitable for a Reel and Story. No gore, no guarantees, no legal advice."].join("\n");
+    const caption = publicCaptionForSlot({ category, title }).caption;
+    db.prepare(`INSERT INTO campaigns(id,name,category,mission,platform,avatar_id,background_id,planning_horizon_days,content_type,output_mode,video_provider,video_model,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(campaignId, title, category, mission, "instagram", avatarId, template.id, input.horizonDays, "cinematic", "video", input.provider, input.model, "active");
+    db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,campaign_id,planning_horizon_days,generation_status,category,media_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(slotId, title, "instagram", scheduledAt, input.autoPost ? "approved" : "pending", input.autoPost ? 1 : 0, caption, "cinematic", campaignId, input.horizonDays, "pending", category, "video/mp4");
     slots.push({ id: slotId, category, title, scheduledAt });
   }
   startCampaignAutopilotLoop(); setTimeout(() => { void runCampaignAutopilotOnce(); }, 0);
@@ -81,7 +84,7 @@ export async function POST(req: Request) {
     const tab: Tab = TABS.includes(body.tab) ? body.tab : "ugc";
     const avatarId: string | null = body.avatarId ? String(body.avatarId) : null;
     const avatarGender: "male" | "female" = body.avatarGender === "female" ? "female" : "male";
-    const horizonDays = [3, 7, 14, 30].includes(Number(body.horizonDays)) ? Number(body.horizonDays) : 7;
+    const horizonDays = [3, 7, 14, 30, 60].includes(Number(body.horizonDays)) ? Number(body.horizonDays) : 7;
     const outputMode: "image" | "video" | "auto_mix" = ["image","video","auto_mix"].includes(body.outputMode) ? body.outputMode : "auto_mix";
     const approvalMode: "manual" | "auto" = body.approvalMode === "auto" ? "auto" : "auto"; // default auto
     const model = body.model ? String(body.model) : "sora2"; // default A2E Sora 2 Pro for hyper realism
@@ -101,7 +104,7 @@ export async function POST(req: Request) {
       ? `VISUAL TEMPLATE: ${selectedTemplate.label}. ${selectedTemplate.promptHint}`
       : "VISUAL TEMPLATE: AUTO — choose the most effective environment and framing for the campaign category, spokesperson, and creative brief.";
     if (body.automationMode === "category-run") {
-      const automation = queueInstagramCategoryAutomation({ requestedAvatarId: avatarId, templateId, prompt: body.prompt ? String(body.prompt).trim() : "", language, provider: providerChoice, model, autoPost: approvalMode === "auto" });
+      const automation = queueInstagramCategoryAutomation({ requestedAvatarId: avatarId, templateId, prompt: body.prompt ? String(body.prompt).trim() : "", language, provider: providerChoice, model, autoPost: approvalMode === "auto", horizonDays });
       return NextResponse.json({ automation: true, message: "Queued one calendar post for each core category. Each ready video will publish as one Reel and one Story.", ...automation }, { status: 201 });
     }
     const userPrompt = body.prompt ? String(body.prompt).trim() : "";
@@ -123,6 +126,7 @@ export async function POST(req: Request) {
       `Category focus: ${tabMeta.focus}`,
       avatar ? `Spokesperson: ${avatar.name} (${avatarGender}). Wardrobe: ${wardrobe}.` : `Spokesperson gender: ${avatarGender}. Wardrobe: ${wardrobe}.`,
       langDirective,
+      mandatoryVideoContactDirective(),
       "Hyper-realistic documentary cinematography, 8K detail, cinematic lighting, broadcast news quality."
     ].filter(Boolean).join("\n");
 
@@ -256,7 +260,7 @@ export async function GET() {
       archetype: r.archetype,
       hasReference: Boolean(r.reference_image_path)
     })),
-    horizonOptions: [3, 7, 14, 30],
+    horizonOptions: [3, 7, 14, 30, 60],
     outputModes: ["image", "video", "auto_mix"],
     approvalModes: ["auto", "manual"],
     defaultModel: "sora2",

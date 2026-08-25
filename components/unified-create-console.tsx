@@ -123,7 +123,7 @@ export function UnifiedCreateConsole() {
   async function runCategoryAutomation() {
     setError(null); setResult(null); setBusy(true); setPollJobId(null); setJobStatus(null);
     try {
-      const r = await fetch("/api/unified/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, prompt, avatarId, avatarGender, approvalMode, model, provider, language, templateId, automationMode: "category-run" }) });
+      const r = await fetch("/api/unified/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, approvalMode, model, provider, language, templateId, automationMode: "category-run" }) });
       const d = await r.json(); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); setResult(d);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -241,6 +241,7 @@ export function UnifiedCreateConsole() {
                     <option value={7}>7 days</option>
                     <option value={14}>14 days</option>
                     <option value={30}>30 days</option>
+                    <option value={60}>60 days</option>
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">

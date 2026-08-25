@@ -43,7 +43,7 @@ export function ensureAssetCalendarPost(input:{
 }
 
 export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string;contentType:string;network?:string;caption?:string;campaignId?:string|null;siteId?:string|null;approvalMode?:"manual"|"auto";cadence?:"daily"|"3-week"|"weekly"|"manual";outputMode?:"video"|"image"|"auto_mix";categories?:string[]}){
-  const horizon=[3,7,14,30].includes(input.horizonDays)?input.horizonDays:7; const cadence=input.cadence||"daily"; const days:number[]=[];
+  const horizon=[3,7,14,30,60].includes(input.horizonDays)?input.horizonDays:7; const cadence=input.cadence||"daily"; const days:number[]=[];
   for(let i=1;i<=horizon;i++){const dow=new Date(Date.now()+i*86400000).getDay();if(cadence==="daily"||(cadence==="3-week"&&[1,3,5].includes(dow))||(cadence==="weekly"&&i===1))days.push(i);}
   const outputMode=input.outputMode||"video";
   const categories=(input.categories||[]).filter(Boolean);

@@ -326,12 +326,15 @@ async function generateSplitSlot(row:any){
 }
 
 async function generateNext(slotId?:string){
+  // Keep a 60-day schedule from starting every video immediately.
+  const generationCutoff = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const statement=db.prepare(`
     SELECT ${SLOT_SELECT}
     FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
     WHERE sp.campaign_id IS NOT NULL
       AND sp.media_url IS NULL
       AND sp.status!='published'
+      AND sp.scheduled_at <= ?
       AND (
         (sp.generation_status='pending' AND sp.video_job_id IS NULL AND sp.upper_job_id IS NULL AND sp.lower_job_id IS NULL)
         OR (sp.generation_status='failed' AND (
@@ -343,7 +346,7 @@ async function generateNext(slotId?:string){
     ORDER BY sp.scheduled_at ASC,sp.created_at ASC
     LIMIT 1
   `);
-  const row=(slotId?statement.get(slotId):statement.get()) as any;
+  const row=(slotId?statement.get(generationCutoff,slotId):statement.get(generationCutoff)) as any;
   if(!row)return false;
   if(row.content_type==="image"){
     try{
