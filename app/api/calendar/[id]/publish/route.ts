@@ -14,7 +14,9 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
     if(post.network==="instagram"){
       if(post.generation_status&&post.generation_status!=="ready")return NextResponse.json({error:`Media is ${post.generation_status}; wait for generation to finish before publishing`},{status:409});
       if(!post.video_job_id&&!post.media_url)return NextResponse.json({error:"Attach a generated image or video before publishing"},{status:409});
-      result=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption});
+      const reel=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption,postType:"feed"});
+      const story=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption,postType:"story"});
+      result={reel,story};
     }else if(post.network==="website"){
       if(!post.site_id)return NextResponse.json({error:"Website Calendar items must be linked to a Site before publishing"},{status:409});
       if(post.generation_status&&post.generation_status!=="ready")return NextResponse.json({error:`Blog draft is ${post.generation_status}; wait for generation to finish before publishing`},{status:409});
