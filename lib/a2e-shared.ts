@@ -10,6 +10,15 @@ export function a2eHeaders(json = true): Record<string, string> {
   };
 }
 
+// A2E's API has no documented SLA and has been observed to hang without
+// responding or erroring, which — left unbounded — can stall the
+// campaign-autopilot loop indefinitely. Every A2E network call must go
+// through this so a slow/unresponsive upstream fails fast instead of
+// hanging the process.
+export function a2eFetch(input: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<Response> {
+  return fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+}
+
 function extensionForMime(mime: string) {
   const normalized = String(mime || "").toLowerCase().split(";")[0].trim();
   const map: Record<string, string> = {
@@ -32,23 +41,23 @@ function extensionForMime(mime: string) {
 export async function uploadA2eBytes(bytes: Buffer, mime: string, prefix = "video-engine"): Promise<string> {
   if (!bytes.length) throw new Error("A2E upload is empty");
   const key = `${prefix}/${crypto.randomUUID()}.${extensionForMime(mime)}`;
-  const presign = await fetch(`${A2E_BASE}/r2/upload-presigned-url`, {
+  const presign = await a2eFetch(`${A2E_BASE}/r2/upload-presigned-url`, {
     method: "POST",
     headers: a2eHeaders(),
     body: JSON.stringify({ key, contentType: mime, contentLength: bytes.length, expiresIn: 300 }),
     cache: "no-store"
-  });
+  }, 20_000);
   if (!presign.ok) throw new Error(`A2E upload URL HTTP ${presign.status}: ${(await presign.text()).slice(0, 300)}`);
   const payload = await presign.json() as { code?: number; msg?: string; err_message?: string; data?: { uploadUrl?: string; cdnUrl?: string } };
   if (payload.code && payload.code !== 0) throw new Error(`A2E upload URL failed: ${payload.err_message || payload.msg || payload.code}`);
   const uploadUrl = payload.data?.uploadUrl;
   const cdnUrl = payload.data?.cdnUrl;
   if (!uploadUrl || !cdnUrl) throw new Error("A2E upload endpoint did not return uploadUrl and cdnUrl");
-  const put = await fetch(uploadUrl, {
+  const put = await a2eFetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": mime, "Content-Length": String(bytes.length) },
     body: new Uint8Array(bytes)
-  });
+  }, 60_000);
   if (!put.ok) throw new Error(`A2E media upload HTTP ${put.status}: ${(await put.text()).slice(0, 200)}`);
   return cdnUrl;
 }
