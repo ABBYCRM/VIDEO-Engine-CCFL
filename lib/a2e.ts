@@ -7,6 +7,7 @@ import { getProviderModel } from "@/lib/providers";
 import { getA2eModel, type A2eModelFamily } from "@/lib/a2e-model-catalog";
 import {
   A2E_BASE,
+  a2eFetch,
   a2eHeaders,
   a2eOutputUrl,
   extractA2eId,
@@ -398,12 +399,12 @@ export async function startOneShot(input: A2eStartInput): Promise<string> {
     : null;
   if (def.requiresImage && !imageUrl) throw new Error(`${def.label} requires a reference image.`);
   const { endpoint, body } = familyPayload(input, model, def.family, imageUrl, audioUrl);
-  const res = await fetch(`${A2E_BASE}/${endpoint}/start`, {
+  const res = await a2eFetch(`${A2E_BASE}/${endpoint}/start`, {
     method: "POST",
     headers: a2eHeaders(),
     body: JSON.stringify(body),
     cache: "no-store"
-  });
+  }, 30_000);
   if (!res.ok) throw new Error(`A2E ${def.label} start HTTP ${res.status}: ${(await res.text()).slice(0, 400)}`);
   const json = await res.json();
   if (typeof json === "object" && json && "code" in json && Number((json as { code?: unknown }).code) !== 0) {
@@ -438,18 +439,18 @@ function recordWithId(value: unknown, id: string): unknown | null {
 async function pollPayload(op: StoredOperation) {
   const endpoint = endpointForFamily(op.family);
   if (op.family === "seedance15") {
-    const res = await fetch(`${A2E_BASE}/seedanceVideo/allRecords?pageNum=1&pageSize=100`, { headers: a2eHeaders(), cache: "no-store" });
+    const res = await a2eFetch(`${A2E_BASE}/seedanceVideo/allRecords?pageNum=1&pageSize=100`, { headers: a2eHeaders(), cache: "no-store" }, 20_000);
     if (!res.ok) throw new Error(`A2E Seedance 1.5 poll HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const json = await res.json();
     return recordWithId(json, op.id) || json;
   }
   // Wan 3.0's published schema currently documents the asynchronous start contract
   // but omits the detail path; the deployed family follows the same /{id} record pattern.
-  const res = await fetch(`${A2E_BASE}/${endpoint}/${encodeURIComponent(op.id)}`, {
+  const res = await a2eFetch(`${A2E_BASE}/${endpoint}/${encodeURIComponent(op.id)}`, {
     method: "GET",
     headers: a2eHeaders(),
     cache: "no-store"
-  });
+  }, 20_000);
   if (!res.ok) throw new Error(`A2E ${op.family} poll HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.json();
 }
@@ -470,8 +471,8 @@ export async function pollOneShot(rawOperation: string, jobId: string, resolutio
     videoUrl = `${A2E_BASE}/veoVideo/${encodeURIComponent(op.id)}/${suffix}`;
   }
   if (!videoUrl) throw new Error(`A2E ${op.family} completed without a downloadable video URL.`);
-  let videoRes = await fetch(videoUrl, { headers: a2eHeaders(false), cache: "no-store" });
-  if (!videoRes.ok) videoRes = await fetch(videoUrl, { cache: "no-store" });
+  let videoRes = await a2eFetch(videoUrl, { headers: a2eHeaders(false), cache: "no-store" }, 60_000);
+  if (!videoRes.ok) videoRes = await a2eFetch(videoUrl, { cache: "no-store" }, 60_000);
   if (!videoRes.ok) throw new Error(`Failed to download A2E ${op.family} video: HTTP ${videoRes.status}`);
   const bytes = Buffer.from(await videoRes.arrayBuffer());
   const outDir = path.resolve(process.env.VIDEO_OUTPUT_DIR || "./data/videos");
