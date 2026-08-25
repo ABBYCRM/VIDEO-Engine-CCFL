@@ -37,7 +37,7 @@ const queuedSlotIds=new Set<string>();
 
 const SLOT_SELECT=`sp.id,sp.title,sp.caption,sp.content_type,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.scheduled_at,
            c.name as campaign_name,c.category,c.mission,c.avatar_id,c.video_provider,c.video_model,
-           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.upper_video_ids`;
+           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.split_template,c.upper_video_ids`;
 
 export function normalizeCategory(value:string):CampaignCategory{
   if(value==="vehicle_accident")return "car_accident";
@@ -157,6 +157,7 @@ async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string},
     upperPath,
     lowerPath,
     splitPercent:clampSplitPercent(row.split_percent),
+    templateId:row.split_template,
     title:row.title,
     caption,
     upperSource:stockId || upper.id,

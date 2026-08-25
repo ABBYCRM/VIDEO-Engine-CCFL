@@ -1,6 +1,7 @@
 import { getA2eModel } from "@/lib/a2e-model-catalog";
 import { db } from "@/lib/db";
 import type { ProviderId } from "@/lib/providers";
+import { DEFAULT_SPLIT_TEMPLATE_ID, isSplitTemplateId, type SplitTemplateId } from "@/lib/split-templates";
 
 export const SPLIT_RELATIONSHIPS = [
   "anchor_field",
@@ -28,6 +29,7 @@ export function ensureSplitSurfaceColumns() {
   ensureCampaignColumn("upper_model", "upper_model TEXT");
   ensureCampaignColumn("split_percent", "split_percent INTEGER NOT NULL DEFAULT 35");
   ensureCampaignColumn("split_relationship", "split_relationship TEXT NOT NULL DEFAULT 'anchor_field'");
+  ensureCampaignColumn("split_template", `split_template TEXT NOT NULL DEFAULT '${DEFAULT_SPLIT_TEMPLATE_ID}'`);
 }
 
 export function clampSplitPercent(value: unknown) {
@@ -88,6 +90,7 @@ export function laneModel(provider: ProviderId, requested?: string | null) {
 export type SplitSurface = {
   splitPercent: number;
   splitRelationship: SplitRelationship;
+  splitTemplate: SplitTemplateId;
   videoProvider: ProviderId;
   videoModel: string | null;
   upperProvider: UpperProviderId;
@@ -100,6 +103,7 @@ export function parseSplitSurface(body: any, fallbackLower: string): SplitSurfac
   return {
     splitPercent: clampSplitPercent(body.splitPercent),
     splitRelationship: normalizeSplitRelationship(body.splitRelationship),
+    splitTemplate: isSplitTemplateId(body.splitTemplate) ? body.splitTemplate : DEFAULT_SPLIT_TEMPLATE_ID,
     videoProvider,
     videoModel: body.videoModel ? String(body.videoModel).slice(0, 120) : null,
     upperProvider,

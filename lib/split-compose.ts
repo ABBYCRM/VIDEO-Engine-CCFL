@@ -5,16 +5,11 @@ import path from "node:path";
 import { db } from "@/lib/db";
 import { savePersistentLibraryAsset } from "@/lib/persistent-library";
 import { clampSplitPercent } from "@/lib/split-surface";
+import { getSplitTemplate, type SplitTemplateId } from "@/lib/split-templates";
 
 db.exec(`CREATE TABLE IF NOT EXISTS generated_compositions(id TEXT PRIMARY KEY,title TEXT NOT NULL,file_path TEXT NOT NULL,mime_type TEXT NOT NULL,upper_source TEXT,lower_source TEXT,split_percent INTEGER NOT NULL DEFAULT 33,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);CREATE INDEX IF NOT EXISTS idx_generated_compositions_created_at ON generated_compositions(created_at);`);
 
 export type SavedComposition = { id: string; url: string; mimeType: string; title: string; splitPercent: number };
-
-function evenHeight(splitPercent: number) {
-  const raw = Math.round(1280 * clampSplitPercent(splitPercent) / 100);
-  const top = Math.max(320, Math.min(576, raw % 2 ? raw + 1 : raw));
-  return { top, bottom: 1280 - top };
-}
 
 function run(cmd: string, args: string[], timeoutMs = 120_000) {
   return new Promise<void>((resolve, reject) => {
@@ -46,27 +41,34 @@ export async function composeSplitScreenFile(input: {
   upperPath: string;
   lowerPath: string;
   splitPercent: number;
+  templateId?: SplitTemplateId | string | null;
   outputPath: string;
   durationSeconds?: number;
 }) {
   const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
-  const { top, bottom } = evenHeight(input.splitPercent);
   const duration = 8;
+  const template = getSplitTemplate(input.templateId);
+  const box = template.avatarBox;
+  const templatePath = path.resolve(process.cwd(), "public", template.assetPath.replace(/^\//, ""));
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
-  // Both lanes are top-anchored (y=0): AI portrait framing puts the subject's
-  // head near the top of frame, so cropping down to the lane height from the
-  // top only ever discards the bottom (torso/background), never the head.
-  // A centered or offset crop here was slicing through the avatar's head at
-  // some split ratios and needed manual per-video readjustment.
+  // The upper AI video is cover-cropped (top-anchored, so a portrait
+  // subject's head is never cut) to fill the whole canvas as the
+  // background layer. The avatar's video is separately cover-cropped
+  // (also top-anchored) to exactly fill the template's avatar box, then
+  // composited into that hole. The selected branded template — permanent
+  // office backdrop + gold frame, opaque everywhere except the avatar box
+  // and the area above the backdrop — goes on top of both.
   const filter = [
-    `[0:v]scale=720:${top}:force_original_aspect_ratio=increase,crop=720:${top}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[ut]`,
-    `[1:v]scale=720:${bottom}:force_original_aspect_ratio=increase,crop=720:${bottom}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[lb]`,
-    `[ut][lb]vstack=inputs=2[v]`
+    `[0:v]scale=${template.canvasW}:${template.canvasH}:force_original_aspect_ratio=increase,crop=${template.canvasW}:${template.canvasH}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[bg]`,
+    `[1:v]scale=${box.w}:${box.h}:force_original_aspect_ratio=increase,crop=${box.w}:${box.h}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[av]`,
+    `[bg][av]overlay=x=${box.x}:y=${box.y}[stacked]`,
+    `[stacked][2:v]overlay=x=0:y=0:format=auto[v]`
   ].join(";");
   const base = [
     "-y",
     "-stream_loop", "-1", "-t", String(duration), "-i", input.upperPath,
     "-stream_loop", "-1", "-t", String(duration), "-i", input.lowerPath,
+    "-loop", "1", "-i", templatePath,
     "-filter_complex", filter,
     "-map", "[v]",
     "-t", String(duration),
@@ -123,6 +125,7 @@ export async function composeSplitSources(input: {
   upperPath: string;
   lowerPath: string;
   splitPercent: number;
+  templateId?: SplitTemplateId | string | null;
   title: string;
   caption?: string;
   upperSource?: string;
@@ -133,6 +136,7 @@ export async function composeSplitSources(input: {
     upperPath: input.upperPath,
     lowerPath: input.lowerPath,
     splitPercent: input.splitPercent,
+    templateId: input.templateId,
     outputPath: tmpPath
   });
   const bytes = await fs.readFile(tmpPath);
@@ -153,6 +157,7 @@ export async function composeSplitJobs(input: {
   upperPath: string;
   lowerPath: string;
   splitPercent: number;
+  templateId?: SplitTemplateId | string | null;
   title: string;
   caption?: string;
   upperJobId: string;
@@ -162,6 +167,7 @@ export async function composeSplitJobs(input: {
     upperPath: input.upperPath,
     lowerPath: input.lowerPath,
     splitPercent: input.splitPercent,
+    templateId: input.templateId,
     title: input.title,
     caption: input.caption,
     upperSource: input.upperJobId,

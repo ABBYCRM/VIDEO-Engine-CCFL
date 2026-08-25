@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { A2E_VIDEO_MODELS, getA2eModel } from "@/lib/a2e-model-catalog";
+import { DEFAULT_SPLIT_TEMPLATE_ID, SPLIT_TEMPLATES, type SplitTemplateId } from "@/lib/split-templates";
 
 const modes = [
   { id: "car_accident", title: "Car Accident", icon: Car, sub: "Roadside, collision, aftermath" },
@@ -121,6 +122,7 @@ export function GeneratorConsole() {
   const [contentFormat, setContentFormat] = useState("cinematic");
   const [splitPercent, setSplitPercent] = useState(35);
   const [splitRelationship, setSplitRelationship] = useState("anchor_field");
+  const [splitTemplate, setSplitTemplate] = useState<SplitTemplateId>(DEFAULT_SPLIT_TEMPLATE_ID);
   const [upperProvider, setUpperProvider] = useState<Exclude<ProviderId, "hedra">>("grok");
   const [upperModel, setUpperModel] = useState(providerModels.grok[0].id);
   const [campaignName, setCampaignName] = useState("New campaign");
@@ -465,7 +467,8 @@ export function GeneratorConsole() {
           upperProvider: contentFormat === "podcast" ? upperProvider : undefined,
           upperModel: contentFormat === "podcast" ? upperModel : undefined,
           splitPercent: contentFormat === "podcast" ? splitPercent : undefined,
-          splitRelationship: contentFormat === "podcast" ? splitRelationship : undefined
+          splitRelationship: contentFormat === "podcast" ? splitRelationship : undefined,
+          splitTemplate: contentFormat === "podcast" ? splitTemplate : undefined
         })
       });
       const d = await r.json();
@@ -517,7 +520,8 @@ export function GeneratorConsole() {
     horizon: String(planningHorizonDays),
     autoPost: autoPost ? "1" : "0",
     splitPercent: String(splitPercent),
-    relationship: splitRelationship
+    relationship: splitRelationship,
+    splitTemplate
   });
   const splitHref = `/podcast-interview?${splitParams.toString()}`;
 
@@ -574,7 +578,7 @@ export function GeneratorConsole() {
         <label className="grid gap-1 text-xs font-medium text-violet-900">Split relationship<select aria-label="Split relationship" value={splitRelationship} onChange={(e) => setSplitRelationship(e.target.value)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm"><option value="anchor_field">Studio anchor asks · field reporter answers</option><option value="question_answer">Upper asks · lower answers</option><option value="context_commentary">Upper context · lower explains</option><option value="reaction">Upper scenario · lower reacts</option><option value="parallel">Parallel complementary stories</option></select></label>
         <label className="grid gap-1 text-xs font-medium text-violet-900">Upper engine<select aria-label="Upper AI engine" value={upperProvider} onChange={(e) => changeUpperProvider(e.target.value as Exclude<ProviderId, "hedra">)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm"><option value="grok">xAI Grok</option><option value="veo">Google Veo</option><option value="a2e">A2E multi-model</option></select></label>
         <label className="grid gap-1 text-xs font-medium text-violet-900">Upper model<select aria-label="Upper video model" value={upperModel} onChange={(e) => setUpperModel(e.target.value)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm">{providerModels[upperProvider].map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
-        <label className="grid gap-1 text-xs font-medium text-violet-900">Top lane height: {splitPercent}%<input aria-label="Top video height" type="range" min={25} max={45} value={splitPercent} onChange={(e) => setSplitPercent(Number(e.target.value))} className="mt-2 w-full"/></label>
+        <label className="grid gap-1 text-xs font-medium text-violet-900">Frame template<select aria-label="Split-screen frame template" value={splitTemplate} onChange={(e) => setSplitTemplate(e.target.value as SplitTemplateId)} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-sm">{SPLIT_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
       </div>
     </section>}
 
