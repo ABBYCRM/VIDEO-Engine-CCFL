@@ -2,22 +2,17 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Clapperboard, Settings, BookOpen, LogOut, Megaphone, Users, Calendar, Plug, Library, Plus, Globe, X } from "lucide-react";
+import { Clapperboard, LogOut, Users, Calendar, Library, Plus, X } from "lucide-react";
 import { DuckMark } from "@/components/duck-mark";
 
-type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW"|"ACCOUNT";exact?:boolean};
+type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW";exact?:boolean};
 const NAV:NavItem[]=[
   {href:"/",label:"Create",icon:Clapperboard,group:"CREATE",exact:true},
-  {href:"/campaigns",label:"Campaigns",icon:Megaphone,group:"CREATE"},
   {href:"/avatars",label:"Avatars",icon:Users,group:"CREATE"},
-  {href:"/sites",label:"Sites",icon:Globe,group:"CREATE"},
   {href:"/library",label:"Library",icon:Library,group:"REVIEW"},
-  {href:"/calendar",label:"Calendar",icon:Calendar,group:"REVIEW"},
-  {href:"/integrations",label:"Integrations",icon:Plug,group:"ACCOUNT"},
-  {href:"/docs",label:"API",icon:BookOpen,group:"ACCOUNT"},
-  {href:"/settings",label:"Settings",icon:Settings,group:"ACCOUNT"}
+  {href:"/calendar",label:"Calendar",icon:Calendar,group:"REVIEW"}
 ];
-const GROUPS:NavItem["group"][]=["CREATE","REVIEW","ACCOUNT"];
+const GROUPS:NavItem["group"][]=["CREATE","REVIEW"];
 
 export function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),router=useRouter();const[mobileOpen,setMobileOpen]=useState(false);

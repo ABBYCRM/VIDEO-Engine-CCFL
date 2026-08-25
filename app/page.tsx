@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
-import { GeneratorConsole } from "@/components/generator-console";
+import { StudioTabs } from "@/components/studio-tabs";
 
 export default function Home(){
-  return <AuthGuard><AppShell><GeneratorConsole/></AppShell></AuthGuard>;
+  return <AuthGuard><AppShell><StudioTabs/></AppShell></AuthGuard>;
 }

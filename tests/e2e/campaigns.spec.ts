@@ -12,6 +12,6 @@ test("Campaigns manages saved plans without duplicating Create builder",async({p
   await expect(saved.getByText(/14 days/)).toBeVisible();
   await expect(page.getByText("Campaign Builder")).toHaveCount(0);
   await expect(page.getByRole("button",{name:/Create campaign \+ fill Calendar/i})).toHaveCount(0);
-  await expect(page.getByRole("link",{name:"Create campaign",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Create campaign",exact:true})).toBeVisible();
   await expect(saved.getByRole("link",{name:"Calendar",exact:true})).toBeVisible();
 });
