@@ -8,8 +8,7 @@ import {
   RefreshCcw,
   Wand2,
   Loader2,
-  Male,
-  Female,
+  User,
   MessageCircle,
   Check,
   Sparkles,
@@ -344,7 +343,7 @@ export function GeneratorConsole() {
                   useMale ? "bg-amber-500/20 text-amber-300" : "text-slate-500 hover:text-slate-300"
                 }`}
               >
-                <Male size={16} /> Male
+                <User size={16} /> Male
               </button>
               <button
                 onClick={() => setUseMale(false)}
@@ -352,7 +351,7 @@ export function GeneratorConsole() {
                   !useMale ? "bg-amber-500/20 text-amber-300" : "text-slate-500 hover:text-slate-300"
                 }`}
               >
-                <Female size={16} /> Female
+                <User size={16} className="text-pink-400" /> Female
               </button>
             </div>
 
