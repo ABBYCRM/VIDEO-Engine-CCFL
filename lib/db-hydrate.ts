@@ -44,7 +44,7 @@ export async function hydrateFromPgIfEmpty(): Promise<void> {
         // Get column names from first row
         const cols = Object.keys(rows[0]);
         const placeholders = cols.map(() => "?").join(",");
-        const insert = db.prepare(
+        const insert = db.prepareLocalOnly(
           `INSERT OR IGNORE INTO ${table} (${cols.join(",")}) VALUES (${placeholders})`
         );
         const tx = db.transaction(() => {
