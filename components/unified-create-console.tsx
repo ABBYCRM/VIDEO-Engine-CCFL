@@ -120,6 +120,14 @@ export function UnifiedCreateConsole() {
     }
   }
 
+  async function runCategoryAutomation() {
+    setError(null); setResult(null); setBusy(true); setPollJobId(null); setJobStatus(null);
+    try {
+      const r = await fetch("/api/unified/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, prompt, avatarId, avatarGender, approvalMode, model, provider, language, templateId, automationMode: "category-run" }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); setResult(d);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
   return (
     <AuthGuard>
       <AppShell>
@@ -253,7 +261,7 @@ export function UnifiedCreateConsole() {
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium text-slate-700">Auto-post</span>
+                  <span className="font-medium text-slate-700">Auto-post (each ready video publishes as 1 Reel + 1 Story)</span>
                   <select value={approvalMode} onChange={e => setApprovalMode(e.target.value as any)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
                     <option value="auto">Auto (publish on schedule)</option>
                     <option value="manual">Manual approval</option>
@@ -294,6 +302,9 @@ export function UnifiedCreateConsole() {
               <Button size="lg" onClick={submit} disabled={busy}>
                 {busy ? <><Loader2 size={16} className="mr-2 animate-spin" />Generating…</> : <><Sparkles size={16} className="mr-2" />Generate + schedule</>}
               </Button>
+              <Button size="lg" variant="secondary" onClick={runCategoryAutomation} disabled={busy}>
+                <Sparkles size={16} className="mr-2" />Run 4-category IG autopilot
+              </Button>
               {pollJobId && (
                 <div className="rounded-xl border bg-slate-50 px-3 py-2 text-xs text-slate-700">
                   Video job <code className="font-mono">{pollJobId.slice(0,8)}</code>: <b>{jobStatus || "queued"}</b>
@@ -305,7 +316,7 @@ export function UnifiedCreateConsole() {
             {result && (
               <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <Check size={14} className="mr-1 inline" />
-                <b>Created.</b> Hero image saved. Video job <code className="font-mono">{result.videoJobId?.slice(0,8)}</code> queued ({duration}s, {provider}). {result.scheduledPosts?.length || 0} additional slots scheduled.
+                {result.automation ? <><b>Automation queued.</b> {result.slots?.length || 4} core-category posts are now on the Calendar. Each ready video will publish as one Reel and one Story.</> : <><b>Created.</b> Hero image saved. Video job <code className="font-mono">{result.videoJobId?.slice(0,8)}</code> queued ({duration}s, {provider}). {result.scheduledPosts?.length || 0} additional slots scheduled.</>}
                 {result.imageAsset?.savedAsset?.assetUrl && (
                   <div className="mt-2"><a className="underline" href={result.imageAsset.savedAsset.assetUrl} target="_blank" rel="noreferrer">View hero image →</a></div>
                 )}
@@ -340,9 +351,9 @@ export function UnifiedCreateConsole() {
                 onClick={() => setAvatarId(null)}
                 className={cn("rounded-xl border p-3 text-left text-sm", avatarId === null ? "border-violet-400 bg-violet-50 ring-2 ring-violet-200" : "border-slate-200 bg-white hover:border-violet-200")}
               >
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">None</div>
-                <div className="mt-1 font-medium text-slate-900">Use {avatarGender} default</div>
-                <div className="mt-1 text-[11px] text-slate-500">No avatar reference; A2E will use a generic {avatarGender} presenter.</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Auto pick</div>
+                <div className="mt-1 font-medium text-slate-900">Let AI choose a ready avatar</div>
+                <div className="mt-1 text-[11px] text-slate-500">The campaign automation chooses a non-archived avatar with a reference first.</div>
               </button>
               {grouped[avatarGender].map(a => (
                 <button
