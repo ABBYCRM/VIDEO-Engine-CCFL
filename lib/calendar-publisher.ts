@@ -10,7 +10,9 @@ async function publishRow(post:any){
   if(post.network==="instagram"){
     if(post.generation_status&&post.generation_status!=="ready")throw new Error(`Media is ${post.generation_status}; it is not ready to publish`);
     if(!post.video_job_id&&!post.media_url)throw new Error("Auto-post requires generated media");
-    return publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption});
+    const reel = await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption,postType:"feed"});
+    const story = await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption,postType:"story"});
+    return { reel, story };
   }
   if(post.network==="website"){
     if(!post.site_id)throw new Error("Website auto-post item has no Site");
