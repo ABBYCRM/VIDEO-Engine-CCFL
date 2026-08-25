@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { claimInstagramPublish, publishInstagramPair, releaseInstagramPublish } from "@/lib/calendar-publisher";
+import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
 import { publishWebsite } from "@/lib/site-publish";
 
 export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
@@ -25,6 +26,7 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
       return NextResponse.json({error:`${post.network} publishing is not connected yet. Use Instagram, Website, or keep this item in owner review.`},{status:409});
     }
     db.prepare("UPDATE scheduled_posts SET status='published',published_at=?,error=NULL,publishing_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(new Date().toISOString(),id);
+    if(post.network==="instagram")setTimeout(()=>{void verifyPublishedInstagramOnce();},15_000).unref?.();
     return NextResponse.json({ok:true,result});
   }catch(e){
     const message=e instanceof Error?e.message:String(e);

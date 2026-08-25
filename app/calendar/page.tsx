@@ -40,6 +40,9 @@ type Post = {
   mediaType?: string | null;
   planningHorizonDays?: number | null;
   publishedAt?: string | null;
+  verifiedAt?: string | null;
+  instagramPermalink?: string | null;
+  verificationError?: string | null;
   error?: string | null;
   contentBody?: string | null;
   seoTitle?: string | null;
@@ -266,7 +269,7 @@ export default function CalendarPage() {
                     <button className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-800 hover:bg-slate-200" onClick={() => setEditing("new")} aria-label={`Add post ${day.toDateString()}`}><Plus size={14}/></button>
                   </div>
                   <div className="grid gap-2">
-                    {items.map(post => <button key={post.id} onClick={() => setEditing(post)} className="rounded-xl border bg-slate-50 p-2 text-left text-slate-800 hover:border-violet-300"><div className="text-xs font-semibold">{post.title}</div><div className="mt-1 text-[10px] font-semibold uppercase text-violet-700">{post.contentType} · {post.network}</div><div className="text-[10px] text-slate-600">{post.status}{post.autoPost ? " · auto" : ""}{post.generationStatus ? ` · ${post.generationStatus}` : ""}</div></button>)}
+                    {items.map(post => <button key={post.id} onClick={() => setEditing(post)} className="rounded-xl border bg-slate-50 p-2 text-left text-slate-800 hover:border-violet-300"><div className="text-xs font-semibold">{post.title}</div><div className="mt-1 text-[10px] font-semibold uppercase text-violet-700">{post.contentType} · {post.network}</div><div className="flex items-center gap-1 text-[10px] text-slate-600">{post.status === "published" && <span aria-label={post.verifiedAt ? "Verified live on Instagram" : "Awaiting verification"} className={`inline-block h-2 w-2 rounded-full ${post.verifiedAt ? "bg-emerald-500" : "bg-amber-400"}`}/>}<span>{post.status}{post.autoPost ? " · auto" : ""}{post.generationStatus ? ` · ${post.generationStatus}` : ""}</span></div></button>)}
                   </div>
                 </section>
               );
@@ -307,6 +310,24 @@ export default function CalendarPage() {
                   </article>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border bg-white p-4">
+            <div className="mb-3 flex items-center gap-2 font-semibold">Published <span className="text-xs font-normal text-slate-500">green light = confirmed live on Instagram</span></div>
+            <div className="grid gap-2">
+              {posts.filter(p => p.status === "published").map(post => (
+                <article key={post.id} className="flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center">
+                  <span aria-label={post.verifiedAt ? "Verified live" : "Awaiting verification"} className={`inline-block h-3 w-3 shrink-0 rounded-full ${post.verifiedAt ? "bg-emerald-500" : "bg-amber-400"}`}/>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-slate-900">{post.title}</div>
+                    <div className="text-xs text-slate-500">{post.network} · published {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ""}{post.verifiedAt ? ` · verified ${new Date(post.verifiedAt).toLocaleString()}` : " · verifying…"}</div>
+                    {!post.verifiedAt && post.verificationError && <div className="text-[11px] text-amber-700">{post.verificationError}</div>}
+                  </div>
+                  {post.instagramPermalink && <a href={post.instagramPermalink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-violet-700 hover:underline">View on Instagram</a>}
+                </article>
+              ))}
+              {posts.every(p => p.status !== "published") && <div className="text-sm text-slate-500">Nothing published yet.</div>}
             </div>
           </div>
         </main>

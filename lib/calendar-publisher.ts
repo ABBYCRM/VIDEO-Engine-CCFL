@@ -3,6 +3,7 @@ import { publishInstagram } from "@/lib/instagram-publish";
 import { publishWebsite } from "@/lib/site-publish";
 import { publicCaptionForSlot, isOperatorCopy } from "@/lib/public-copy";
 import "@/lib/calendar-assets";
+import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
 
 let started=false;
 let running=false;
@@ -63,6 +64,7 @@ export async function runCalendarPublisherOnce(){
       catch(e){releaseInstagramPublish(post.id);db.prepare("UPDATE scheduled_posts SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),post.id);}
       processed++;
     }
+    if(processed>0)setTimeout(()=>{void verifyPublishedInstagramOnce();},20_000).unref?.();
     return{processed};
   }finally{running=false;}
 }
@@ -70,5 +72,6 @@ export async function runCalendarPublisherOnce(){
 export function startCalendarPublisherLoop(){
   if(started||process.env.NODE_ENV==="test")return;started=true;
   setInterval(()=>{void runCalendarPublisherOnce();},60_000).unref?.();
+  setInterval(()=>{void verifyPublishedInstagramOnce();},120_000).unref?.();
   setTimeout(()=>{void runCalendarPublisherOnce();},5_000).unref?.();
 }
