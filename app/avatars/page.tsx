@@ -390,8 +390,8 @@ function ImageSettingsModal({ initial, onClose, onSaved }: { initial: ImageSetti
     finally { setBusy(false); }
   }
 
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-xl">
+  return <div className="fixed inset-0 z-50 bg-slate-900/35 p-3 sm:p-4 overflow-y-auto" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
       <div className="mb-4 flex items-center justify-between"><div><div className="font-semibold text-slate-900">Avatar image provider</div><div className="text-xs text-slate-500">This setting controls identity-preserving four-view generation.</div></div><button onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-slate-100"><X size={16}/></button></div>
       <div className="grid gap-2">{choices.map(choice => {
         const disabled = !choice.supportsTurnaround && choice.id === "xai";
@@ -400,7 +400,7 @@ function ImageSettingsModal({ initial, onClose, onSaved }: { initial: ImageSetti
       {selected && <div className="mt-4 grid gap-3"><label className="grid gap-1 text-sm"><span className="font-medium text-slate-700">Model</span><select value={model} onChange={e => setModel(e.target.value)} className="h-11 rounded-xl border px-3">{models.map(m => <option key={m} value={m}>{m}</option>)}</select></label>{provider !== "mock" && <label className="grid gap-1 text-sm"><span className="font-medium text-slate-700">{selected.envVar || "API key"}</span><input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={initial?.configured && initial.provider === provider ? "Saved · paste only to replace" : "Use environment variable or paste a replacement"} className="h-11 rounded-xl border px-3"/><span className="text-[11px] text-slate-500">Environment variables are preferred in production. A pasted replacement is encrypted at rest.</span></label>}</div>}
       {provider === "gemini" && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Gemini supports the turnaround workflow, but a 429 spending-cap error must be resolved in the Google AI project before retrying.</div>}
       {error && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{friendlyError(error)}</div>}
-      <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy || !selected}>{busy ? "Saving…" : "Save"}</Button></div>
+      <div className="sticky bottom-0 -mx-5 mt-5 flex justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4 pb-[max(env(safe-area-inset-bottom),1rem)]"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={save} disabled={busy || !selected}>{busy ? "Saving…" : "Save"}</Button></div>
     </div>
   </div>;
 }

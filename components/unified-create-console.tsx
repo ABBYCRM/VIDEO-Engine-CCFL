@@ -47,6 +47,10 @@ export function UnifiedCreateConsole() {
   const [outputMode, setOutputMode] = useState<"image" | "video" | "auto_mix">("auto_mix");
   const [approvalMode, setApprovalMode] = useState<"auto" | "manual">("auto");
   const [model, setModel] = useState("sora2");
+  const [provider, setProvider] = useState("a2e");
+  const [duration, setDuration] = useState(15); // A2E Seedance 15-30s; Grok Imagine 8s
+  const [language, setLanguage] = useState("mix"); // en | es | mix
+  const [templateId, setTemplateId] = useState("auto"); // auto | office-modern | office-warm | digital-grid
 
   const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [busy, setBusy] = useState(false);
@@ -99,7 +103,7 @@ export function UnifiedCreateConsole() {
       const r = await fetch("/api/unified/create", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, outputMode, approvalMode, model })
+        body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, outputMode, approvalMode, model, provider, durationSeconds: duration, language, templateId })
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
@@ -181,16 +185,44 @@ export function UnifiedCreateConsole() {
               </div>
               <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium text-slate-700">Video model (A2E)</span>
+                  <span className="font-medium text-slate-700">Video provider</span>
+                  <select value={provider} onChange={e => { setProvider(e.target.value); if (e.target.value === "grok") { setModel("grok-imagine-video-1.5"); setDuration(8); } else { setModel("sora2"); setDuration(15); } }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    <option value="a2e">A2E (Sora 2 / Veo 3 / Kling)</option>
+                    <option value="grok">xAI · Grok Imagine Video</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium text-slate-700">Video model</span>
                   <select value={model} onChange={e => setModel(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-                    <option value="sora2">A2E · Sora 2 Pro (hyper-real, 8s)</option>
-                    <option value="veo3">A2E · Veo 3 (8s, native audio)</option>
-                    <option value="kling3">A2E · Kling 3.0</option>
-                    <option value="kling3-fast">A2E · Kling 3.0 Fast</option>
-                    <option value="seedance2.5">A2E · Seedance 2.5</option>
-                    <option value="wan2.6-i2v">A2E · Wan 2.6 I2V</option>
-                    <option value="happyhorse">A2E · HappyHorse</option>
-                    <option value="veo3_fast">A2E · Veo 3 Fast</option>
+                    {provider === "a2e" && (<>
+                      <option value="sora2">A2E · Sora 2 Pro (hyper-real, 8s)</option>
+                      <option value="veo3">A2E · Veo 3 (8s, native audio)</option>
+                      <option value="kling3">A2E · Kling 3.0</option>
+                      <option value="kling3-fast">A2E · Kling 3.0 Fast</option>
+                      <option value="seedance2.5">A2E · Seedance 2.5</option>
+                      <option value="wan2.6-i2v">A2E · Wan 2.6 I2V</option>
+                      <option value="happyhorse">A2E · HappyHorse</option>
+                      <option value="veo3_fast">A2E · Veo 3 Fast</option>
+                    </>)}
+                    {provider === "grok" && (
+                      <option value="grok-imagine-video-1.5">xAI · Grok Imagine Video 1.5 (8s)</option>
+                    )}
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium text-slate-700">Video duration (seconds)</span>
+                  <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    {provider === "grok" ? (
+                      <option value={8}>8 seconds (Grok Imagine)</option>
+                    ) : (
+                      <>
+                        <option value={8}>8 seconds</option>
+                        <option value={15}>15 seconds (Seedance default)</option>
+                        <option value={20}>20 seconds (Seedance)</option>
+                        <option value={25}>25 seconds (Seedance)</option>
+                        <option value={30}>30 seconds (Seedance)</option>
+                      </>
+                    )}
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
@@ -200,6 +232,23 @@ export function UnifiedCreateConsole() {
                     <option value={7}>7 days</option>
                     <option value={14}>14 days</option>
                     <option value={30}>30 days</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium text-slate-700">Language</span>
+                  <select value={language} onChange={e => setLanguage(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    <option value="mix">EN + ES mix (bilingual)</option>
+                    <option value="en">English only</option>
+                    <option value="es">Spanish only (Español)</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium text-slate-700">Visual template</span>
+                  <select value={templateId} onChange={e => setTemplateId(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    <option value="auto">Auto (AI picks the best fit)</option>
+                    <option value="office-modern">Modern office · blue glass frame</option>
+                    <option value="office-warm">Warm office · bookshelf & skyline</option>
+                    <option value="digital-grid">Digital grid · dual frame (top + bottom)</option>
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
@@ -235,7 +284,7 @@ export function UnifiedCreateConsole() {
             {result && (
               <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <Check size={14} className="mr-1 inline" />
-                <b>Created.</b> Hero image saved. Video job <code className="font-mono">{result.videoJobId?.slice(0,8)}</code> queued. {result.scheduledPosts?.length || 0} additional slots scheduled.
+                <b>Created.</b> Hero image saved. Video job <code className="font-mono">{result.videoJobId?.slice(0,8)}</code> queued ({duration}s, {provider}). {result.scheduledPosts?.length || 0} additional slots scheduled.
                 {result.imageAsset?.savedAsset?.assetUrl && (
                   <div className="mt-2"><a className="underline" href={result.imageAsset.savedAsset.assetUrl} target="_blank" rel="noreferrer">View hero image →</a></div>
                 )}
