@@ -226,6 +226,10 @@ function ensureColumn(table: string, column: string, ddl: string) {
 }
 try { ensureColumn("video_jobs", "provider", "provider TEXT NOT NULL DEFAULT 'veo'"); } catch {}
 for (const [column, ddl] of [
+  ["planning_horizon_days", "planning_horizon_days INTEGER NOT NULL DEFAULT 7"],
+  ["content_type", "content_type TEXT NOT NULL DEFAULT 'cinematic'"],
+  ["output_mode", "output_mode TEXT NOT NULL DEFAULT 'video'"],
+  ["video_provider", "video_provider TEXT NOT NULL DEFAULT 'veo'"],
   ["video_model", "video_model TEXT"],
   ["upper_provider", "upper_provider TEXT"],
   ["upper_model", "upper_model TEXT"],
