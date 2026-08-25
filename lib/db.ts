@@ -36,6 +36,12 @@ class Db {
   private inner: Database.Database;
   constructor(s: Database.Database) { this.inner = s; }
   prepare(sql: string): Stmt { return new Stmt(this.inner.prepare(sql), sql); }
+  // Rows pulled FROM the PG mirror to repopulate local SQLite after a
+  // fresh deploy must never be mirrored straight back to PG — that's a
+  // wasteful, always-failing round trip (SQLite's `INSERT OR IGNORE`
+  // isn't valid Postgres syntax) that floods the logs on every boot.
+  // Used only by lib/db-hydrate.ts.
+  prepareLocalOnly(sql: string): Database.Statement { return this.inner.prepare(sql); }
   exec(sql: string) {
     this.inner.exec(sql);
     if (process.env.DATABASE_URL) {
