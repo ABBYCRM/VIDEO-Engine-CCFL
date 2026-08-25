@@ -4,8 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Clapperboard, Image as ImageIcon, Settings as SettingsIcon } from "lucide-react";
 import { GeneratorConsole } from "@/components/generator-console";
-import { CalendarPage } from "@/app/calendar/page";
-import { LibraryPage } from "@/app/library/page";
+import CalendarPage from "@/app/calendar/page";
+import LibraryPage from "@/app/library/page";
 
 const TABS = [
   { id: "create", label: "Studio", icon: Clapperboard },
