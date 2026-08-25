@@ -127,6 +127,13 @@ export async function listPersistentLibraryAssets(limit = 500): Promise<Persiste
   }));
 }
 
+export async function deletePersistentLibraryAsset(id: string): Promise<boolean> {
+  if (!sql) return false;
+  await ensureSchema();
+  const rows = await sql`DELETE FROM library_assets WHERE id = ${id} RETURNING id`;
+  return rows.length > 0;
+}
+
 export async function getPersistentLibraryAsset(id: string): Promise<{ bytes: Buffer; mimeType: string; title: string } | null> {
   if (!sql) return null;
   await ensureSchema();

@@ -17,6 +17,7 @@ ensureColumn("focus_keyword","focus_keyword TEXT");
 ensureColumn("generation_status","generation_status TEXT NOT NULL DEFAULT 'ready'");
 ensureColumn("upper_job_id","upper_job_id TEXT");
 ensureColumn("lower_job_id","lower_job_id TEXT");
+ensureColumn("category","category TEXT");
 try{db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_posts_source_asset_key ON scheduled_posts(source_asset_key) WHERE source_asset_key IS NOT NULL");}catch{}
 
 export function ensureAssetCalendarPost(input:{
@@ -41,10 +42,11 @@ export function ensureAssetCalendarPost(input:{
   return id;
 }
 
-export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string;contentType:string;network?:string;caption?:string;campaignId?:string|null;siteId?:string|null;approvalMode?:"manual"|"auto";cadence?:"daily"|"3-week"|"weekly"|"manual";outputMode?:"video"|"image"|"auto_mix"}){
+export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string;contentType:string;network?:string;caption?:string;campaignId?:string|null;siteId?:string|null;approvalMode?:"manual"|"auto";cadence?:"daily"|"3-week"|"weekly"|"manual";outputMode?:"video"|"image"|"auto_mix";categories?:string[]}){
   const horizon=[3,7,14,30].includes(input.horizonDays)?input.horizonDays:7; const cadence=input.cadence||"daily"; const days:number[]=[];
   for(let i=1;i<=horizon;i++){const dow=new Date(Date.now()+i*86400000).getDay();if(cadence==="daily"||(cadence==="3-week"&&[1,3,5].includes(dow))||(cadence==="weekly"&&i===1))days.push(i);}
   const outputMode=input.outputMode||"video";
-  const ids:string[]=[]; for(let index=0;index<days.length;index++){const day=days[index],id=crypto.randomUUID(),when=new Date(Date.now()+day*86400000);when.setHours(10,0,0,0);const slotType=outputMode==="image"?"image":outputMode==="auto_mix"?(index%2===0?input.contentType:"image"):input.contentType;const seedCaption=input.contentType==="podcast"?"":(input.caption||"");db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,`${input.titlePrefix} · Day ${day} · ${slotType==="image"?"Still":"Video"}`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,seedCaption.slice(0,5000),slotType,input.siteId||null,input.campaignId||null,horizon,"pending");ids.push(id);}
+  const categories=(input.categories||[]).filter(Boolean);
+  const ids:string[]=[]; for(let index=0;index<days.length;index++){const day=days[index],id=crypto.randomUUID(),when=new Date(Date.now()+day*86400000);when.setHours(10,0,0,0);const slotType=outputMode==="image"?"image":outputMode==="auto_mix"?(index%2===0?input.contentType:"image"):input.contentType;const seedCaption=input.contentType==="podcast"?"":(input.caption||"");const category=categories.length?categories[index%categories.length]:null;db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,`${input.titlePrefix} · Day ${day} · ${slotType==="image"?"Still":"Video"}`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,seedCaption.slice(0,5000),slotType,input.siteId||null,input.campaignId||null,horizon,"pending",category);ids.push(id);}
   return ids;
 }
