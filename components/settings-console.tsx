@@ -165,8 +165,8 @@ export function SettingsConsole(){
 
  const ALL_PROVIDERS: ProviderId[] = ["veo","grok","a2e","hedra"];
 
- return <main className="mx-auto max-w-5xl px-4 py-8">
-   <h1 className="text-3xl font-semibold">Settings & API access</h1>
+ return <div className="mx-auto max-w-5xl">
+   <h2 className="text-2xl font-semibold">Settings & API access</h2>
    <p className="mt-2 text-slate-600">All provider keys are encrypted server-side with AES-256-GCM. Generated VIDEO-Engine tokens are stored only as SHA-256 hashes.</p>
 
    <div className="mt-7 grid gap-6">
@@ -344,7 +344,7 @@ export function SettingsConsole(){
      </Card>
 
    </div>
- </main>;
+ </div>;
 }
 
 // Green light status indicator. Three states: green (key live), red (key live
