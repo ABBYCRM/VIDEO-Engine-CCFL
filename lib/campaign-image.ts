@@ -90,7 +90,7 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
   const result=await renderWithConfiguredProvider(prompt,reference);
   let base64=result.base64,mimeType=result.mimeType;
   if(template){
-    const tempDir=path.resolve(process.env.VIDEO_OUTPUT_DIR||"./data/videos"),"still-compose"),token=crypto.randomUUID(),photoPath=path.join(tempDir,`${token}.${mimeType==="image/jpeg"?"jpg":mimeType==="image/webp"?"webp":"png"}`),outPath=path.join(tempDir,`${token}-composed.png`);
+    const tempDir=path.join(path.resolve(process.env.VIDEO_OUTPUT_DIR||"./data/videos"),"still-compose"),token=crypto.randomUUID(),photoPath=path.join(tempDir,`${token}.${mimeType==="image/jpeg"?"jpg":mimeType==="image/webp"?"webp":"png"}`),outPath=path.join(tempDir,`${token}-composed.png`);
     await fs.mkdir(tempDir,{recursive:true});
     try{await fs.writeFile(photoPath,Buffer.from(base64,"base64"));await composeStillPost({photoPath,templateId:template.id,outPath});base64=(await fs.readFile(outPath)).toString("base64");mimeType="image/png";}
     finally{await Promise.all([fs.unlink(photoPath).catch(()=>{}),fs.unlink(outPath).catch(()=>{})]);}
