@@ -10,9 +10,9 @@ export function issueApiToken(name: string) {
   return { id, name, token: raw, prefix };
 }
 export function listApiTokens() {
-  return db.prepare("SELECT id,name,token_prefix as prefix,created_at as createdAt,last_used_at as lastUsedAt,revoked_at as revokedAt FROM api_tokens ORDER BY created_at DESC").all();
+  return db.prepare("SELECT id,name,token_prefix as prefix,created_at as createdAt,last_used_at as lastUsedAt,revoked_at as revokedAt FROM api_tokens WHERE revoked_at IS NULL ORDER BY created_at DESC").all();
 }
-export function revokeApiToken(id: string) { db.prepare("UPDATE api_tokens SET revoked_at=CURRENT_TIMESTAMP WHERE id=?").run(id); }
+export function revokeApiToken(id: string) { db.prepare("DELETE FROM api_tokens WHERE id=?").run(id); }
 export function verifyApiToken(raw: string) {
   const hash = crypto.createHash("sha256").update(raw).digest("hex");
   const row = db.prepare("SELECT id FROM api_tokens WHERE token_hash=? AND revoked_at IS NULL").get(hash) as { id: string } | undefined;

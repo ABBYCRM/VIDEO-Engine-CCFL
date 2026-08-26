@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 const COOKIE = "video_engine_session";
 function secret() { const s = process.env.SESSION_SECRET; if (!s || s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters"); return s; }
@@ -19,7 +19,19 @@ export function verifySessionValue(value?: string | null) {
 }
 export async function requireAdmin() {
   const jar = await cookies();
-  return verifySessionValue(jar.get(COOKIE)?.value);
+  if (verifySessionValue(jar.get(COOKIE)?.value)) return true;
+  try {
+    const h = await headers();
+    const auth = h.get("authorization") || "";
+    if (auth.toLowerCase().startsWith("bearer ")) {
+      const raw = auth.slice(7).trim();
+      if (raw.startsWith("ve_live_")) {
+        const { verifyApiToken } = await import("@/lib/tokens");
+        return verifyApiToken(raw);
+      }
+    }
+  } catch { /* headers() unavailable outside a request scope */ }
+  return false;
 }
 export const sessionCookieName = COOKIE;
 
