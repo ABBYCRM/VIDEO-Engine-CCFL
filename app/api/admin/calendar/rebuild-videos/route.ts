@@ -13,7 +13,8 @@ export async function POST(req: Request) {
   const now = body?.from ? new Date(String(body.from)) : new Date();
   if (Number.isNaN(now.getTime())) return NextResponse.json({ error: "Invalid from date" }, { status: 400 });
 
-  const rows = db.prepare(`
+  const requestedIds = Array.isArray(body?.ids) ? new Set(body.ids.map(String)) : null;
+  const candidates = db.prepare(`
     SELECT id,title,scheduled_at,generation_status,media_url,source_asset_key
     FROM scheduled_posts
     WHERE campaign_id IS NOT NULL
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
       AND scheduled_at>=?
     ORDER BY scheduled_at ASC
   `).all(now.toISOString()) as any[];
+  const rows = requestedIds ? candidates.filter((row) => requestedIds.has(row.id)) : candidates;
 
   const update = db.prepare(`
     UPDATE scheduled_posts

@@ -74,7 +74,10 @@ export async function composeSplitScreenFile(input: {
   for (const candidate of fontCandidates) {
     try { await fs.access(candidate); fontPath = candidate; break; } catch {}
   }
-  const banner = `drawbox=x=0:y=${bannerY}:w=iw:h=${bannerH}:color=black@0.68:t=fill,drawtext=fontfile='${fontPath}':text='${CASE_CLOSED_URL}  ·  ${CASE_CLOSED_PHONE}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=${bannerY}+((${bannerH}-text_h)/2)[v]`;
+  // Every final Reel/Story must be true 9:16. Legacy 2:3 templates are fitted
+  // inside 1080x1920 with safe top/bottom padding — never center-cropped,
+  // because that would cut subjects and legal/contact copy.
+  const banner = `drawbox=x=0:y=${bannerY}:w=iw:h=${bannerH}:color=black@0.68:t=fill,drawtext=fontfile='${fontPath}':text='${CASE_CLOSED_URL}  ·  ${CASE_CLOSED_PHONE}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=${bannerY}+((${bannerH}-text_h)/2)[branded];[branded]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x07111f,setsar=1[v]`;
   if (template.layout === "avatar-box") {
     // The upper AI video cover-crops the whole canvas as the permanent
     // background layer. The avatar's own video (with its own generated
