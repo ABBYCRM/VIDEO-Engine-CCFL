@@ -39,6 +39,8 @@ export type DualBoxTemplateDef = {
   purpose: string;
   videoPromptHints: VideoPromptHints;
   assetPath: string;
+  /** Campaign categories this frame's baked artwork/headline fits. Omitted = fits any category. */
+  categories?: string[];
   canvasW: number;
   canvasH: number;
   upperBox: SplitBox;
