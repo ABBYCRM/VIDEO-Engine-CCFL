@@ -71,12 +71,24 @@ export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string
   const outputMode=input.outputMode||"video";
   const categories=(input.categories||[]).filter(Boolean);
   const ids:string[]=[];
+  // Trio campaigns share the two daily waves round-robin so Instagram gets exactly
+  // ONE trio (1 still feed post + 1 reel + 1 story) per wave, not one per campaign.
+  const isTrio=input.contentType==="podcast"&&input.includeDailyStillPost;
+  let rotationCount=1,rotationIndex=0;
+  if(isTrio&&input.campaignId){
+    const active=db.prepare("SELECT id FROM campaigns WHERE status='active' ORDER BY created_at ASC, id ASC").all() as Array<{id:string}>;
+    const list=active.some(c=>c.id===input.campaignId)?active:[...active,{id:input.campaignId}];
+    rotationCount=Math.max(1,list.length);
+    rotationIndex=Math.max(0,list.findIndex(c=>c.id===input.campaignId));
+  }
   for(let index=0;index<days.length;index++){
     const day=days[index];
     const category=categories.length?categories[index%categories.length]:null;
     // Trio campaigns (video + still) fire every wave; everything else fires once, on the first wave.
-    const waves=(input.contentType==="podcast"&&input.includeDailyStillPost)?DAILY_WAVES:DAILY_WAVES.slice(0,1);
+    const waves=isTrio?DAILY_WAVES:DAILY_WAVES.slice(0,1);
     for(let w=0;w<waves.length;w++){
+      // Round-robin: this campaign only owns waves where the global wave index matches its slot.
+      if(isTrio&&rotationCount>1&&(((day-1)*DAILY_WAVES.length+w)%rotationCount)!==rotationIndex)continue;
       const [hh,mm]=waves[w];
       const when=brandLocalTimeToUTC(day,hh,mm);
       const waveTag=waves.length>1?(w===0?" · AM":" · PM"):"";

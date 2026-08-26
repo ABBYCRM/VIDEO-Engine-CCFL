@@ -53,10 +53,11 @@ export async function composeSplitScreenFile(input: {
   const custom = getCustomSplitTemplate(template.id);
   const templatePath = custom ? path.resolve(custom.filePath) : path.resolve(process.cwd(), "public", template.assetPath.replace(/^\//, ""));
   await fs.mkdir(path.dirname(input.outputPath), { recursive: true });
-  // cover-crop a lane's video (top-anchored, so a portrait subject's head
-  // is never cut) to exactly fill a box without stretching it.
+  // cover-crop a lane's video to exactly fill a box without stretching it.
+  // Horizontally centered (a left-anchored crop showed off-center stock footage);
+  // vertically top-anchored so a portrait subject's head is never cut.
   const coverCrop = (streamIn: string, box: { w: number; h: number }, streamOut: string) =>
-    `[${streamIn}]scale=${box.w}:${box.h}:force_original_aspect_ratio=increase,crop=${box.w}:${box.h}:0:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[${streamOut}]`;
+    `[${streamIn}]scale=${box.w}:${box.h}:force_original_aspect_ratio=increase,crop=${box.w}:${box.h}:(in_w-out_w)/2:0,fps=30,setsar=1,trim=duration=${duration},setpts=PTS-STARTPTS[${streamOut}]`;
   let filter: string;
   const bannerH = Math.round(template.canvasH * 0.075);
   const bannerY = Math.round(template.canvasH * 0.03);

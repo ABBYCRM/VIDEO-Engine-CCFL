@@ -33,7 +33,11 @@ export async function publishInstagramPair(post:any){
     db.prepare("UPDATE scheduled_posts SET instagram_reel_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id,post.id);
     post.instagram_reel_id=id;
   }
-  if(!post.instagram_story_id){
+  // Still-image slots publish to the feed only. Stills are composed 2:3 for the feed;
+  // Instagram center-crops Stories to 9:16 and chops the layout, so only video slots
+  // (which are already 9:16) get the companion Story.
+  const isStillImage=post.content_type==="image"||String(post.media_type||"").startsWith("image");
+  if(!post.instagram_story_id&&!isStillImage){
     story=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption,postType:"story"});
     const id=String(story.mediaId||story.creationId||"");
     if(!id)throw new Error("Instagram Story publish completed without a media id");
