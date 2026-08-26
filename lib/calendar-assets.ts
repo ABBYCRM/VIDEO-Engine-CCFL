@@ -53,11 +53,46 @@ export function ensureAssetCalendarPost(input:{
   return id;
 }
 
+// ---- Brand-timezone scheduling -------------------------------------------
+// All calendar slots are anchored to Florida wall time (America/New_York),
+// DST-aware, regardless of the server's own timezone.
+const BRAND_TZ="America/New_York";
+function brandTzOffsetMs(date:Date){const dtf=new Intl.DateTimeFormat("en-US",{timeZone:BRAND_TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});const p:Record<string,string>={};for(const part of dtf.formatToParts(date))p[part.type]=part.value;const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,(+p.hour)%24,+p.minute,+p.second);return asUTC-date.getTime();}
+export function brandLocalTimeToUTC(dayOffset:number,hour:number,minute:number){const base=new Date(Date.now()+dayOffset*86400000);const dtf=new Intl.DateTimeFormat("en-CA",{timeZone:BRAND_TZ,year:"numeric",month:"2-digit",day:"2-digit"});const [y,m,d]=dtf.format(base).split("-").map(Number);const guess=new Date(Date.UTC(y,m-1,d,hour,minute,0));return new Date(guess.getTime()-brandTzOffsetMs(guess));}
+// The daily posting waves in Florida wall time. Each wave fires one full
+// trio per campaign: 1 still feed post + 1 reel + 1 story (a video slot
+// publishes as a Reel + Story pair). Edit this list to change the cadence
+// for every future plan.
+export const DAILY_WAVES:ReadonlyArray<readonly [number,number]>=[[7,30],[17,0]];
+
 export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string;contentType:string;network?:string;caption?:string;campaignId?:string|null;siteId?:string|null;approvalMode?:"manual"|"auto";cadence?:"daily"|"3-week"|"weekly"|"manual";outputMode?:"video"|"image"|"auto_mix";categories?:string[];includeDailyStillPost?:boolean}){
   const horizon=[3,7,14,30,60].includes(input.horizonDays)?input.horizonDays:7; const cadence=input.cadence||"daily"; const days:number[]=[];
   for(let i=1;i<=horizon;i++){const dow=new Date(Date.now()+i*86400000).getDay();if(cadence==="daily"||(cadence==="3-week"&&[1,3,5].includes(dow))||(cadence==="weekly"&&i===1))days.push(i);}
   const outputMode=input.outputMode||"video";
   const categories=(input.categories||[]).filter(Boolean);
-  const ids:string[]=[]; for(let index=0;index<days.length;index++){const day=days[index],id=crypto.randomUUID(),when=new Date(Date.now()+day*86400000);when.setHours(10,0,0,0);const slotType=outputMode==="image"?"image":outputMode==="auto_mix"?(index%2===0?input.contentType:"image"):input.contentType;const seedCaption=input.contentType==="podcast"?"":(input.caption||"");const category=categories.length?categories[index%categories.length]:null;const splitTemplate=slotType==="podcast"?SPLIT_TEMPLATES[Math.floor(Math.random()*SPLIT_TEMPLATES.length)].id:null;db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category,split_template) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,`${input.titlePrefix} · Day ${day} · ${slotType==="image"?"Still":"Video"}`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,seedCaption.slice(0,5000),slotType,input.siteId||null,input.campaignId||null,horizon,"pending",category,splitTemplate);ids.push(id);if(input.includeDailyStillPost&&slotType!=="image"){const stillId=crypto.randomUUID(),stillWhen=new Date(when);stillWhen.setHours(14,0,0,0);const stillTemplate=pickRandomStillPostTemplate();db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category,still_template_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(stillId,`${input.titlePrefix} · Day ${day} · Still`.slice(0,180),input.network||"instagram",stillWhen.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,ensureBrandContactInCaption(input.caption||"").slice(0,5000),"image",input.siteId||null,input.campaignId||null,horizon,"pending",category,stillTemplate.id);ids.push(stillId);}}
+  const ids:string[]=[];
+  for(let index=0;index<days.length;index++){
+    const day=days[index];
+    const category=categories.length?categories[index%categories.length]:null;
+    // Trio campaigns (video + still) fire every wave; everything else fires once, on the first wave.
+    const waves=(input.contentType==="podcast"&&input.includeDailyStillPost)?DAILY_WAVES:DAILY_WAVES.slice(0,1);
+    for(let w=0;w<waves.length;w++){
+      const [hh,mm]=waves[w];
+      const when=brandLocalTimeToUTC(day,hh,mm);
+      const waveTag=waves.length>1?(w===0?" · AM":" · PM"):"";
+      const slotType=outputMode==="image"?"image":outputMode==="auto_mix"?(index%2===0?input.contentType:"image"):input.contentType;
+      const seedCaption=input.contentType==="podcast"?"":(input.caption||"");
+      const splitTemplate=slotType==="podcast"?SPLIT_TEMPLATES[Math.floor(Math.random()*SPLIT_TEMPLATES.length)].id:null;
+      const id=crypto.randomUUID();
+      db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category,split_template) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,`${input.titlePrefix} · Day ${day}${waveTag} · ${slotType==="image"?"Still":"Video"}`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,seedCaption.slice(0,5000),slotType,input.siteId||null,input.campaignId||null,horizon,"pending",category,splitTemplate);
+      ids.push(id);
+      if(input.includeDailyStillPost&&slotType!=="image"){
+        const stillId=crypto.randomUUID();
+        const stillTemplate=pickRandomStillPostTemplate();
+        db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category,still_template_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(stillId,`${input.titlePrefix} · Day ${day}${waveTag} · Still`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,ensureBrandContactInCaption(input.caption||"").slice(0,5000),"image",input.siteId||null,input.campaignId||null,horizon,"pending",category,stillTemplate.id);
+        ids.push(stillId);
+      }
+    }
+  }
   return ids;
 }
