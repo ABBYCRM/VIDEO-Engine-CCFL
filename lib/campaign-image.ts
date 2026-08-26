@@ -1,9 +1,12 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { generateA2eGptImage, getImageApiKey, getImageModel, getImageProvider, ImageUpstreamError } from "@/lib/avatar-generation/client";
 import { generateAvatarImage } from "@/lib/nvidia/image";
 import { saveGeneratedImage } from "@/lib/media-library";
+import { composeStillPost } from "@/lib/still-compose";
+import { getStillPostTemplate } from "@/lib/still-post-templates";
 
 function resolveReferencePath(referenceImagePath:string){
   if(referenceImagePath.startsWith("/avatars/"))return path.resolve(process.cwd(),"public",referenceImagePath.slice(1));
@@ -72,8 +75,9 @@ async function renderWithConfiguredProvider(prompt:string, referencePath:string|
   return{base64:fresh.base64,mimeType:fresh.mimeType,model:fresh.model};
 }
 
-export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean}){
-  const prompt=`Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${input.prompt}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.`;
+export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null}){
+  const template=input.stillTemplateId?getStillPostTemplate(input.stillTemplateId):null;
+  const prompt=`Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${input.prompt}${template?`\nTemplate image direction: ${template.imagePromptHints}.`:""}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.`;
   let reference:string|null=null;
   if(input.avatarId){
     const avatar=db.prepare("SELECT id,name,reference_image_path FROM avatars WHERE id=?").get(input.avatarId) as {id:string;name:string;reference_image_path:string|null}|undefined;
@@ -84,6 +88,13 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
     reference=resolveReferencePath(raw);
   }
   const result=await renderWithConfiguredProvider(prompt,reference);
-  const saved=await saveGeneratedImage({base64:result.base64,source:"campaign-still",model:result.model,prompt,mimeType:result.mimeType,createCalendarPost:input.createCalendarPost});
-  return{...result,assetId:saved.id,assetUrl:saved.url};
+  let base64=result.base64,mimeType=result.mimeType;
+  if(template){
+    const tempDir=path.resolve(process.env.VIDEO_OUTPUT_DIR||"./data/videos"),"still-compose"),token=crypto.randomUUID(),photoPath=path.join(tempDir,`${token}.${mimeType==="image/jpeg"?"jpg":mimeType==="image/webp"?"webp":"png"}`),outPath=path.join(tempDir,`${token}-composed.png`);
+    await fs.mkdir(tempDir,{recursive:true});
+    try{await fs.writeFile(photoPath,Buffer.from(base64,"base64"));await composeStillPost({photoPath,templateId:template.id,outPath});base64=(await fs.readFile(outPath)).toString("base64");mimeType="image/png";}
+    finally{await Promise.all([fs.unlink(photoPath).catch(()=>{}),fs.unlink(outPath).catch(()=>{})]);}
+  }
+  const saved=await saveGeneratedImage({base64,source:"campaign-still",model:result.model,prompt,mimeType,createCalendarPost:input.createCalendarPost});
+  return{...result,base64,mimeType,assetId:saved.id,assetUrl:saved.url};
 }

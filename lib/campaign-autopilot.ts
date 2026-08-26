@@ -36,9 +36,9 @@ let started=false;
 let running=false;
 const queuedSlotIds=new Set<string>();
 
-const SLOT_SELECT=`sp.id,sp.title,sp.caption,sp.content_type,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.scheduled_at,sp.category as slot_category,
+const SLOT_SELECT=`sp.id,sp.title,sp.caption,sp.content_type,sp.generation_status,sp.error,sp.video_job_id,sp.upper_job_id,sp.lower_job_id,sp.scheduled_at,sp.category as slot_category,sp.still_template_id,COALESCE(sp.split_template,c.split_template) as split_template,
            c.name as campaign_name,c.category as campaign_category,c.mission,c.avatar_id,c.video_provider,c.video_model,
-           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.split_template,c.split_duration_seconds,c.upper_video_ids`;
+           c.upper_provider,c.upper_model,c.split_percent,c.split_relationship,c.split_duration_seconds,c.upper_video_ids`;
 
 function slotCategory(row:any){
   return String(row.slot_category || row.campaign_category || "ugc");
@@ -352,7 +352,7 @@ async function generateNext(slotId?:string){
     try{
       db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
       const prompt=`Campaign: ${row.campaign_name}. ${row.mission}\nCalendar variation: ${row.title}. Create a distinct visual variation for this scheduled post, suitable for Instagram and consistent with the campaign.`;
-      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false});
+      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false,stillTemplateId:row.still_template_id});
       db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,caption=?,generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(image.assetUrl,image.mimeType,slotPublicCaption(row),row.id);
     }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
     return true;
