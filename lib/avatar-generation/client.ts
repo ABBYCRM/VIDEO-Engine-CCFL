@@ -8,7 +8,7 @@ import { VIEWS, type AvatarView } from "@/lib/avatars";
 import { uploadA2eBase64 } from "@/lib/a2e-shared";
 import { getProviderKey } from "@/lib/providers";
 
-export type ImageProvider = "gemini" | "openai" | "xai" | "a2e" | "mock";
+export type ImageProvider = "gemini" | "openai" | "xai" | "a2e" | "hedra" | "mock";
 const SETTING_KEY = "image_api_key";
 const SETTING_MODEL_KEY = "image_model";
 const SETTING_PROVIDER_KEY = "image_provider";
@@ -17,6 +17,7 @@ const PROVIDER_MODELS: Record<ImageProvider, string[]> = {
   openai: ["gpt-image-1", "dall-e-3"],
   xai: ["grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-quality"],
   a2e: ["gpt-image-1.5", "gpt-image-2"],
+  hedra: ["gpt-image-2", "flux2-max", "flux-kontext", "nano-banana-pro", "imagen-4", "seedream-5", "ideogram-v4", "recraft-v3"],
   mock: ["mock-stable-diffusion-1"]
 };
 
@@ -29,7 +30,7 @@ function setRaw(key: string, value: string) {
 
 export function getImageProvider(): ImageProvider {
   const raw = getRaw(SETTING_PROVIDER_KEY);
-  return raw === "gemini" || raw === "openai" || raw === "xai" || raw === "a2e" || raw === "mock" ? raw : "gemini";
+  return raw === "gemini" || raw === "openai" || raw === "xai" || raw === "a2e" || raw === "hedra" || raw === "mock" ? raw : "hedra";
 }
 export function setImageProvider(provider: ImageProvider) { setRaw(SETTING_PROVIDER_KEY, provider); }
 
@@ -41,6 +42,7 @@ export function getImageApiKey(): string {
   if (provider === "gemini" && process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
   if (provider === "xai" && process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
   if (provider === "a2e") return getProviderKey("a2e");
+  if (provider === "hedra") return getProviderKey("hedra");
   throw new Error("Image API key is not configured");
 }
 export function saveImageApiKey(value: string) { setRaw(SETTING_KEY, encryptSecret(value.trim())); }
@@ -60,6 +62,7 @@ export function setImageModel(model: string) {
 }
 export function listImageProviders() {
   return [
+    { id: "hedra", label: "Hedra multi-model image (gpt-image-2, flux2-max, imagen-4, seedream-5, ideogram-v4, recraft-v3)", envVar: "HEDRA_API_KEY", help: "Default image provider. 75+ image models behind one v3 endpoint, ~3.5¢ per generation. Text-to-image and reference-image editing." },
     { id: "gemini", label: "Google Gemini image generation", envVar: "GEMINI_API_KEY", help: "Native multimodal; supports reference-image editing. Best for identity-preserving 4-view turnaround." },
     { id: "a2e", label: "A2E GPT Image (gpt-image-1.5 / gpt-image-2)", envVar: "A2E_API_KEY", help: "Asynchronous upload-reference-then-edit. Routed through A2E's GPT Image endpoint. Best for 4-view turnaround when OpenAI is slow or its gpt-image-1 base64 path is timing out." },
     { id: "openai", label: "OpenAI image generation", envVar: "OPENAI_API_KEY", help: "gpt-image-1 supports reference editing. Higher cost, slower latency." },
@@ -122,6 +125,7 @@ export async function generateView(opts: { avatarId: string; view: AvatarView; r
   const referencePath = resolveReferencePath(opts.referenceImagePath);
   if (provider === "a2e") return a2eImageGenerate(referencePath, model, prompt);
   if (provider === "openai") return openaiImageGenerate(referencePath, model, prompt);
+  if (provider === "hedra") return hedraImageGenerate(referencePath, model, prompt);
   if (provider === "mock") return mockGenerate(opts, model, prompt);
   return geminiImageGenerate(referencePath, model, prompt);
 }
@@ -157,6 +161,93 @@ async function geminiImageGenerate(referencePath: string, model: string, prompt:
   } finally {
     clearTimeout(timer);
     if (hardTimer) clearTimeout(hardTimer);
+  }
+}
+
+async function hedraImageGenerate(referencePath: string | null, model: string, prompt: string): Promise<GenerateResult> {
+  // Hedra v3 image generation: submit + poll, return image bytes.
+  // Same /v3/models/{model_id} submit + /v3/jobs/{id}/status poll + /v3/jobs/{id} read pattern as the video endpoint.
+  // Model id is whatever the user selected in settings (gpt-image-2, flux2-max, imagen-4, seedream-5, etc.)
+  const key = getProviderKey("hedra");
+  const TIMEOUT_MS = 120000;
+  const aspectRatio = "9:16";
+  const resolution = "1K";
+  const ac = new AbortController();
+  const submitTimer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, resolution };
+  // Only attach reference image if a path is supplied AND the model supports it.
+  // The text-to-image models (flux2-max, gpt-image-2, imagen-4) accept an optional input image as
+  // an "assets" base64 pair; when we have a reference, attach it as the first frame.
+  try {
+    let submit: Response;
+    if (referencePath) {
+      const bytes = await fs.readFile(referencePath);
+      const mime = sniffImageMime(bytes, referencePath);
+      const b64 = bytes.toString("base64");
+      submit = await fetch(`https://api.hedra.com/v3/models/${encodeURIComponent(model)}`, {
+        method: "POST",
+        headers: { "Authorization": `Key ${key}`, "Content-Type": "application/json" },
+        cache: "no-store",
+        signal: ac.signal,
+        body: JSON.stringify({ input: { ...input, input_image: { type: "base64", media_type: mime, data: b64 } } })
+      });
+    } else {
+      submit = await fetch(`https://api.hedra.com/v3/models/${encodeURIComponent(model)}`, {
+        method: "POST",
+        headers: { "Authorization": `Key ${key}`, "Content-Type": "application/json" },
+        cache: "no-store",
+        signal: ac.signal,
+        body: JSON.stringify({ input })
+      });
+    }
+    if (!submit.ok) throw new ImageUpstreamError(`Hedra image submit HTTP ${submit.status}: ${(await submit.text()).slice(0,300)}`, submit.status);
+    const sub = await submit.json() as { job_id?: string; id?: string };
+    const jobId = sub.job_id || sub.id;
+    if (!jobId) throw new ImageUpstreamError("Hedra image submit returned no job id", 502);
+
+    // Poll until COMPLETED / FAILED
+    const pollStart = Date.now();
+    let status = "queued";
+    while (Date.now() - pollStart < TIMEOUT_MS) {
+      await new Promise(r => setTimeout(r, 1500));
+      const r = await fetch(`https://api.hedra.com/v3/jobs/${encodeURIComponent(jobId)}/status`, {
+        headers: { "Authorization": `Key ${key}` }, cache: "no-store"
+      });
+      if (!r.ok) throw new ImageUpstreamError(`Hedra image poll HTTP ${r.status}: ${(await r.text()).slice(0,300)}`, r.status);
+      const j = await r.json() as { status?: string; state?: string };
+      status = (j.status || j.state || "queued").toLowerCase();
+      if (status === "completed" || status === "succeeded" || status === "success") break;
+      if (status === "failed" || status === "error" || status === "cancelled") {
+        throw new ImageUpstreamError(`Hedra image job ${jobId} ${status}`, 502);
+      }
+    }
+    if (status !== "completed" && status !== "succeeded" && status !== "success") {
+      throw new ImageUpstreamError(`Hedra image job ${jobId} timed out after ${TIMEOUT_MS}ms (last status: ${status})`, 504);
+    }
+
+    // Read result
+    const r = await fetch(`https://api.hedra.com/v3/jobs/${encodeURIComponent(jobId)}`, {
+      headers: { "Authorization": `Key ${key}` }, cache: "no-store"
+    });
+    if (!r.ok) throw new ImageUpstreamError(`Hedra image result HTTP ${r.status}: ${(await r.text()).slice(0,300)}`, r.status);
+    const j = await r.json() as { outputs?: Array<{ url?: string; b64?: string; data?: string }>; data?: Array<{ url?: string; b64?: string; data?: string }> };
+    const outputs = j.outputs || j.data || [];
+    const out = outputs[0];
+    if (!out) throw new ImageUpstreamError("Hedra returned no image output", 502);
+    if (out.b64 || out.data) {
+      return { png: Buffer.from((out.b64 || out.data) as string, "base64"), model, prompt };
+    }
+    if (out.url) {
+      const dl = await fetch(out.url, { signal: ac.signal, cache: "no-store" });
+      if (!dl.ok) throw new ImageUpstreamError(`Hedra image download HTTP ${dl.status}`, dl.status);
+      return { png: Buffer.from(await dl.arrayBuffer()), model, prompt };
+    }
+    throw new ImageUpstreamError("Hedra output had no url or b64 data", 502);
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new ImageUpstreamError(`Hedra image API timed out after ${TIMEOUT_MS}ms`, 504);
+    throw e;
+  } finally {
+    clearTimeout(submitTimer);
   }
 }
 

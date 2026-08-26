@@ -195,9 +195,10 @@ export function UnifiedCreateConsole() {
               <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium text-slate-700">Video provider</span>
-                  <select value={provider} onChange={e => { setProvider(e.target.value); if (e.target.value === "grok") { setModel("grok-imagine-video-1.5"); setDuration(8); } else { setModel("sora2"); setDuration(15); } }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                  <select value={provider} onChange={e => { setProvider(e.target.value); if (e.target.value === "grok") { setModel("grok-imagine-video-1.5"); setDuration(8); } else if (e.target.value === "veo") { setModel("veo-3.1-generate-preview"); setDuration(8); } else { setModel("sora2"); setDuration(15); } }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
                     <option value="a2e">A2E (Sora 2 / Veo 3 / Kling)</option>
                     <option value="grok">xAI · Grok Imagine Video</option>
+                    <option value="veo">Google · Veo 3.1 (Gemini)</option>
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
@@ -216,13 +217,18 @@ export function UnifiedCreateConsole() {
                     {provider === "grok" && (
                       <option value="grok-imagine-video-1.5">xAI · Grok Imagine Video 1.5 (8s)</option>
                     )}
+                    {provider === "veo" && (<>
+                      <option value="veo-3.1-generate-preview">Google · Veo 3.1 (preview, 8s)</option>
+                      <option value="veo-3.1-fast-generate-preview">Google · Veo 3.1 Fast (preview, 8s)</option>
+                      <option value="veo-3.1-lite-generate-preview">Google · Veo 3.1 Lite (preview, 8s)</option>
+                    </>)}
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium text-slate-700">Video duration (seconds)</span>
                   <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-                    {provider === "grok" ? (
-                      <option value={8}>8 seconds (Grok Imagine)</option>
+                    {(provider === "grok" || provider === "veo") ? (
+                      <option value={8}>8 seconds (8s cap)</option>
                     ) : (
                       <>
                         <option value={8}>8 seconds</option>

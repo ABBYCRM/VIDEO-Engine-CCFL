@@ -89,8 +89,8 @@ export async function POST(req: Request) {
     const approvalMode: "manual" | "auto" = body.approvalMode === "auto" ? "auto" : "auto"; // default auto
     const model = body.model ? String(body.model) : "sora2"; // default A2E Sora 2 Pro for hyper realism
     const providerChoice = body.provider ? String(body.provider) : "a2e";
-    // A2E supports 15-30s (Seedance 2.5 etc); Grok Imagine is 8s
-    const defaultDuration = providerChoice === "grok" ? 8 : 15;
+    // A2E supports 15-30s (Seedance 2.5 etc); Grok Imagine is 8s; Veo 3.1 caps at 8s
+    const defaultDuration = (providerChoice === "grok" || providerChoice === "veo") ? 8 : 15;
     const durationSeconds = Number.isFinite(Number(body.durationSeconds)) && [2,3,5,6,8,10,12,15,20,25,30].includes(Number(body.durationSeconds)) ? Number(body.durationSeconds) : defaultDuration;
     // Language support: 'en', 'es', or 'mix' (English + Spanish in same video)
     const language = ["en","es","mix"].includes(body.language) ? body.language : "mix";
@@ -268,7 +268,8 @@ export async function GET() {
     defaultLanguage: "mix",
     providers: [
       { id: "a2e", label: "A2E (Sora 2 / Veo 3 / Kling)", defaultModel: "sora2", defaultDuration: 15 },
-      { id: "grok", label: "xAI · Grok Imagine Video", defaultModel: "grok-imagine-video-1.5", defaultDuration: 8 }
+      { id: "grok", label: "xAI · Grok Imagine Video", defaultModel: "grok-imagine-video-1.5", defaultDuration: 8 },
+      { id: "veo", label: "Google · Veo 3.1 (Gemini)", defaultModel: "veo-3.1-generate-preview", defaultDuration: 8 }
     ],
     durations: [2, 3, 5, 6, 8, 10, 12, 15, 20, 25, 30],
     templates: visualTemplates.map((template) => ({
