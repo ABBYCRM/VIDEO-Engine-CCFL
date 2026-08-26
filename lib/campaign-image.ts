@@ -79,7 +79,9 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
   const template=input.stillTemplateId?getStillPostTemplate(input.stillTemplateId):null;
   const prompt=`Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${input.prompt}${template?`\nTemplate image direction: ${template.imagePromptHints}.`:""}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.`;
   let reference:string|null=null;
-  if(input.avatarId){
+  if(input.avatarId&&getImageProvider()==="xai"){
+    // xAI cannot edit a reference image; generate from the prompt alone instead of failing the slot.
+  }else if(input.avatarId){
     const avatar=db.prepare("SELECT id,name,reference_image_path FROM avatars WHERE id=?").get(input.avatarId) as {id:string;name:string;reference_image_path:string|null}|undefined;
     if(!avatar)throw new Error("Selected canonical avatar was not found");
     const front=db.prepare("SELECT file_path,status FROM avatar_views WHERE avatar_id=? AND view='front'").get(input.avatarId) as {file_path:string|null;status:string}|undefined;
