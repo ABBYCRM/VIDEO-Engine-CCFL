@@ -83,7 +83,12 @@ export function saveStockUppersByCategory(map: Record<string, string[]>) {
  *  same clip (planning and compose agree), while different slots vary. */
 export function pickStockUpperForSlot(category: string | null, seed: string): string | null {
   const map = getStockUppersByCategory();
-  const list = category && map[category]?.length ? map[category] : Object.values(map).flat();
+  // Never cross-contaminate unrelated topics. Rideshare may use generic
+  // car-collision footage; slip/fall never receives vehicle footage.
+  const fallbackCategory = category === "rideshare" ? "car_accident" : null;
+  const list = category && map[category]?.length
+    ? map[category]
+    : (fallbackCategory && map[fallbackCategory]?.length ? map[fallbackCategory] : []);
   if (!list.length) return null;
   const hash = crypto.createHash("sha1").update(seed).digest();
   return list[hash.readUInt32BE(0) % list.length] || null;
