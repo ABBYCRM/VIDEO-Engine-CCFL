@@ -225,7 +225,7 @@ async function startSplitLanes(row:any, opts?:{upperProvider?:ProviderId;lowerPr
     );
     return;
   }
-  const upperMission=`${plan.upper.mission}\nVisual direction: ${plan.upper.visualDirection}\nONE CONTINUOUS SHOT ONLY`;
+  const upperMission=`${plan.upper.mission}\nVisual direction: ${plan.upper.visualDirection}\nONE CONTINUOUS SHOT ONLY\nSTRICT: photorealistic real-world footage only. NEVER render app interfaces, notification cards, social-media post frames, phone screens, buttons, captions, watermarks, or any text — especially never any words from this brief or internal planning titles. Show the full subject properly framed: no cut-off bodies, no half vehicles unless a deliberate close-up.`;
   const upper=await startSlotJob(row, upperProvider, null, {mission:upperMission, model:laneModel(upperProvider, row.upper_model), script:plan.upper.script, subject:plan.upper.subject});
   db.prepare(`UPDATE scheduled_posts SET upper_job_id=?,lower_job_id=?,video_job_id=NULL,generation_status='generating',error=NULL,caption=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
     upper.id, lower.id, caption, row.id
