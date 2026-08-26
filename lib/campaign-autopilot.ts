@@ -13,9 +13,11 @@ import {
   campaignUpperVideoIds,
   ensureUpperVideoColumns,
   materializeUpperVideo,
+  pickStockUpperForSlot,
   pickUpperVideoId,
   resolveCampaignAvatarId
 } from "@/lib/upper-videos";
+import { resolveSplitTemplate } from "@/lib/custom-split-templates";
 import {
   clampSplitDuration,
   clampSplitPercent,
@@ -125,7 +127,15 @@ function slotPublicCaption(row:any, plan?:{hook?:string;caption?:string}){
 }
 
 function stockUpperId(row:any){
-  return pickUpperVideoId(campaignUpperVideoIds(row), row.title);
+  const explicit=pickUpperVideoId(campaignUpperVideoIds(row), row.title);
+  if(explicit)return explicit;
+  // Category-keyed stock library: only for dual-box (top/bottom) templates,
+  // where a pre-made clip fills the upper box and the avatar comments on it.
+  try{
+    const template=resolveSplitTemplate(row.split_template);
+    if(template.layout!=="dual-box")return null;
+  }catch{return null;}
+  return pickStockUpperForSlot(normalizeCategory(slotCategory(row)), String(row.id||row.title||""));
 }
 
 // A configured stock upper video only counts if its bytes are actually

@@ -50,6 +50,45 @@ export function pickUpperVideoId(ids: string[], title?: string | null): string |
   return ids[(dayIndexFromTitle(title) - 1) % ids.length] || null;
 }
 
+// ---- Category-keyed stock upper library (persistent, survives redeploys) ----
+// Curated pre-made clips (US-style crash/incident footage) used as the upper
+// lane of dual-box split templates, so only the avatar lane needs generating.
+const STOCK_BY_CATEGORY_KEY = "stock_upper_ids_by_category";
+
+export function getStockUppersByCategory(): Record<string, string[]> {
+  try {
+    const setting = db.prepare("SELECT value FROM settings WHERE key=?").get(STOCK_BY_CATEGORY_KEY) as { value: string } | undefined;
+    const parsed = setting?.value ? JSON.parse(setting.value) : {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(parsed)) out[k] = parseUpperVideoIds(v);
+      return out;
+    }
+  } catch {}
+  return {};
+}
+
+export function saveStockUppersByCategory(map: Record<string, string[]>) {
+  const clean: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(map)) {
+    const ids = parseUpperVideoIds(v);
+    if (ids.length) clean[k] = ids;
+  }
+  db.prepare(
+    "INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP"
+  ).run(STOCK_BY_CATEGORY_KEY, JSON.stringify(clean));
+}
+
+/** Deterministic per-slot "random" pick: the same slot always resolves to the
+ *  same clip (planning and compose agree), while different slots vary. */
+export function pickStockUpperForSlot(category: string | null, seed: string): string | null {
+  const map = getStockUppersByCategory();
+  const list = category && map[category]?.length ? map[category] : Object.values(map).flat();
+  if (!list.length) return null;
+  const hash = crypto.createHash("sha1").update(seed).digest();
+  return list[hash.readUInt32BE(0) % list.length] || null;
+}
+
 export function saveDefaultUpperVideoIds(ids: string[]) {
   const value = JSON.stringify(ids.filter(Boolean));
   db.prepare(
