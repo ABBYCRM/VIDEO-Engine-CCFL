@@ -128,6 +128,16 @@ function stockUpperId(row:any){
   return pickUpperVideoId(campaignUpperVideoIds(row), row.title);
 }
 
+// A configured stock upper video only counts if its bytes are actually
+// recoverable (persistent library or disk). Uploads that lived on the
+// ephemeral disk vanish on redeploy — in that case fall back to
+// generating the upper lane instead of failing the slot.
+async function usableStockUpperId(row:any){
+  const id=stockUpperId(row);
+  if(!id)return null;
+  try{ await materializeUpperVideo(id); return id; }catch{ return null; }
+}
+
 async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string;avatarId?:string}|null, extra?:{mission?:string;model?:string;script?:string;subject?:string}){
   const variation=extra?.mission || `${row.mission}\nCalendar variation: ${row.title}. Produce a distinct execution for this scheduled post while preserving the campaign message.`;
   const job=await createJob({
@@ -151,7 +161,9 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
 }
 
 async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string}, lower:{id?:string;outputPath?:string}){
-  const stockId=stockUpperId(row);
+  // Prefer a real generated upper lane; only reach for stock when no upper
+  // job exists, and only if the stock asset is still materializable.
+  const stockId=(upper.id||upper.outputPath)?null:await usableStockUpperId(row);
   const upperPath=stockId
     ? await materializeUpperVideo(stockId)
     : (upper.id ? await ensureJobOutputPath(upper.id) : upper.outputPath);
@@ -178,7 +190,7 @@ async function startSplitLanes(row:any, opts?:{upperProvider?:ProviderId;lowerPr
   const surface=campaignSurface(row);
   const upperProvider=opts?.upperProvider || surface.upper;
   const lowerProvider=opts?.lowerProvider || surface.lower;
-  const stockId=stockUpperId(row);
+  const stockId=await usableStockUpperId(row);
   const avatarRef=await loadAvatarReference(row.avatar_id);
   const avatarName=avatarRef?.avatar?.name||null;
   const duration=clampSplitDuration(row.split_duration_seconds);
@@ -225,7 +237,9 @@ async function recoverLane(row:any, lane:"upper"|"lower", failedProvider:Provide
 }
 
 async function finishSplit(row:any){
-  const stockId=stockUpperId(row);
+  // Trust the slot's actual state: a slot planned with generated lanes has
+  // upper_job_id set and must wait on that job, regardless of settings.
+  const stockId=row.upper_job_id?null:stockUpperId(row);
   const upper=row.upper_job_id?await refreshJob(row.upper_job_id,{ensureCalendar:false}):null;
   const lower=row.lower_job_id?await refreshJob(row.lower_job_id,{ensureCalendar:false}):null;
   if((!stockId && upper && !["succeeded","failed"].includes(upper.status)) || (lower && !["succeeded","failed"].includes(lower.status)))return true;
