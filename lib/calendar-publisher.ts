@@ -5,7 +5,11 @@ import { publicCaptionForSlot, isOperatorCopy } from "@/lib/public-copy";
 import "@/lib/calendar-assets";
 import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
 import { isYouTubeConnected, uploadYouTubeShort } from "@/lib/youtube";
-import { getPersistentLibraryAsset } from "@/lib/persistent-library";
+import { getPersistentLibraryAsset, savePersistentLibraryAsset } from "@/lib/persistent-library";
+import { spawn } from "node:child_process";
+import { promises as fsp } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 let started=false;
 let running=false;
@@ -23,6 +27,58 @@ export function releaseInstagramPublish(postId:string){
 }
 
 /** Resume safely after a partial Reel/Story publish: each remote media id is persisted immediately. */
+function waveHasVideoSlot(post:any){
+  const row=db.prepare("SELECT COUNT(*) as c FROM scheduled_posts WHERE scheduled_at=? AND id<>? AND network='instagram' AND content_type<>'image' AND status='approved'").get(post.scheduled_at,post.id) as {c:number};
+  return row.c>0;
+}
+
+function runFfmpegOnce(args:string[]){
+  const bin=process.env.FFMPEG_PATH||"ffmpeg";
+  return new Promise<void>((resolve,reject)=>{
+    const child=spawn(bin,args,{stdio:["ignore","pipe","pipe"]});
+    let err="";
+    child.stderr.on("data",d=>{err+=String(d);});
+    child.on("error",reject);
+    child.on("close",code=>code===0?resolve():reject(new Error(`ffmpeg exited ${code}: ${err.slice(-400)}`)));
+  });
+}
+
+/** Re-frame the 2:3 feed still as a 1080x1920 Story image: blurred cover
+ *  background with the full still centered on top. Saved to the persistent
+ *  library under a deterministic id so publish retries reuse it. */
+async function ensureStillStoryAsset(post:any):Promise<string>{
+  const match=/^\/api\/library\/assets\/([^/]+)\/file(?:\?.*)?$/.exec(String(post.media_url||""));
+  if(!match)throw new Error("Story publish needs a library still asset");
+  const asset=await getPersistentLibraryAsset(decodeURIComponent(match[1]));
+  if(!asset)throw new Error("Library asset not found for the story variant");
+  const dir=await fsp.mkdtemp(path.join(os.tmpdir(),"story-"));
+  const ext=String(asset.mimeType||"").includes("png")?"png":"jpg";
+  const inPath=path.join(dir,`in.${ext}`);
+  const outPath=path.join(dir,"out.jpg");
+  try{
+    await fsp.writeFile(inPath,asset.bytes);
+    await runFfmpegOnce(["-y","-i",inPath,
+      "-filter_complex",
+      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=40:5[bg];[0:v]scale=1000:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2",
+      "-frames:v","1","-q:v","3",outPath]);
+    const bytes=await fsp.readFile(outPath);
+    const url=await savePersistentLibraryAsset({
+      id:`${post.id}-story-9x16`,
+      kind:"calendar-story",
+      mediaType:"image",
+      label:"Story 9:16",
+      title:`${post.title||"Calendar still"} (story)`,
+      mimeType:"image/jpeg",
+      bytes,
+      model:"ffmpeg story re-frame"
+    });
+    if(!url)throw new Error("Persistent library is not configured; cannot host the story variant");
+    return url;
+  }finally{
+    await fsp.rm(dir,{recursive:true,force:true}).catch(()=>{});
+  }
+}
+
 export async function publishInstagramPair(post:any){
   if(post.generation_status&&post.generation_status!=="ready")throw new Error("Media is "+post.generation_status+"; it is not ready to publish");
   if(!post.video_job_id&&!post.media_url)throw new Error("Auto-post requires generated media");
@@ -35,10 +91,20 @@ export async function publishInstagramPair(post:any){
     db.prepare("UPDATE scheduled_posts SET instagram_reel_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id,post.id);
     post.instagram_reel_id=id;
   }
-  // Still-image slots publish to the feed only. Stills are composed 2:3 for the feed;
-  // Instagram center-crops Stories to 9:16 and chops the layout, so only video slots
-  // (which are already 9:16) get the companion Story.
+  // Video slots mirror the reel as a 9:16 Story. Still slots mirror the feed
+  // photo as a Story ONLY when no video slot shares the wave (the morning
+  // still-only wave); at night the reel already provides the Story. The 2:3
+  // feed still is re-framed onto a blurred 9:16 backdrop first, because
+  // Instagram center-crops raw Story images and chops the layout.
   const isStillImage=post.content_type==="image"||String(post.media_type||"").startsWith("image");
+  if(!post.instagram_story_id&&isStillImage&&!waveHasVideoSlot(post)){
+    const storyUrl=await ensureStillStoryAsset(post);
+    story=await publishInstagram({mediaUrl:storyUrl,mediaType:"image/jpeg",caption:post.caption,postType:"story"});
+    const id=String(story.mediaId||story.creationId||"");
+    if(!id)throw new Error("Instagram Story publish completed without a media id");
+    db.prepare("UPDATE scheduled_posts SET instagram_story_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id,post.id);
+    post.instagram_story_id=id;
+  }
   if(!post.instagram_story_id&&!isStillImage){
     story=await publishInstagram({jobId:post.video_job_id,mediaUrl:post.media_url,mediaType:post.media_type,caption:post.caption,postType:"story"});
     const id=String(story.mediaId||story.creationId||"");
@@ -68,6 +134,27 @@ async function maybePublishYouTubeShort(post:any){
   }
 }
 
+const YT_BACKFILL_PAUSE_KEY="youtube_backfill_paused_until";
+
+/** Backfill: mirror every already-published reel to YouTube, oldest first,
+ *  one per publisher pass. YouTube's default API quota only covers ~6
+ *  uploads/day (videos.insert costs 1600 of 10000 units), so on a quota error
+ *  we pause until just after the next UTC midnight and retry that reel first. */
+async function backfillOneYouTubeShort(){
+  if(!isYouTubeConnected())return;
+  const paused=(db.prepare("SELECT value FROM settings WHERE key=?").get(YT_BACKFILL_PAUSE_KEY) as {value:string}|undefined)?.value;
+  if(paused&&new Date(paused).getTime()>Date.now())return;
+  const row=db.prepare("SELECT * FROM scheduled_posts WHERE network='instagram' AND content_type<>'image' AND instagram_reel_id IS NOT NULL AND (youtube_video_id IS NULL OR youtube_video_id='') AND (youtube_error IS NULL OR youtube_error='') AND media_url LIKE '/api/library/assets/%' ORDER BY scheduled_at ASC LIMIT 1").get() as any;
+  if(!row)return;
+  await maybePublishYouTubeShort(row);
+  const err=String((db.prepare("SELECT youtube_error FROM scheduled_posts WHERE id=?").get(row.id) as any)?.youtube_error||"");
+  if(/quota/i.test(err)){
+    const t=new Date();t.setUTCHours(24,5,0,0);
+    db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run(YT_BACKFILL_PAUSE_KEY,t.toISOString());
+    db.prepare("UPDATE scheduled_posts SET youtube_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+  }
+}
+
 async function publishRow(post:any){
   if(post.network==="instagram"){const pair=await publishInstagramPair(post);await maybePublishYouTubeShort(post);return pair;}
   if(post.network==="website"){
@@ -90,6 +177,7 @@ export async function runCalendarPublisherOnce(){
       processed++;
     }
     if(processed>0)setTimeout(()=>{void verifyPublishedInstagramOnce();},20_000).unref?.();
+    try{await backfillOneYouTubeShort();}catch{}
     return{processed};
   }finally{running=false;}
 }

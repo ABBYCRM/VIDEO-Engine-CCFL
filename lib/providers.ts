@@ -79,7 +79,7 @@ export function getProviderModel(p: ProviderId): string {
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(`${p}_model`) as { value: string } | undefined)?.value || def.defaultModel;
 }
 export function getDefaultProvider(): ProviderId {
-  const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get("default_provider") as { value: string } | undefined)?.value;
-  if (raw === "grok" || raw === "a2e" || raw === "hedra" || raw === "veo") return raw;
+  // Gemini/Veo is the only supported video provider. Other adapters remain in
+  // the registry for legacy job polling but are never selected for new work.
   return "veo";
 }

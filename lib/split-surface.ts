@@ -71,18 +71,15 @@ export function normalizeUpperProvider(value: unknown, lowerProvider?: string): 
 }
 
 export function unattendedLaneProvider(provider: ProviderId, model?: string | null): ProviderId {
-  if (provider === "hedra") return "grok";
-  if (provider === "a2e") {
-    const def = getA2eModel(model || "");
-    if (def?.requiresAudio || def?.requiresTwin) return "grok";
-  }
-  return provider;
+  // Gemini/Veo only: every unattended lane is coerced to veo regardless of the
+  // campaign's stored provider. grok/a2e/hedra are retired for generation.
+  void provider; void model;
+  return "veo";
 }
 
 export function nextLaneFallback(failed: ProviderId): ProviderId | null {
-  if (failed === "a2e") return "grok";
-  if (failed === "grok") return "veo";
-  if (failed === "hedra") return "grok";
+  // No cross-provider fallback: veo is the only video provider.
+  void failed;
   return null;
 }
 
@@ -110,7 +107,7 @@ export type SplitSurface = {
 };
 
 export function parseSplitSurface(body: any, fallbackLower: string): SplitSurface {
-  const videoProvider = isProviderId(String(body.videoProvider || fallbackLower)) ? (String(body.videoProvider || fallbackLower) as ProviderId) : "grok";
+  const videoProvider: ProviderId = "veo"; // Gemini/Veo only
   const upperProvider = normalizeUpperProvider(body.upperProvider, videoProvider);
   return {
     splitPercent: clampSplitPercent(body.splitPercent),

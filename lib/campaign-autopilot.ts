@@ -54,7 +54,7 @@ export function normalizeCategory(value:string):CampaignCategory{
   if(value==="car_accident"||value==="rideshare"||value==="trucking"||value==="slip_fall"||value==="ugc")return value;
   return "ugc";
 }
-function provider(value:string):ProviderId{return isProviderId(value)?value:"veo";}
+function provider(value:string):ProviderId{void value;return "veo";} // Gemini/Veo only
 
 function fallbackProvider(failed:ProviderId):ProviderId|null{
   return nextLaneFallback(failed);
