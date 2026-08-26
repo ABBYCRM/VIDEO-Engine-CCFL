@@ -343,8 +343,70 @@ export function SettingsConsole(){
        </div>
      </Card>
 
+     <YouTubeCard/>
+
    </div>
  </div>;
+}
+
+function YouTubeCard(){
+ const [status,setStatus] = useState<{configured:boolean;connected:boolean;channelTitle:string|null}|null>(null);
+ const [clientId,setClientId] = useState("");
+ const [clientSecret,setClientSecret] = useState("");
+ const [busy,setBusy] = useState(false);
+ const [notice,setNotice] = useState<string|null>(null);
+
+ async function refresh(){
+   const r = await fetch("/api/admin/youtube");
+   if(r.ok) setStatus(await r.json());
+ }
+ useEffect(()=>{
+   refresh();
+   const q = new URLSearchParams(window.location.search).get("youtube");
+   if(q === "connected") setNotice("YouTube channel connected. Reels now mirror to Shorts automatically.");
+   else if(q) setNotice(`YouTube connection failed: ${q}`);
+ },[]);
+
+ async function saveClient(){
+   setBusy(true);
+   try{
+     const r = await fetch("/api/admin/youtube", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ clientId, clientSecret }) });
+     const d = await r.json();
+     if(!r.ok){ alert(d.error); return; }
+     setClientId(""); setClientSecret("");
+     await refresh();
+   } finally { setBusy(false); }
+ }
+ async function disconnect(){
+   if(!confirm("Disconnect the YouTube channel? Scheduled reels will stop mirroring to Shorts.")) return;
+   await fetch("/api/admin/youtube", { method:"DELETE" });
+   refresh();
+ }
+
+ return <Card className="p-5">
+   <div className="mb-1 font-medium">YouTube Shorts</div>
+   <p className="mb-4 text-sm text-slate-600">Every published Reel is mirrored to the connected YouTube channel as a public Short. Stills and Stories stay on Instagram.</p>
+   {notice && <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
+   {status?.connected
+     ? <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white/70 p-3 text-sm">
+         <div>
+           <div className="font-medium">Connected{status.channelTitle ? ` · ${status.channelTitle}` : ""}</div>
+           <div className="text-xs text-slate-500">Uploads use the youtube.upload scope only.</div>
+         </div>
+         <Button variant="ghost" onClick={disconnect}>Disconnect</Button>
+       </div>
+     : <div className="grid gap-3">
+         <div className="grid gap-3 md:grid-cols-2">
+           <Input value={clientId} onChange={e=>setClientId(e.target.value)} placeholder="Google OAuth client ID"/>
+           <Input value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Google OAuth client secret" type="password"/>
+         </div>
+         <div className="flex flex-wrap gap-3">
+           <Button onClick={saveClient} disabled={busy || !clientId || !clientSecret}>Save OAuth client</Button>
+           <Button variant="outline" disabled={!status?.configured} onClick={()=>{ window.location.href = "/api/admin/youtube/connect"; }}>Connect YouTube channel</Button>
+         </div>
+         <p className="text-xs text-slate-500">Google Cloud Console → APIs &amp; Services → Credentials → Create OAuth client ID (Web application) with redirect URI <code className="rounded bg-slate-100 px-1">{typeof window !== "undefined" ? `${window.location.origin}/api/oauth/youtube/callback` : "/api/oauth/youtube/callback"}</code>, and enable the YouTube Data API v3.</p>
+       </div>}
+ </Card>;
 }
 
 // Green light status indicator. Three states: green (key live), red (key live

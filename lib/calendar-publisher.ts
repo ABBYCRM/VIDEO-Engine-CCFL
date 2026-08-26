@@ -4,6 +4,8 @@ import { publishWebsite } from "@/lib/site-publish";
 import { publicCaptionForSlot, isOperatorCopy } from "@/lib/public-copy";
 import "@/lib/calendar-assets";
 import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
+import { isYouTubeConnected, uploadYouTubeShort } from "@/lib/youtube";
+import { getPersistentLibraryAsset } from "@/lib/persistent-library";
 
 let started=false;
 let running=false;
@@ -47,8 +49,27 @@ export async function publishInstagramPair(post:any){
   return {reel,story};
 }
 
+/** Mirror every published Reel to YouTube as a Short. Never blocks or fails the
+ *  Instagram publish: a YouTube failure is recorded on the slot and retried on
+ *  the next publisher pass only if the slot itself republishes. */
+async function maybePublishYouTubeShort(post:any){
+  const isStillImage=post.content_type==="image"||String(post.media_type||"").startsWith("image");
+  if(isStillImage||post.youtube_video_id||!isYouTubeConnected())return;
+  try{
+    const match=/^\/api\/library\/assets\/([^/]+)\/file(?:\?.*)?$/.exec(String(post.media_url||""));
+    if(!match)throw new Error("YouTube upload needs a library video asset");
+    const asset=await getPersistentLibraryAsset(decodeURIComponent(match[1]));
+    if(!asset)throw new Error("Library asset not found for YouTube upload");
+    const videoId=await uploadYouTubeShort({bytes:asset.bytes,mimeType:asset.mimeType||"video/mp4",caption:String(post.caption||"").trim()});
+    db.prepare("UPDATE scheduled_posts SET youtube_video_id=?,youtube_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(videoId,post.id);
+    post.youtube_video_id=videoId;
+  }catch(e){
+    db.prepare("UPDATE scheduled_posts SET youtube_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),post.id);
+  }
+}
+
 async function publishRow(post:any){
-  if(post.network==="instagram") return publishInstagramPair(post);
+  if(post.network==="instagram"){const pair=await publishInstagramPair(post);await maybePublishYouTubeShort(post);return pair;}
   if(post.network==="website"){
     if(!post.site_id)throw new Error("Website auto-post item has no Site");
     if(post.generation_status&&post.generation_status!=="ready")throw new Error("Website draft is "+post.generation_status+"; it is not ready to publish");

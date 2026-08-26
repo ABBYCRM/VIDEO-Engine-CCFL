@@ -245,6 +245,12 @@ for (const [column, ddl] of [
   try { ensureColumn("scheduled_posts", column, ddl); } catch {}
 }
 for (const [column, ddl] of [
+  ["youtube_video_id", "youtube_video_id TEXT"],
+  ["youtube_error", "youtube_error TEXT"]
+] as const) {
+  try { ensureColumn("scheduled_posts", column, ddl); } catch {}
+}
+for (const [column, ddl] of [
   ["a2e_twin_id", "a2e_twin_id TEXT"],
   ["a2e_twin_anchor_id", "a2e_twin_anchor_id TEXT"],
   ["a2e_twin_status", "a2e_twin_status TEXT NOT NULL DEFAULT 'idle'"],
