@@ -301,6 +301,7 @@ export default function CalendarPage() {
                         {retryable && <Button size="sm" variant="secondary" onClick={() => retryGeneration(post)} disabled={busy === `${post.id}:retry`}><RefreshCcw size={13} className={`mr-1 ${busy === `${post.id}:retry` ? "animate-spin" : ""}`}/>{busy === `${post.id}:retry` ? "Retrying…" : "Retry generation"}</Button>}
                         <Button size="sm" variant="secondary" onClick={() => patch(post, { autoPost: !post.autoPost, status: post.status === "pending" ? "approved" : post.status })} disabled={!autoCapable || busy === post.id || generating || (post.network === "website" && !post.contentBody?.trim())}>{post.autoPost ? "Disable auto" : "Enable auto"}</Button>
                         {publishable && <Button size="sm" variant="secondary" onClick={() => publish(post)} disabled={busy === `${post.id}:publish`}><Send size={13} className="mr-1"/>{busy === `${post.id}:publish` ? "Posting…" : "Post now"}</Button>}
+                        {!publishable && post.network === "instagram" && <Button size="sm" variant="secondary" disabled title="Post now unlocks when the video finishes generating"><Send size={13} className="mr-1"/>{generating ? "Post now (generating…)" : "Post now (no media yet)"}</Button>}
                         <button onClick={() => remove(post)} aria-label={`Delete ${post.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"><Trash2 size={14}/></button>
                       </div>
                     </div>
