@@ -14,7 +14,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-RUN apk add --no-cache ffmpeg \
+RUN apk add --no-cache ffmpeg ttf-dejavu fontconfig \
   && addgroup -S nodejs && adduser -S nextjs -G nodejs \
   && mkdir -p /app/data/videos /app/public/generated/compositions \
   && chown -R nextjs:nodejs /app

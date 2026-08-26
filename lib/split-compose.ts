@@ -61,7 +61,18 @@ export async function composeSplitScreenFile(input: {
   const bannerH = Math.round(template.canvasH * 0.075);
   const bannerY = Math.round(template.canvasH * 0.03);
   const fontSize = Math.max(18, Math.round(template.canvasW * 0.035));
-  const fontPath = process.env.FONT_PATH || "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+  // Prefer the font bundled with the app (survives any base image); fall
+  // back to common system locations (Alpine, then Debian layout).
+  const fontCandidates = [
+    process.env.FONT_PATH,
+    path.resolve(process.cwd(), "public", "fonts", "DejaVuSans-Bold.ttf"),
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+  ].filter((p): p is string => Boolean(p));
+  let fontPath = fontCandidates[1];
+  for (const candidate of fontCandidates) {
+    try { await fs.access(candidate); fontPath = candidate; break; } catch {}
+  }
   const banner = `drawbox=x=0:y=${bannerY}:w=iw:h=${bannerH}:color=black@0.68:t=fill,drawtext=fontfile='${fontPath}':text='${CASE_CLOSED_URL}  ·  ${CASE_CLOSED_PHONE}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=${bannerY}+((${bannerH}-text_h)/2)[v]`;
   if (template.layout === "avatar-box") {
     // The upper AI video cover-crops the whole canvas as the permanent
