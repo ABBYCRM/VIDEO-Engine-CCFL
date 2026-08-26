@@ -160,10 +160,10 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
   return job;
 }
 
-async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string}, lower:{id?:string;outputPath?:string}){
-  // Prefer a real generated upper lane; only reach for stock when no upper
-  // job exists, and only if the stock asset is still materializable.
-  const stockId=(upper.id||upper.outputPath)?null:await usableStockUpperId(row);
+async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string;stockId?:string}, lower:{id?:string;outputPath?:string}){
+  // A stock upper lane is passed explicitly as {stockId}; a generated lane
+  // as {id: jobId}. Never treat a stock library id as a video job id.
+  const stockId=upper.stockId||null;
   const upperPath=stockId
     ? await materializeUpperVideo(stockId)
     : (upper.id ? await ensureJobOutputPath(upper.id) : upper.outputPath);
@@ -257,7 +257,7 @@ async function finishSplit(row:any){
   }
   if(lower?.status==="succeeded" && (stockId || upper?.status==="succeeded")){
     try{
-      await composeReadySplit(row, stockId ? {id: stockId} : upper, lower);
+      await composeReadySplit(row, stockId ? {stockId} : upper, lower);
     }catch(e){
       db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id);
     }
@@ -310,11 +310,13 @@ async function finishGenerating(slotId?:string){
 }
 
 async function generateSplitSlot(row:any){
-  const stockId=stockUpperId(row);
+  // Only honor the stock upper video when its bytes are actually
+  // recoverable; otherwise plan generated lanes instead of failing.
+  const stockId=row.upper_job_id?null:await usableStockUpperId(row);
   const upper=row.upper_job_id?getJob(row.upper_job_id):null;
   const lower=row.lower_job_id?getJob(row.lower_job_id):null;
   if(lower?.status==="succeeded" && (stockId || upper?.status==="succeeded")){
-    try{ await composeReadySplit(row, stockId ? {id: stockId} : upper, lower); }
+    try{ await composeReadySplit(row, stockId ? {stockId} : upper, lower); }
     catch(e){ db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(`Split-screen compose failed: ${(e instanceof Error?e.message:String(e))}`.slice(0,2000),row.id); }
     return;
   }
