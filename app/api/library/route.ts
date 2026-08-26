@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { listLibraryTextOverrides } from "@/lib/library-overrides";
 import { listGeneratedImages } from "@/lib/media-library";
 import { listPersistentLibraryAssets, persistentLibraryConfigured } from "@/lib/persistent-library";
 
@@ -14,5 +15,5 @@ export async function GET(){
   const videos=(db.prepare("SELECT id,category,provider,model,status,created_at,updated_at FROM video_jobs WHERE status='succeeded' AND output_path IS NOT NULL ORDER BY updated_at DESC").all() as Array<any>).map(v=>({id:`video:${v.id}`,kind:"video",mediaType:"video",label:`${String(v.category||"campaign").replaceAll("_"," ")} video`,title:`${String(v.provider||"AI").toUpperCase()} generated video`,url:`/api/v1/video/${v.id}/file`,model:v.model||v.provider||null,prompt:null,createdAt:v.updated_at||v.created_at}));
   let compositions:Array<any>=[];try{compositions=(db.prepare("SELECT id,title,file_path,mime_type,split_percent,created_at FROM generated_compositions ORDER BY created_at DESC").all() as Array<any>).map(c=>({id:`composition:${c.id}`,kind:"composition",mediaType:"video",label:`Split-screen · ${c.split_percent}% top`,title:c.title,url:c.file_path,model:"browser composition",prompt:null,createdAt:c.created_at}))}catch{}
   const deduped=new Map<string,any>();for(const asset of [...persistent,...generated,...avatarAssets,...videos,...compositions])if(!deduped.has(asset.id))deduped.set(asset.id,asset);
-  const assets=[...deduped.values()].sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime());return NextResponse.json({assets,persistence:persistentLibraryConfigured()?"novaluis":"local-fallback"});
+  const overrides=new Map(listLibraryTextOverrides().map(item=>[item.assetId,item]));const assets=[...deduped.values()].map(asset=>{const override=overrides.get(asset.id);return override?{...asset,title:override.title,label:override.label,prompt:override.hidePrompt?null:asset.prompt}:asset}).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime());return NextResponse.json({assets,persistence:persistentLibraryConfigured()?"novaluis":"local-fallback"});
 }
