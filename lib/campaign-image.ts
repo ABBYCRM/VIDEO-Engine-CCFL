@@ -83,7 +83,11 @@ function sanitizeStillPrompt(raw:string){
   return String(raw||"")
     .replace(/MANDATORY BRAND CONTACT:[^\n]*/gi,"")
     .replace(/five six one[^.\n]*/gi,"")
-    .replace(/cinco seis uno[^.\n]*/gi,"");
+    .replace(/cinco seis uno[^.\n]*/gi,"")
+    .replace(/\(?\s*561\s*\)?[\s.\u00b7-]*566[\s.\u00b7-]*1360/g,"")
+    .replace(/caseclosedfl\.?\s*com/gi,"")
+    .replace(/instagram automation/gi,"")
+    .replace(/d\u00edas? \d+|day \d+/gi,"");
 }
 
 export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null;seed?:string|null}){
