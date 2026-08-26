@@ -127,15 +127,17 @@ function slotPublicCaption(row:any, plan?:{hook?:string;caption?:string}){
 }
 
 function stockUpperId(row:any){
-  const explicit=pickUpperVideoId(campaignUpperVideoIds(row), row.title);
-  if(explicit)return explicit;
   // Category-keyed stock library: only for dual-box (top/bottom) templates,
   // where a pre-made clip fills the upper box and the avatar comments on it.
+  // Category stock MUST win over legacy/global defaults: the old default can
+  // contain generated phone/UI footage and may be unrelated to this topic.
   try{
     const template=resolveSplitTemplate(row.split_template);
     if(template.layout!=="dual-box")return null;
   }catch{return null;}
-  return pickStockUpperForSlot(normalizeCategory(slotCategory(row)), String(row.id||row.title||""));
+  const categoryStock=pickStockUpperForSlot(normalizeCategory(slotCategory(row)), String(row.id||row.title||""));
+  if(categoryStock)return categoryStock;
+  return pickUpperVideoId(campaignUpperVideoIds(row), row.title);
 }
 
 // A configured stock upper video only counts if its bytes are actually
