@@ -207,6 +207,60 @@ export default function CalendarPage() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
   }
+  async function bulkApproveAll() {
+    setBusy("bulk-approve");
+    try {
+      const r = await fetch("/api/calendar/bulk-approve", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+  async function scrubCaptions() {
+    if (!window.confirm("Walk every scheduled post and rewrite any operator-language captions? Existing good captions are left alone.")) return;
+    setBusy("scrub");
+    try {
+      const r = await fetch("/api/admin/calendar/scrub-captions", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      alert(`Scrubbed ${d.fixed} of ${d.scanned} captions.`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+  async function rebuildVideos() {
+    if (!window.confirm("Detach all old compositions and requeue every future campaign video? This will take a few minutes.")) return;
+    setBusy("rebuild");
+    try {
+      const r = await fetch("/api/admin/calendar/rebuild-videos", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({}) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      alert(`Rebuild queued: ${d.queued || 0} videos will be regenerated.`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+  async function rearmPending() {
+    setBusy("rearm");
+    try {
+      const r = await fetch("/api/admin/campaigns/rearm-pending", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({}) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
+  async function runAutopilot() {
+    setBusy("autopilot");
+    try {
+      const r = await fetch("/api/internal/campaign-autopilot", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(null); }
+  }
   async function retryGeneration(post: Post) {
     setBusy(`${post.id}:retry`);
     setError(null);
@@ -232,9 +286,14 @@ export default function CalendarPage() {
               <h1 className="text-[34px] font-semibold tracking-tight">Content Calendar</h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-600">Generated blog articles, images and videos land here automatically. Review and edit them, approve them, publish immediately, or enable auto-post for connected Instagram and Website publishers. Planning supports 3, 7, 14 or 30 days.</p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={autoApproveAll} disabled={busy === "auto-approve"}>{busy === "auto-approve" ? "Approving…" : <><Check size={14} className="mr-2"/>Auto-approve & auto-post all</>}</Button>
-              <Button variant="secondary" onClick={spreadCalendar} disabled={busy === "spread-calendar"}>{busy === "spread-calendar" ? "Spacing…" : <><CalendarDays size={14} className="mr-2"/>Spread over 60 days</>}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={runAutopilot} disabled={busy === "autopilot"}>{busy === "autopilot" ? "Running…" : <><Play size={14} className="mr-2"/>Run autopilot</>}</Button>
+              <Button variant="secondary" onClick={rearmPending} disabled={busy === "rearm"}>{busy === "rearm" ? "Rearming…" : "Rearm pending"}</Button>
+              <Button variant="secondary" onClick={bulkApproveAll} disabled={busy === "bulk-approve"}>{busy === "bulk-approve" ? "Approving…" : "Bulk-approve"}</Button>
+              <Button variant="secondary" onClick={autoApproveAll} disabled={busy === "auto-approve"}>{busy === "auto-approve" ? "Approving…" : "Auto-approve & auto-post"}</Button>
+              <Button variant="secondary" onClick={scrubCaptions} disabled={busy === "scrub"}>{busy === "scrub" ? "Scrubbing…" : "Scrub captions"}</Button>
+              <Button variant="secondary" onClick={spreadCalendar} disabled={busy === "spread-calendar"}>{busy === "spread-calendar" ? "Spacing…" : "Spread over 60 days"}</Button>
+              <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={rebuildVideos} disabled={busy === "rebuild"}>{busy === "rebuild" ? "Rebuilding…" : "Rebuild all videos"}</Button>
               <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={clearCalendar} disabled={busy === "clear-calendar"}>{busy === "clear-calendar" ? "Clearing…" : <><Trash2 size={14} className="mr-2"/>Clear calendar</>}</Button>
               <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
               <Button onClick={() => setEditing("new")}><Plus size={14} className="mr-2"/>Add post</Button>

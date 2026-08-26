@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { KeyRound, Save, Copy, Trash2, Shield, Sparkles, Atom, Cloud, Bird, RefreshCcw, Cpu, BookOpen } from "lucide-react";
+import { KeyRound, Save, Copy, Trash2, Shield, Sparkles, Atom, Cloud, Bird, RefreshCcw, Cpu, BookOpen, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { ModelSelector, ModelSelectorTrigger, ModelSelectorValue, ModelSelectorC
 
 type TokenRow = { id:string; name:string; prefix:string; createdAt:string; lastUsedAt?:string|null; revokedAt?:string|null };
 type ProviderId = "veo" | "grok" | "a2e" | "hedra";
+type ImageProviderId = "hedra" | "gemini" | "openai" | "xai" | "a2e" | "mock";
 
 type LiveRow = {
   id: ProviderId | "nvidia";
@@ -79,6 +80,10 @@ export function SettingsConsole(){
  const [nvidiaKey,setNvidiaKey] = useState("");
  const [defaultProvider,setDefaultProvider] = useState<ProviderId>("veo");
  const [providerModels,setProviderModels] = useState<Record<ProviderId,string>>({ veo:"", grok:"", a2e:"", hedra:"" });
+ const [imageProvider,setImageProvider] = useState<ImageProviderId>("hedra");
+ const [imageModel,setImageModel] = useState<string>("gpt-image-2");
+ const [imageBusy,setImageBusy] = useState(false);
+ const [imageMsg,setImageMsg] = useState<string|null>(null);
  const [nvidiaModels,setNvidiaModels] = useState<{ id:string; label:string; notes:string }[]>([]);
  const [nvidiaSelection,setNvidiaSelection] = useState<AiModelSelection>({ id: "meta/llama-3.1-70b-instruct", effort: "high", context: "16K", fast: true });
  const [resolution,setResolution] = useState("1080p");
@@ -126,6 +131,30 @@ export function SettingsConsole(){
    }
  }
  useEffect(()=>{ if(settings) loadLive(); },[settings?.providers?.hedra?.keyConfigured, settings?.nvidia?.keyConfigured]);
+
+ async function loadImageProvider(){
+   const r = await fetch("/api/admin/image-provider", { cache: "no-store" });
+   if(!r.ok) return;
+   const d = await r.json();
+   if(d.provider) setImageProvider(d.provider as ImageProviderId);
+   if(d.model) setImageModel(d.model);
+ }
+ useEffect(()=>{ loadImageProvider(); },[]);
+
+ async function saveImageProvider(){
+   setImageBusy(true);setImageMsg(null);
+   try {
+     const r = await fetch("/api/admin/image-provider", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ provider: imageProvider, model: imageModel }) });
+     const d = await r.json();
+     if(!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+     setImageMsg(`Saved: ${d.provider} · ${d.model}`);
+     await loadImageProvider();
+   } catch(e){
+     setImageMsg(e instanceof Error ? e.message : String(e));
+   } finally {
+     setImageBusy(false);
+   }
+ }
 
  async function save(){
    const r = await fetch("/api/admin/settings", { method: "PUT", headers: {"content-type":"application/json"},
@@ -201,6 +230,77 @@ export function SettingsConsole(){
              </button>
            );
          })}
+       </div>
+     </Card>
+
+     <Card className="p-5">
+       <div className="mb-4 flex items-center justify-between">
+         <div className="flex items-center gap-2 font-medium"><ImageIcon size={18} className="text-cyan-700"/>Default image provider</div>
+         <Button variant="ghost" size="sm" onClick={() => { loadImageProvider(); setImageMsg(null); }}>
+           <RefreshCcw size={14} className="mr-1"/>Reload
+         </Button>
+       </div>
+       <p className="mb-4 text-xs text-slate-500">Powers the campaign hero still and the 4-view avatar turnaround. Hedra is the default — 75+ image models behind one v3 endpoint, ~3.5¢ per generation. Same key as the Hedra video provider above.</p>
+       <div className="grid gap-3 md:grid-cols-2">
+         <label className="grid gap-2 text-sm">
+           <span className="font-medium">Provider</span>
+           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageProvider} onChange={e => {
+             const p = e.target.value as ImageProviderId;
+             setImageProvider(p);
+             // Snap model to the first valid choice for the new provider
+             const defaults: Record<ImageProviderId,string> = { hedra: "gpt-image-2", gemini: "gemini-2.5-flash-image", openai: "gpt-image-1", xai: "grok-imagine-image", a2e: "gpt-image-1.5", mock: "mock-stable-diffusion-1" };
+             setImageModel(defaults[p]);
+           }}>
+             <option value="hedra">Hedra multi-model image (gpt-image-2, flux2-max, imagen-4, seedream-5, ideogram-v4, recraft-v3)</option>
+             <option value="gemini">Google Gemini image generation</option>
+             <option value="a2e">A2E GPT Image (gpt-image-1.5 / gpt-image-2)</option>
+             <option value="openai">OpenAI image generation (gpt-image-1, dall-e-3)</option>
+             <option value="xai">xAI Grok Imagine (text-to-image only)</option>
+             <option value="mock">Mock placeholder (dev only)</option>
+           </select>
+         </label>
+         <label className="grid gap-2 text-sm">
+           <span className="font-medium">Model</span>
+           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageModel} onChange={e => setImageModel(e.target.value)}>
+             {imageProvider === "hedra" && (<>
+               <option value="gpt-image-2">gpt-image-2</option>
+               <option value="flux2-max">flux2-max (FLUX.2 [max])</option>
+               <option value="flux-kontext">flux-kontext</option>
+               <option value="nano-banana-pro">nano-banana-pro (Imagen)</option>
+               <option value="imagen-4">imagen-4</option>
+               <option value="seedream-5">seedream-5</option>
+               <option value="ideogram-v4">ideogram-v4</option>
+               <option value="recraft-v3">recraft-v3</option>
+             </>)}
+             {imageProvider === "gemini" && (<>
+               <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+               <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
+               <option value="gemini-3.1-flash-image">gemini-3.1-flash-image</option>
+               <option value="gemini-3.1-flash-lite-image">gemini-3.1-flash-lite-image</option>
+             </>)}
+             {imageProvider === "openai" && (<>
+               <option value="gpt-image-1">gpt-image-1</option>
+               <option value="dall-e-3">dall-e-3</option>
+             </>)}
+             {imageProvider === "xai" && (<>
+               <option value="grok-imagine-image">grok-imagine-image</option>
+               <option value="grok-imagine-image-2.0">grok-imagine-image-2.0</option>
+               <option value="grok-imagine-image-quality">grok-imagine-image-quality</option>
+             </>)}
+             {imageProvider === "a2e" && (<>
+               <option value="gpt-image-1.5">gpt-image-1.5</option>
+               <option value="gpt-image-2">gpt-image-2</option>
+             </>)}
+             {imageProvider === "mock" && <option value="mock-stable-diffusion-1">mock-stable-diffusion-1</option>}
+           </select>
+         </label>
+       </div>
+       <div className="mt-4 flex items-center gap-3">
+         <Button onClick={saveImageProvider} disabled={imageBusy}>
+           {imageBusy ? <RefreshCcw size={14} className="mr-2 animate-spin"/> : <Save size={14} className="mr-2"/>}
+           Save image provider
+         </Button>
+         {imageMsg && <span className="text-xs text-slate-600">{imageMsg}</span>}
        </div>
      </Card>
 

@@ -13,8 +13,8 @@ export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const provider = String(body?.provider || "");
-  if (!["gemini", "openai", "xai", "a2e", "mock"].includes(provider)) {
-    return NextResponse.json({ error: "provider must be one of gemini, openai, xai, a2e, mock" }, { status: 400 });
+  if (!["hedra", "gemini", "openai", "xai", "a2e", "mock"].includes(provider)) {
+    return NextResponse.json({ error: "provider must be one of hedra, gemini, openai, xai, a2e, mock" }, { status: 400 });
   }
   setImageProvider(provider as ImageProvider);
   return NextResponse.json({ ok: true, provider: getImageProvider(), model: getImageModel(), configured: isImageProviderConfigured() });
