@@ -75,9 +75,20 @@ async function renderWithConfiguredProvider(prompt:string, referencePath:string|
   return{base64:fresh.base64,mimeType:fresh.mimeType,model:fresh.model};
 }
 
-export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null}){
+function sanitizeStillPrompt(raw:string){
+  // The MANDATORY BRAND CONTACT mandate is for spoken video dialogue. In an
+  // image prompt it makes the model paint the phone number and its spelled
+  // out pronunciation into the photo (in any language). Strip it: the frame
+  // overlay carries all branding and contact text.
+  return String(raw||"")
+    .replace(/MANDATORY BRAND CONTACT:[^\n]*/gi,"")
+    .replace(/five six one[^.\n]*/gi,"")
+    .replace(/cinco seis uno[^.\n]*/gi,"");
+}
+
+export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null;seed?:string|null}){
   const template=input.stillTemplateId?getStillPostTemplate(input.stillTemplateId):null;
-  const prompt=`Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${input.prompt}${template?`\nTemplate image direction: ${template.imagePromptHints}.`:""}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.`;
+  const prompt=`Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${sanitizeStillPrompt(input.prompt)}${template?`\nTemplate image direction: ${template.imagePromptHints}.`:""}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.\nSTRICT: the photograph itself must contain absolutely no words, letters, digits, signage text, or phone numbers anywhere in the frame — every headline, phone number, and brand mark is added afterwards by a designed overlay. Show every person fully framed: never crop a person at the neck, waist, or knees by the edge of the frame.`;
   let reference:string|null=null;
   if(input.avatarId&&getImageProvider()==="xai"){
     // xAI cannot edit a reference image; generate from the prompt alone instead of failing the slot.
@@ -94,7 +105,7 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
   if(template){
     const tempDir=path.join(path.resolve(process.env.VIDEO_OUTPUT_DIR||"./data/videos"),"still-compose"),token=crypto.randomUUID(),photoPath=path.join(tempDir,`${token}.${mimeType==="image/jpeg"?"jpg":mimeType==="image/webp"?"webp":"png"}`),outPath=path.join(tempDir,`${token}-composed.png`);
     await fs.mkdir(tempDir,{recursive:true});
-    try{await fs.writeFile(photoPath,Buffer.from(base64,"base64"));await composeStillPost({photoPath,templateId:template.id,outPath});base64=(await fs.readFile(outPath)).toString("base64");mimeType="image/png";}
+    try{await fs.writeFile(photoPath,Buffer.from(base64,"base64"));await composeStillPost({photoPath,templateId:template.id,outPath,seed:input.seed});base64=(await fs.readFile(outPath)).toString("base64");mimeType="image/png";}
     finally{await Promise.all([fs.unlink(photoPath).catch(()=>{}),fs.unlink(outPath).catch(()=>{})]);}
   }
   const saved=await saveGeneratedImage({base64,source:"campaign-still",model:result.model,prompt,mimeType,createCalendarPost:input.createCalendarPost});

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
 import { ensureBrandContactInCaption } from "@/lib/brand-contact";
-import { SPLIT_TEMPLATES } from "@/lib/split-templates";
+import { pickSplitTemplateForCategory } from "@/lib/split-templates";
 import { pickRandomStillPostTemplate } from "@/lib/still-post-templates";
 
 function ensureColumn(name:string, ddl:string){try{const cols=db.prepare("PRAGMA table_info(scheduled_posts)").all() as {name:string}[];if(!cols.some(c=>c.name===name))db.exec(`ALTER TABLE scheduled_posts ADD COLUMN ${ddl}`);}catch{}}
@@ -81,6 +81,7 @@ export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string
     rotationCount=Math.max(1,list.length);
     rotationIndex=Math.max(0,list.findIndex(c=>c.id===input.campaignId));
   }
+  const campaignCategory=input.campaignId?String((db.prepare("SELECT category FROM campaigns WHERE id=?").get(input.campaignId) as {category?:string}|undefined)?.category||""):"";
   for(let index=0;index<days.length;index++){
     const day=days[index];
     const category=categories.length?categories[index%categories.length]:null;
@@ -94,7 +95,7 @@ export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string
       const waveTag=waves.length>1?(w===0?" · AM":" · PM"):"";
       const slotType=outputMode==="image"?"image":outputMode==="auto_mix"?(index%2===0?input.contentType:"image"):input.contentType;
       const seedCaption=input.contentType==="podcast"?"":(input.caption||"");
-      const splitTemplate=slotType==="podcast"?SPLIT_TEMPLATES[Math.floor(Math.random()*SPLIT_TEMPLATES.length)].id:null;
+      const splitTemplate=slotType==="podcast"?pickSplitTemplateForCategory(category||campaignCategory||"car_accident").id:null;
       const id=crypto.randomUUID();
       db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category,split_template) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,`${input.titlePrefix} · Day ${day}${waveTag} · ${slotType==="image"?"Still":"Video"}`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,seedCaption.slice(0,5000),slotType,input.siteId||null,input.campaignId||null,horizon,"pending",category,splitTemplate);
       ids.push(id);

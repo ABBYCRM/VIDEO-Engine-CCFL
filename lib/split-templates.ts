@@ -25,6 +25,8 @@ export type AvatarBoxTemplateDef = {
   purpose: string;
   videoPromptHints: VideoPromptHints;
   assetPath: string;
+  /** Campaign categories this frame's baked artwork/headline fits. Omitted = fits any category. */
+  categories?: string[];
   canvasW: number;
   canvasH: number;
   avatarBox: SplitBox;
@@ -48,6 +50,7 @@ export type SplitTemplateDef = AvatarBoxTemplateDef | DualBoxTemplateDef;
 export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   {
     id: "office-modern",
+    categories: ["car_accident"],
     layout: "avatar-box",
     label: "Crash CTA · dusk highway",
     purpose: "Use for the main car-accident call-to-action reel.",
@@ -91,6 +94,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   },
   {
     id: "rideshare-night",
+    categories: ["rideshare"],
     layout: "avatar-box",
     label: "Rideshare · night city",
     purpose: "Use for Uber, Lyft, and delivery accident reels.",
@@ -102,6 +106,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   },
   {
     id: "truck-highway",
+    categories: ["trucking"],
     layout: "avatar-box",
     label: "Truck crash · highway",
     purpose: "Use for commercial-vehicle crash reels.",
@@ -113,6 +118,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   },
   {
     id: "slipfall-store",
+    categories: ["slip_fall"],
     layout: "avatar-box",
     label: "Slip & fall · retail",
     purpose: "Use for premises-liability reels.",
@@ -124,6 +130,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   },
   {
     id: "motorcycle-sunset",
+    categories: ["motorcycle"],
     layout: "avatar-box",
     label: "Motorcycle · sunset",
     purpose: "Use for motorcycle crash reels.",
@@ -135,6 +142,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   },
   {
     id: "evidence-phone",
+    categories: ["manual"],
     layout: "avatar-box",
     label: "Evidence checklist",
     purpose: "Use for educational what-to-do-at-the-scene reels.",
@@ -146,6 +154,7 @@ export const SPLIT_TEMPLATES: SplitTemplateDef[] = [
   },
   {
     id: "spanish-golden",
+    categories: ["spanish"],
     layout: "avatar-box",
     label: "Español · golden hour",
     purpose: "Use for Spanish-language outreach reels with the script and captions in Spanish.",
@@ -211,4 +220,17 @@ export function isSplitTemplateId(value: unknown): value is SplitTemplateId {
 
 export function getSplitTemplate(id?: string | null): SplitTemplateDef {
   return SPLIT_TEMPLATES.find((t) => t.id === id) || SPLIT_TEMPLATES[0];
+}
+
+export function splitTemplateAllowsCategory(def: SplitTemplateDef, category: string) {
+  if (!def.categories || def.categories.length === 0) return true;
+  return def.categories.includes(category);
+}
+
+/** Random template whose baked artwork fits the campaign category. A Vehicle
+ *  slot must never receive the slip-and-fall frame (and vice versa). */
+export function pickSplitTemplateForCategory(category: string): SplitTemplateDef {
+  const pool = SPLIT_TEMPLATES.filter((t) => splitTemplateAllowsCategory(t, category));
+  if (!pool.length) return SPLIT_TEMPLATES[0];
+  return pool[Math.floor(Math.random() * pool.length)];
 }

@@ -18,6 +18,7 @@ import {
   resolveCampaignAvatarId
 } from "@/lib/upper-videos";
 import { resolveSplitTemplate } from "@/lib/custom-split-templates";
+import { splitTemplateAllowsCategory, pickSplitTemplateForCategory } from "@/lib/split-templates";
 import {
   clampSplitDuration,
   clampSplitPercent,
@@ -199,6 +200,18 @@ async function composeReadySplit(row:any, upper:{id?:string;outputPath?:string;s
 }
 
 async function startSplitLanes(row:any, opts?:{upperProvider?:ProviderId;lowerProvider?:ProviderId}){
+  // Self-heal: legacy slots picked split templates at random, so a slot can
+  // carry a frame whose baked headline belongs to another category. Reassign
+  // a compatible frame before planning lanes.
+  try{
+    const cat=normalizeCategory(slotCategory(row));
+    const current=resolveSplitTemplate(row.split_template);
+    if(!splitTemplateAllowsCategory(current,cat)){
+      const fixed=pickSplitTemplateForCategory(cat);
+      row.split_template=fixed.id;
+      db.prepare("UPDATE scheduled_posts SET split_template=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(fixed.id,row.id);
+    }
+  }catch{}
   const surface=campaignSurface(row);
   const upperProvider=opts?.upperProvider || surface.upper;
   const lowerProvider=opts?.lowerProvider || surface.lower;
@@ -380,7 +393,7 @@ async function generateNext(slotId?:string){
     try{
       db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
       const prompt=`Campaign: ${row.campaign_name}. ${row.mission}\nCalendar variation: ${row.title}. Create a distinct visual variation for this scheduled post, suitable for Instagram and consistent with the campaign.`;
-      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false,stillTemplateId:row.still_template_id});
+      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false,stillTemplateId:row.still_template_id,seed:row.id});
       db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,caption=?,generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(image.assetUrl,image.mimeType,slotPublicCaption(row),row.id);
     }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
     return true;
