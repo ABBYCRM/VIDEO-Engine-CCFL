@@ -34,13 +34,24 @@ export async function POST(req: Request) {
     try {
       let bytes: Buffer | null = null;
       let mimeType = "video/mp4";
-      const persisted = await getPersistentLibraryAsset(assetId).catch(() => null);
-      if (persisted) {
-        bytes = Buffer.from(persisted.bytes);
-        mimeType = persisted.mimeType || mimeType;
-      } else if (assetId.startsWith("video:")) {
-        const outputPath = await ensureJobOutputPath(assetId.slice("video:".length));
-        if (outputPath) bytes = await fs.readFile(outputPath);
+      if (assetId.startsWith("https://")) {
+        // Direct download (e.g. Wikimedia Commons public-domain footage).
+        const res = await fetch(assetId, { headers: { "user-agent": "CaseClosedFL-content-engine/1.0" } });
+        if (!res.ok) throw new Error(`Source download HTTP ${res.status}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 80 * 1024 * 1024) throw new Error("Source video exceeds the 80MB import limit");
+        bytes = buf;
+        const ct = String(res.headers.get("content-type") || "");
+        mimeType = ct.includes("webm") ? "video/webm" : "video/mp4";
+      } else {
+        const persisted = await getPersistentLibraryAsset(assetId).catch(() => null);
+        if (persisted) {
+          bytes = Buffer.from(persisted.bytes);
+          mimeType = persisted.mimeType || mimeType;
+        } else if (assetId.startsWith("video:")) {
+          const outputPath = await ensureJobOutputPath(assetId.slice("video:".length));
+          if (outputPath) bytes = await fs.readFile(outputPath);
+        }
       }
       if (!bytes?.length) throw new Error("Asset bytes could not be recovered from Library or job output");
       const saved = await saveUploadedVideo({
