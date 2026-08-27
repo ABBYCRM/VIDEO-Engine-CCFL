@@ -203,16 +203,18 @@ export function CreatorConsole() {
     // occasionally RST the connection during that window. If the fetch throws
     // a "Failed to fetch" TypeError once, we wait 3s and try again before
     // surfacing a real error.
+    //
+    // Note: keepalive: true is intentionally NOT used. Chrome silently drops
+    // the body of multipart/form-data requests that include a File (from
+    // <input type="file">) when keepalive is set — see the WHATWG fetch
+    // spec and Chromium issue #1084001.
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 120_000);
     try {
       const r = await fetch("/api/creator/upload", {
         method: "POST",
         body: fd,
-        signal: ac.signal,
-        // Don't let the browser or any intermediary close the connection
-        // before we've sent the entire multipart body.
-        keepalive: true
+        signal: ac.signal
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
@@ -223,6 +225,8 @@ export function CreatorConsole() {
       if (isNetwork && attempt < 2) {
         // Try once more. The DO app may have been idle-evicted and the next
         // request will wake it. 3s gives the cold-start time to finish.
+        // We rebuild a fresh FormData so the browser doesn't hand us a
+        // partially-consumed one.
         setResult({ ok: false, error: "Connection dropped — retrying (server may be cold-starting)…" });
         await new Promise(r => setTimeout(r, 3000));
         return uploadWithRetry(fd, attempt + 1);
@@ -234,6 +238,23 @@ export function CreatorConsole() {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  function buildFormData(): FormData {
+    const fd = new FormData();
+    if (file) {
+      fd.append("file", file, file.name);
+    }
+    fd.append("title", title || (file ? file.name : ""));
+    fd.append("label", label);
+    fd.append("formats", formats.join(","));
+    fd.append("scheduledAt", combineDateAndTime(date, time));
+    fd.append("network", network);
+    fd.append("autoPost", String(autoPost));
+    fd.append("caption", caption);
+    fd.append("category", category);
+    fd.append("subject", subject);
+    return fd;
   }
 
   async function upload() {
@@ -256,18 +277,7 @@ export function CreatorConsole() {
     }
     setBusy("upload");
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("title", title || file.name);
-      fd.append("label", label);
-      fd.append("formats", formats.join(","));
-      fd.append("scheduledAt", combineDateAndTime(date, time));
-      fd.append("network", network);
-      fd.append("autoPost", String(autoPost));
-      fd.append("caption", caption);
-      fd.append("category", category);
-      fd.append("subject", subject);
-      const d = await uploadWithRetry(fd, 1);
+      const d = await uploadWithRetry(buildFormData(), 1);
       setResult({ ok: true, ids: d.scheduledPostIds, message: `Scheduled ${d.scheduledPostIds?.length || 0} post(s) for ${d.formats?.join(", ")}` });
       // Reset only the per-upload bits; keep topic + date+time
       setFile(null);
