@@ -30,7 +30,20 @@ ensureColumn("verification_error","verification_error TEXT");
 ensureColumn("instagram_permalink","instagram_permalink TEXT");
 ensureColumn("still_template_id","still_template_id TEXT");
 ensureColumn("split_template","split_template TEXT");
-try{db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_posts_source_asset_key ON scheduled_posts(source_asset_key) WHERE source_asset_key IS NOT NULL");}catch{}
+// source_asset_key is intentionally NOT unique: a single Creator-tab upload
+// creates one row per format (reel, story, post) that all share the same
+// uploadId. The autopilot path that uses this column already does a
+// SELECT-then-INSERT/UPDATE so its idempotency is preserved.
+try{db.exec("CREATE INDEX IF NOT EXISTS idx_scheduled_posts_source_asset_key ON scheduled_posts(source_asset_key) WHERE source_asset_key IS NOT NULL");}catch{}
+// Old deployments may have created the index as UNIQUE. Drop the unique
+// variant if it exists so the multi-row Creator pattern works.
+try{db.exec("DROP INDEX IF EXISTS idx_scheduled_posts_source_asset_key_unique");}catch{}
+// Belt-and-braces: SQLite stores the index under a system-generated name.
+// If we ever see a unique-typed index on this column, drop and recreate.
+try{
+  const ix=db.prepare("SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='scheduled_posts' AND sql LIKE '%source_asset_key%' AND sql LIKE '%UNIQUE%'").all() as Array<{name:string,sql:string}>;
+  for(const row of ix){ db.exec(`DROP INDEX IF EXISTS ${row.name}`); }
+}catch{}
 
 export function ensureAssetCalendarPost(input:{
   sourceKey:string;title:string;contentType:string;mediaUrl?:string|null;mediaType?:string|null;caption?:string;network?:string;
