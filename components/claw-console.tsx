@@ -184,21 +184,21 @@ export function ClawConsole() {
 
   return (
     <AuthGuard>
-      <AppShell fullBleed>
-        <div className="flex h-[calc(100dvh-3.25rem)] flex-col md:h-screen">
+      <AppShell>
+        <div className="flex h-[calc(100dvh-7rem)] flex-col">
           <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
             <Bird size={16} className="text-violet-600" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold tracking-tight">Claw</div>
               <div className="truncate text-[11px] text-slate-500">NVIDIA operator agent · Steel web research · Graph Instagram</div>
             </div>
-            <button type="button" className="rounded-lg border px-2 py-1 text-xs md:hidden" onClick={() => setPane(pane === "threads" ? "chat" : "threads")}>Threads</button>
-            <button type="button" className="rounded-lg border px-2 py-1 text-xs md:hidden" onClick={() => setPane(pane === "files" ? "chat" : "files")}>Files</button>
+            <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "threads" ? "chat" : "threads")}>Threads</button>
+            <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "files" ? "chat" : "files")}>Files</button>
             <Button size="sm" variant="secondary" onClick={newThread}><Plus size={14} className="mr-1" />New</Button>
           </header>
 
           <div className="flex min-h-0 flex-1">
-            <aside className={`${pane === "threads" ? "flex" : "hidden"} w-full flex-col border-r border-slate-200 bg-white md:flex md:w-64`}>
+            <aside className={`${pane === "threads" ? "flex" : "hidden"} w-full flex-col border-r border-slate-200 bg-white`}>
               <div className="border-b px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Threads</div>
               <div className="flex-1 overflow-y-auto p-2">
                 {convs.map((c) => (
@@ -211,7 +211,7 @@ export function ClawConsole() {
               </div>
             </aside>
 
-            <section className={`${pane === "chat" ? "flex" : "hidden"} min-w-0 flex-1 flex-col md:flex`}>
+            <section className={`${pane === "chat" ? "flex" : "hidden"} min-w-0 flex-1 flex-col`}>
               <div ref={scroller} className="flex-1 overflow-y-auto px-3 py-4 sm:px-6">
                 {!visible.length && !streaming && (
                   <div className="mx-auto max-w-xl rounded-2xl border border-violet-100 bg-violet-50/60 p-5">
@@ -224,7 +224,7 @@ export function ClawConsole() {
                     </div>
                   </div>
                 )}
-                <div className="mx-auto flex max-w-3xl flex-col gap-3">
+                <div className="mx-auto flex max-w-[440px] flex-col gap-3">
                   {visible.map((m) => (
                     <div key={m.id} className={`group flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${m.role === "user" ? "bg-violet-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}>
@@ -259,7 +259,7 @@ export function ClawConsole() {
                     ))}
                   </div>
                 )}
-                <div className="mx-auto flex max-w-3xl items-end gap-2">
+                <div className="mx-auto flex max-w-[440px] items-end gap-2">
                   <input ref={fileInput} type="file" className="hidden" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
                   <button type="button" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => fileInput.current?.click()} aria-label="Upload files"><Paperclip size={16} /></button>
                   <textarea
@@ -277,7 +277,7 @@ export function ClawConsole() {
               </div>
             </section>
 
-            <aside className={`${pane === "files" ? "flex" : "hidden"} w-full flex-col border-l border-slate-200 bg-white lg:flex lg:w-72`}>
+            <aside className={`${pane === "files" ? "flex" : "hidden"} w-full flex-col border-l border-slate-200 bg-white`}>
               <div className="flex items-center justify-between border-b px-3 py-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Files</div>
                 <button type="button" className="grid h-8 w-8 place-items-center rounded-lg border text-slate-600" onClick={() => fileInput.current?.click()} aria-label="Add file"><FilePlus2 size={14} /></button>

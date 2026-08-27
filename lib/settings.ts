@@ -62,7 +62,9 @@ export function getEngineSettings(): EngineSettings {
     },
     nvidia: {
       keyConfigured: Boolean(getRaw("nvidia_api_key") || process.env.NVIDIA_API_KEY),
-      model: getRaw("nvidia_model") || "meta/llama-3.1-70b-instruct"
+      // Default to the live 2026-08-27 catalog default. The model registry is
+      // the source of truth — the old 3.1 70B was retired 2026-08-26.
+      model: getRaw("nvidia_model") || "meta/llama-3.2-11b-vision-instruct"
     },
     composio: {
       keyConfigured: isComposioConfigured(),

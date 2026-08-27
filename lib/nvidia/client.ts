@@ -41,8 +41,8 @@ export function getNvidiaApiKey(): string {
 export function getNvidiaModel(): NvidiaModelId {
   const raw = getRaw(SETTINGS_MODEL_KEY);
   if (isNvidiaModelId(raw)) return raw;
-  // default: 3.1 70B for content intelligence
-  return "meta/llama-3.1-70b-instruct";
+  // Fall through to the live default — Llama 3.2 11B (replaces the EOL 3.1 70B)
+  return "meta/llama-3.2-11b-vision-instruct";
 }
 
 const CLAW_MODEL_KEY = "claw_nvidia_model";
@@ -159,7 +159,7 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
   };
   applyThinkingMode(body, req.thinking);
   const ac = req.signal ? null : new AbortController();
-  const t = ac ? setTimeout(() => ac.abort(), 45_000) : null;
+  const t = ac ? setTimeout(() => ac.abort(), 60_000) : null;
   try {
     const r = await fetch(`${NVIDIA_BASE}/chat/completions`, {
       method: "POST",
@@ -184,27 +184,71 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
     let buf = "";
     let text = "";
     let finishReason = "stop";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const parts = buf.split("\n");
-      buf = parts.pop() || "";
-      for (const line of parts) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") continue;
-        try {
-          const json = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }> };
-          const delta = json.choices?.[0]?.delta?.content || "";
-          if (delta) {
-            text += delta;
-            onToken(delta);
-          }
-          if (json.choices?.[0]?.finish_reason) finishReason = String(json.choices[0].finish_reason);
-        } catch { /* ignore malformed SSE lines */ }
+    // Watchdog: some retired models on NVIDIA's build endpoint accept the
+    // request, return 200, but never write a single token. If 25s passes
+    // without activity, cancel the stream and fall back to a non-stream call.
+    let lastActivity = Date.now();
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastActivity > 25_000) {
+        try { reader.cancel("watchdog timeout").catch(() => {}); } catch { /* ignore */ }
+        try { ac?.abort("watchdog timeout"); } catch { /* ignore */ }
       }
+    }, 2_000);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lastActivity = Date.now();
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n");
+        buf = parts.pop() || "";
+        for (const line of parts) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const json = JSON.parse(data) as {
+              choices?: Array<{
+                delta?: { content?: string; reasoning_content?: string };
+                finish_reason?: string | null;
+              }>;
+            };
+            // deepseek-v4-* models emit a `reasoning_content` thinking trace.
+            // The registry records `emitsReasoning` and we strip it here so the
+            // operator only ever sees the actual answer text.
+            const delta = json.choices?.[0]?.delta?.content || "";
+            if (delta) {
+              text += delta;
+              onToken(delta);
+            }
+            if (json.choices?.[0]?.finish_reason) finishReason = String(json.choices[0].finish_reason);
+          } catch { /* ignore malformed SSE lines */ }
+        }
+      }
+    } catch (streamErr) {
+      // Watchdog tripped or the connection died. If we already have some text,
+      // surface what we have. Otherwise fall back to a non-stream call so the
+      // operator always gets an answer.
+      console.warn(`[nvidia] stream interrupted for ${req.model}:`, streamErr instanceof Error ? streamErr.message : streamErr);
+      if (!text) {
+        try {
+          const fallback = await chatCompletion(req);
+          for (const word of fallback.text.split(/(\s+)/)) {
+            if (word) onToken(word);
+          }
+          text = fallback.text;
+          finishReason = fallback.finishReason;
+        } catch (fallbackErr) {
+          // Re-throw with the original stream error so the operator sees a useful message
+          throw new NvidiaUpstreamError(
+            `NVIDIA stream + fallback both failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`,
+            502
+          );
+        }
+      }
+    } finally {
+      clearInterval(watchdog);
     }
     return { text, finishReason, usage: null, rawModel: req.model };
   } finally {

@@ -3,10 +3,15 @@
 // NVIDIA's build endpoint is OpenAI-compatible: POST /v1/chat/completions on
 // https://integrate.api.nvidia.com/v1/chat/completions with
 //   Authorization: Bearer $NVIDIA_API_KEY
-// The full model catalog is documented at
-//   https://docs.api.nvidia.com/nim/reference/llm-api
-// but only the chat-completions-capable models we actually use are listed here
-// so that the Settings UI is not a marketing dump.
+//
+// The catalog below was rebuilt on 2026-08-27 after a large portion of the
+// previously supported models (Llama 3.1 70B, Llama 3.3 70B, Nemotron 3.5
+// Lightning, Nemotron Mini 4B) all reached end-of-life on 2026-08-26
+// (HTTP 410 Gone from the build endpoint, returns no body for streaming).
+//
+// The new default — meta/llama-3.2-11b-vision-instruct — was confirmed working
+// from the sandbox at 2026-08-27 14:25 ET (non-stream 30ms, stream 250ms,
+// clean text-only deltas, no `reasoning_content`).
 //
 // We deliberately do NOT hard-code model behavior in routes — every call site
 // asks the registry for a configured model id, validates it, and only then
@@ -15,12 +20,13 @@
 export type NvidiaCapability = "chat" | "vision" | "json-mode";
 
 export type NvidiaModelId =
-  | "meta/llama-3.1-70b-instruct"
-  | "meta/llama-3.3-70b-instruct"
-  | "nvidia/nemotron-3.5-lightning-30b-a3b"
-  | "nvidia/llama-3.1-nemotron-70b-instruct"
-  | "nvidia/nemotron-mini-4b-instruct"
-  | "mistralai/mistral-large-2-instruct"
+  | "meta/llama-3.2-11b-vision-instruct"
+  | "meta/llama-3.2-90b-vision-instruct"
+  | "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+  | "deepseek-ai/deepseek-v4-flash-0731"
+  | "deepseek-ai/deepseek-v4-pro-0813"
+  | "mistralai/mistral-large"
+  | "ai21labs/jamba-1.5-large-instruct"
   | "disabled";
 
 export const NVIDIA_MODELS: Record<NvidiaModelId, {
@@ -30,54 +36,72 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
   contextWindow: number;
   costTier: "low" | "mid" | "high";
   notes: string;
+  // Some models emit a `reasoning_content` delta field that the operator-facing
+  // stream should strip. The registry is the single source of truth.
+  emitsReasoning: boolean;
 }> = {
-  "meta/llama-3.1-70b-instruct": {
-    id: "meta/llama-3.1-70b-instruct",
-    label: "Llama 3.1 70B Instruct",
+  "meta/llama-3.2-11b-vision-instruct": {
+    id: "meta/llama-3.2-11b-vision-instruct",
+    label: "Llama 3.2 11B Vision Instruct (default)",
+    capabilities: ["chat", "vision", "json-mode"],
+    contextWindow: 131072,
+    costTier: "low",
+    notes: "Default for Claw + content intelligence. Confirmed working 2026-08-27. Text-only deltas, no reasoning trace.",
+    emitsReasoning: false
+  },
+  "meta/llama-3.2-90b-vision-instruct": {
+    id: "meta/llama-3.2-90b-vision-instruct",
+    label: "Llama 3.2 90B Vision Instruct",
+    capabilities: ["chat", "vision", "json-mode"],
+    contextWindow: 131072,
+    costTier: "high",
+    notes: "Larger Llama 3.2 — same simple delta format, slower but stronger. Good for the most complex structured-JSON generation.",
+    emitsReasoning: false
+  },
+  "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
+    id: "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+    label: "Nemotron Ultra 253B v1",
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "high",
-    notes: "Default for content intelligence — strongest structured-JSON output in the catalog."
+    notes: "NVIDIA's largest Nemotron for top-quality reasoning. Use for long-form strategy / audit synthesis.",
+    emitsReasoning: false
   },
-  "nvidia/nemotron-3.5-lightning-30b-a3b": {
-    id: "nvidia/nemotron-3.5-lightning-30b-a3b",
-    label: "NVIDIA Nemotron 3.5 Lightning 30B A3B",
+  "deepseek-ai/deepseek-v4-flash-0731": {
+    id: "deepseek-ai/deepseek-v4-flash-0731",
+    label: "DeepSeek V4 Flash (0731)",
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "Fast 3B-active MoE hybrid built for long-running agents, instruction following, and tool use."
+    notes: "Cheap + fast. Emits a `reasoning_content` thinking trace that the streaming client strips automatically. Good for monitoring.",
+    emitsReasoning: true
   },
-  "meta/llama-3.3-70b-instruct": {
-    id: "meta/llama-3.3-70b-instruct",
-    label: "Llama 3.3 70B Instruct",
+  "deepseek-ai/deepseek-v4-pro-0813": {
+    id: "deepseek-ai/deepseek-v4-pro-0813",
+    label: "DeepSeek V4 Pro (0813)",
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
-    costTier: "high",
-    notes: "Newer reasoning-tuned 70B. Good fallback when 3.1 70B rate-limits."
+    costTier: "mid",
+    notes: "Larger DeepSeek — stronger reasoning, slightly higher latency. Same reasoning-trace handling as the Flash variant.",
+    emitsReasoning: true
   },
-  "nvidia/llama-3.1-nemotron-70b-instruct": {
-    id: "nvidia/llama-3.1-nemotron-70b-instruct",
-    label: "Llama 3.1 Nemotron 70B (NVIDIA-tuned)",
+  "mistralai/mistral-large": {
+    id: "mistralai/mistral-large",
+    label: "Mistral Large",
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
-    costTier: "high",
-    notes: "NVIDIA-aligned Nemotron 70B. Strong at instruction-following + structured output. Backward-compatible default for the existing monitor config."
+    costTier: "mid",
+    notes: "Strong European-multilingual support. Useful for non-English copy variants.",
+    emitsReasoning: false
   },
-  "nvidia/nemotron-mini-4b-instruct": {
-    id: "nvidia/nemotron-mini-4b-instruct",
-    label: "Nemotron Mini 4B Instruct",
+  "ai21labs/jamba-1.5-large-instruct": {
+    id: "ai21labs/jamba-1.5-large-instruct",
+    label: "AI21 Jamba 1.5 Large",
     capabilities: ["chat", "json-mode"],
-    contextWindow: 8192,
-    costTier: "low",
-    notes: "Ultra-cheap, fast monitor summarizer. Use only for short KPI digests."
-  },
-  "mistralai/mistral-large-2-instruct": {
-    id: "mistralai/mistral-large-2-instruct",
-    label: "Mistral Large 2 Instruct",
-    capabilities: ["chat", "json-mode"],
-    contextWindow: 131072,
-    costTier: "high",
-    notes: "Strong European-multilingual support. Useful for non-English copy variants."
+    contextWindow: 256000,
+    costTier: "mid",
+    notes: "Hybrid SSM-Transformer with 256K context. Best when the conversation history is long (Claw with many tool turns).",
+    emitsReasoning: false
   },
   "disabled": {
     id: "disabled",
@@ -85,11 +109,12 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: [],
     contextWindow: 0,
     costTier: "low",
-    notes: "NVIDIA subsystems are turned off. Content generation and monitor will return dormant / null."
+    notes: "NVIDIA subsystems are turned off. Content generation and monitor will return dormant / null.",
+    emitsReasoning: false
   }
 };
 
-export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3.5-lightning-30b-a3b";
+export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = "meta/llama-3.2-11b-vision-instruct";
 
 export const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
 
@@ -99,4 +124,9 @@ export function isNvidiaModelId(v: unknown): v is NvidiaModelId {
 
 export function listNvidiaModelIds(): NvidiaModelId[] {
   return Object.keys(NVIDIA_MODELS) as NvidiaModelId[];
+}
+
+/** Read the registered model record for the given id. */
+export function getNvidiaModelMeta(id: NvidiaModelId) {
+  return NVIDIA_MODELS[id];
 }
