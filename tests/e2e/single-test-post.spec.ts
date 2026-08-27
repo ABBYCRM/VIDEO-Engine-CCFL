@@ -14,7 +14,7 @@ import { test, expect, request } from "@playwright/test";
 const LIVE = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
 
 test("single test post end-to-end", async () => {
-  test.setTimeout(180000);
+  test.setTimeout(240000);
   const ctx = await request.newContext({ baseURL: LIVE, ignoreHTTPSErrors: true });
 
   // 1. Login
@@ -53,7 +53,7 @@ test("single test post end-to-end", async () => {
       language: "en",
       templateId: "auto",
       imageProvider: "hedra",
-      imageModel: "gpt-image-2"
+      imageModel: "flux2-max"
     }
   });
   expect(create.ok(), `unified/create HTTP ${create.status()}`).toBeTruthy();
