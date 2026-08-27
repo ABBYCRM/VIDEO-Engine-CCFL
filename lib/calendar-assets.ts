@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { ensureBrandContactInCaption } from "@/lib/brand-contact";
 import { pickSplitTemplateForCategory } from "@/lib/split-templates";
 import { pickRandomStillPostTemplate } from "@/lib/still-post-templates";
+import { CARTOON_TEMPLATES, pickCartoonTemplateForCategory } from "@/lib/cartoon-still-templates";
 
 function ensureColumn(name:string, ddl:string){try{const cols=db.prepare("PRAGMA table_info(scheduled_posts)").all() as {name:string}[];if(!cols.some(c=>c.name===name))db.exec(`ALTER TABLE scheduled_posts ADD COLUMN ${ddl}`);}catch{}}
 ensureColumn("content_type","content_type TEXT NOT NULL DEFAULT 'ugc'");
@@ -101,7 +102,14 @@ export function createPlanningSlots(input:{horizonDays:number;titlePrefix:string
       ids.push(id);
       if(input.includeDailyStillPost&&slotType!=="image"){
         const stillId=crypto.randomUUID();
-        const stillTemplate=pickRandomStillPostTemplate();
+        // 70% chance the daily still is a "cartoon-..." template (Animated Legal Ad),
+        // 30% chance it's one of the existing photoreal still templates. The cartoon
+        // template is category-matched so the scene varies per campaign (slip-fall →
+        // grocery aisle, car accident → rear-end, trucking → highway, etc.).
+        const useCartoon = Math.random() < 0.7;
+        const stillTemplate = useCartoon
+          ? pickCartoonTemplateForCategory(category || campaignCategory || "car_accident", stillId)
+          : pickRandomStillPostTemplate();
         db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,site_id,campaign_id,planning_horizon_days,generation_status,category,still_template_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(stillId,`${input.titlePrefix} · Day ${day}${waveTag} · Still`.slice(0,180),input.network||"instagram",when.toISOString(),input.approvalMode==="auto"?"approved":"pending",input.approvalMode==="auto"?1:0,ensureBrandContactInCaption(input.caption||"").slice(0,5000),"image",input.siteId||null,input.campaignId||null,horizon,"pending",category,stillTemplate.id);
         ids.push(stillId);
       }

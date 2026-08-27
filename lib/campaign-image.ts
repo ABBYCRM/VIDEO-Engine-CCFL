@@ -7,6 +7,8 @@ import { generateAvatarImage } from "@/lib/nvidia/image";
 import { saveGeneratedImage } from "@/lib/media-library";
 import { composeStillPost } from "@/lib/still-compose";
 import { getStillPostTemplate } from "@/lib/still-post-templates";
+import { composeCartoonStillPost, planCartoonStill, type CartoonOverlaySpec } from "@/lib/cartoon-still-compose";
+import { getCartoonTemplate, pickCartoonTemplateForCategory, pickCartoonVariant } from "@/lib/cartoon-still-templates";
 
 function resolveReferencePath(referenceImagePath:string){
   if(referenceImagePath.startsWith("/avatars/"))return path.resolve(process.cwd(),"public",referenceImagePath.slice(1));
@@ -139,9 +141,28 @@ function sanitizeStillPrompt(raw:string){
     .replace(/d\u00edas? \d+|day \d+/gi,"");
 }
 
-export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null;seed?:string|null}){
-  const template=input.stillTemplateId?getStillPostTemplate(input.stillTemplateId):null;
-  const prompt=`Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${sanitizeStillPrompt(input.prompt)}${template?`\nTemplate image direction: ${template.imagePromptHints}.`:""}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.\nSTRICT: the photograph itself must contain absolutely no words, letters, digits, signage text, or phone numbers anywhere in the frame — every headline, phone number, and brand mark is added afterwards by a designed overlay. Show every person fully framed: never crop a person at the neck, waist, or knees by the edge of the frame.`;
+export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null;seed?:string|null;category?:string|null}){
+  // Two template systems:
+  //  - "cartoon-..." ids  → "The Animated Legal Ad" (Pixar-style 3D cartoon, orange footer, navy panel)
+  //  - everything else    → the existing photoreal still template system
+  const isCartoon = (input.stillTemplateId || "").startsWith("cartoon-");
+  const template = isCartoon ? null : (input.stillTemplateId ? getStillPostTemplate(input.stillTemplateId) : null);
+
+  // Build the prompt
+  let prompt: string;
+  let cartoonOverlay: import("@/lib/cartoon-still-compose").CartoonOverlaySpec | null = null;
+  if (isCartoon) {
+    const plan = planCartoonStill({
+      category: input.category || "car_accident",
+      seed: input.seed,
+      templateId: input.stillTemplateId,
+    });
+    cartoonOverlay = plan.overlay;
+    prompt = plan.imagePrompt;
+  } else {
+    prompt = `Create one bold, scroll-stopping vertical editorial photograph for a social post — the kind of image that makes someone stop scrolling in under a second, not a flat evenly-lit stock photo. ${sanitizeStillPrompt(input.prompt)}${template?`\nTemplate image direction: ${template.imagePromptHints}.`:""}\nUse dramatic, high-contrast lighting, a single clear focal point, confident and slightly dynamic framing (not a static passport-photo pose), and rich, saturated color. Photorealistic unless the creative direction explicitly requests another style.\nReturn only the photograph itself: no social-media interface, phone screen, app frame, post mockup, buttons, counters, captions, lettering, logos, or text artifacts. No fabricated legal results, settlement amounts, testimonials, injuries, or statistics.\nSTRICT: the photograph itself must contain absolutely no words, letters, digits, signage text, or phone numbers anywhere in the frame — every headline, phone number, and brand mark is added afterwards by a designed overlay. Show every person fully framed: never crop a person at the neck, waist, or knees by the edge of the frame.`;
+  }
+
   let reference:string|null=null;
   if(input.avatarId&&getImageProvider()==="xai"){
     // xAI cannot edit a reference image; generate from the prompt alone instead of failing the slot.
@@ -155,7 +176,12 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
   }
   const result=await renderWithConfiguredProvider(prompt,reference);
   let base64=result.base64,mimeType=result.mimeType;
-  if(template){
+  if(isCartoon && cartoonOverlay){
+    const tempDir=path.join(path.resolve(process.env.VIDEO_OUTPUT_DIR||"./data/videos"),"cartoon-compose"),token=crypto.randomUUID(),photoPath=path.join(tempDir,`${token}.${mimeType==="image/jpeg"?"jpg":mimeType==="image/webp"?"webp":"png"}`),outPath=path.join(tempDir,`${token}-composed.png`);
+    await fs.mkdir(tempDir,{recursive:true});
+    try{await fs.writeFile(photoPath,Buffer.from(base64,"base64"));await composeCartoonStillPost({photoPath,overlay:cartoonOverlay,outPath});base64=(await fs.readFile(outPath)).toString("base64");mimeType="image/png";}
+    finally{await Promise.all([fs.unlink(photoPath).catch(()=>{}),fs.unlink(outPath).catch(()=>{})]);}
+  } else if(template){
     const tempDir=path.join(path.resolve(process.env.VIDEO_OUTPUT_DIR||"./data/videos"),"still-compose"),token=crypto.randomUUID(),photoPath=path.join(tempDir,`${token}.${mimeType==="image/jpeg"?"jpg":mimeType==="image/webp"?"webp":"png"}`),outPath=path.join(tempDir,`${token}-composed.png`);
     await fs.mkdir(tempDir,{recursive:true});
     try{await fs.writeFile(photoPath,Buffer.from(base64,"base64"));await composeStillPost({photoPath,templateId:template.id,outPath,seed:input.seed});base64=(await fs.readFile(outPath)).toString("base64");mimeType="image/png";}
