@@ -168,7 +168,7 @@ export function UnifiedCreateConsole() {
   return (
     <AuthGuard>
       <AppShell>
-        <main className="max-w-6xl">
+        <main>
           {/* Header */}
           <PageHeader
             eyebrow="Unified campaign builder"

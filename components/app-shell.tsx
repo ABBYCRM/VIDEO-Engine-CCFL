@@ -110,8 +110,8 @@ export function AppShell({children,fullBleed}:{children:React.ReactNode;fullBlee
           />
         )}
 
-        <main className="min-h-screen w-full flex-1">
-          {fullBleed ? children : <div className="mx-auto w-full max-w-[640px] px-4 py-5 sm:px-5 sm:py-6">{children}</div>}
+        <main className="min-h-screen w-full min-w-0 flex-1 overflow-x-hidden">
+          {fullBleed ? children : <div className="mx-auto w-full max-w-[480px] px-4 py-5 sm:px-5 sm:py-6">{children}</div>}
         </main>
       </div>
     </div>

@@ -198,3 +198,4 @@ input, textarea, select { color-scheme: light; }
 
 /* Smooth scrolling for in-page nav */
 html { scroll-behavior: smooth; }
+html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }

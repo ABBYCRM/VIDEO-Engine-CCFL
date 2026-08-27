@@ -15,11 +15,13 @@ export const metadata: Metadata = {
   },
 };
 
-// Mobile-first viewport. We pin the design to ~430px so the app behaves like a
-// phone-sized window even on a desktop browser. user-scalable=no prevents
-// the iOS Safari pinch-zoom that would re-flow the layout.
+// Mobile-first viewport. We let the device pick its natural width (so the layout
+// doesn't get clipped on Android Chrome which can ignore a fixed width hint), but
+// we disable user zoom so pinch-zoom doesn't re-flow the layout. The design is
+// built to look right between 360-430px; the MobileFrame component then puts the
+// app in a 430px window when viewed on a real desktop browser.
 export const viewport: Viewport = {
-  width: 430,
+  width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,

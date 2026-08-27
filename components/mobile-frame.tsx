@@ -55,11 +55,11 @@ export function MobileFrame({ children }: { children: ReactNode }) {
 
   // Framed: a phone-sized window on the desktop background.
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200">
-      <div className="flex min-h-screen items-center justify-center p-6">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200">
+      <div className="flex min-h-screen items-center justify-center p-4 sm:p-6">
         <div
-          className="relative w-[430px] max-w-full overflow-hidden rounded-[36px] border-[10px] border-slate-900 bg-white shadow-2xl ring-1 ring-slate-900/5"
-          style={{ height: "min(900px, calc(100dvh - 48px))" }}
+          className="relative w-[412px] max-w-full overflow-hidden rounded-[40px] border-[10px] border-slate-900 bg-white shadow-2xl ring-1 ring-slate-900/5"
+          style={{ height: "min(900px, calc(100dvh - 32px))" }}
         >
           {/* Status bar (decorative) */}
           <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex h-7 items-center justify-between bg-white px-6 text-[11px] font-semibold text-slate-700">
@@ -74,7 +74,7 @@ export function MobileFrame({ children }: { children: ReactNode }) {
           <div className="pointer-events-none absolute left-1/2 top-0 z-50 h-5 w-28 -translate-x-1/2 rounded-b-2xl bg-slate-900" />
           {/* Scrollable inner area */}
           <div
-            className="h-full w-full overflow-y-auto bg-white pt-7"
+            className="h-full w-full overflow-y-auto overflow-x-hidden bg-white pt-7"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
             {children}
