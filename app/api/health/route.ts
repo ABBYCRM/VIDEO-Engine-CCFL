@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { pingPg } from "@/lib/db-pg-bootstrap";
 import { getProviderKey, PROVIDERS, type ProviderId } from "@/lib/providers";
 import { getGeminiApiKey } from "@/lib/settings";
-import { getNvidiaApiKey } from "@/lib/nvidia";
+import { getClawModel, getNvidiaApiKey } from "@/lib/nvidia";
 
 const TIMEOUT_MS = 6000;
 
@@ -54,20 +54,34 @@ async function pingVideoProvider(provider: ProviderId) {
 }
 
 async function pingNvidia() {
+  const model = getClawModel();
   let key: string;
   try {
     key = getNvidiaApiKey();
   } catch {
-    return { configured: false, live: false, error: "no key configured" };
+    return { configured: false, live: false, model, error: "no key configured" };
   }
   const t0 = Date.now();
   const r = await withTimeout(
     fetch("https://integrate.api.nvidia.com/v1/models", { headers: { Authorization: `Bearer ${key}` } }),
     TIMEOUT_MS
   );
-  if (!r.ok) return { configured: true, live: false, error: r.error, latencyMs: Date.now() - t0 };
+  if (!r.ok) return { configured: true, live: false, model, error: r.error, latencyMs: Date.now() - t0 };
   const response = r.value as Response;
-  return { configured: true, live: response.ok, status: response.status, error: response.ok ? undefined : `HTTP ${response.status}`, latencyMs: Date.now() - t0 };
+  const catalog = response.ok
+    ? await response.json().catch(() => null) as { data?: Array<{ id?: string }> } | null
+    : null;
+  const modelIds = catalog?.data?.map(entry => entry.id).filter((id): id is string => Boolean(id)) || [];
+  const available = modelIds.length ? modelIds.includes(model) : undefined;
+  return {
+    configured: true,
+    live: response.ok && available !== false,
+    status: response.status,
+    model,
+    available,
+    error: !response.ok ? `HTTP ${response.status}` : available === false ? "configured model is unavailable" : undefined,
+    latencyMs: Date.now() - t0
+  };
 }
 
 async function pingComposio() {
