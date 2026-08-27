@@ -12,6 +12,7 @@ import { runCampaignAutopilotOnce, startCampaignAutopilotLoop } from "@/lib/camp
 import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
 import { mandatoryVideoContactDirective } from "@/lib/brand-contact";
 import { publicCaptionForSlot } from "@/lib/public-copy";
+import { isImageGenEnabled } from "@/lib/feature-flags";
 import {
   getImageModel,
   getImageProvider,
@@ -88,6 +89,15 @@ function queueInstagramCategoryAutomation(input: { requestedAvatarId: string | n
 
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // IMAGE_GEN disabled (2026-08-27) — keep the code, but no more surprise
+  // campaigns / images / videos can be created from this endpoint.
+  if (!isImageGenEnabled()) {
+    return NextResponse.json({
+      error: "Image + video generation is disabled. Use the manual Calendar, Creator tab, or Library.",
+      feature: "image_generation",
+      disabled: true
+    }, { status: 410 });
+  }
   try {
     const body = await req.json().catch(() => ({}));
     const tab: Tab = TABS.includes(body.tab) ? body.tab : "ugc";

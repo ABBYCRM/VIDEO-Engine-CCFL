@@ -27,6 +27,13 @@ function repairIncompatibleState(){
 export async function GET(){if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});repairIncompatibleState();return NextResponse.json(payload());}
 export async function POST(req:Request){
   if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});
+  if (!process.env.IMAGE_GEN_ENABLED) {
+    return NextResponse.json({
+      error: "Image generation is disabled. Avatar image provider switching is paused.",
+      feature: "image_generation",
+      disabled: true
+    }, { status: 410 });
+  }
   try{
     const body=await req.json().catch(()=>({}));
     if(body.provider){

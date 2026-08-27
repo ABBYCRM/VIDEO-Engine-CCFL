@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   Check,
@@ -89,6 +90,8 @@ function canPublish(post: Post) {
 }
 
 export default function CalendarPage() {
+  const search = useSearchParams();
+  const showFeatureDisabled = search.get("feature_disabled") === "image_generation";
   const [posts, setPosts] = useState<Post[]>([]);
   const [week, setWeek] = useState(() => startOfWeek(new Date()));
   const [editing, setEditing] = useState<Post | null | "new">(null);
@@ -287,18 +290,22 @@ export default function CalendarPage() {
             title="Content Calendar"
             description="Generated blog articles, images and videos land here automatically. Review and edit them, approve them, publish immediately, or enable auto-post for connected Instagram and Website publishers. Planning supports 3, 7, 14 or 30 days."
             actions={<>
-              <Button variant="secondary" onClick={runAutopilot} disabled={busy === "autopilot"}>{busy === "autopilot" ? "Running…" : <><Play size={14} className="mr-2"/>Run autopilot</>}</Button>
-              <Button variant="secondary" onClick={rearmPending} disabled={busy === "rearm"}>{busy === "rearm" ? "Rearming…" : "Rearm pending"}</Button>
+              <Button variant="secondary" onClick={runAutopilot} disabled aria-disabled title="Image generation is paused. Autopilot is offline.">{busy === "autopilot" ? "Running…" : <><Play size={14} className="mr-2"/>Run autopilot (disabled)</>}</Button>
+              <Button variant="secondary" onClick={rearmPending} disabled aria-disabled title="Image generation is paused. No new jobs to rearm.">{busy === "rearm" ? "Rearming…" : "Rearm pending (disabled)"}</Button>
               <Button variant="secondary" onClick={bulkApproveAll} disabled={busy === "bulk-approve"}>{busy === "bulk-approve" ? "Approving…" : "Bulk-approve"}</Button>
               <Button variant="secondary" onClick={autoApproveAll} disabled={busy === "auto-approve"}>{busy === "auto-approve" ? "Approving…" : "Auto-approve & auto-post"}</Button>
               <Button variant="secondary" onClick={scrubCaptions} disabled={busy === "scrub"}>{busy === "scrub" ? "Scrubbing…" : "Scrub captions"}</Button>
               <Button variant="secondary" onClick={spreadCalendar} disabled={busy === "spread-calendar"}>{busy === "spread-calendar" ? "Spacing…" : "Spread over 60 days"}</Button>
-              <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={rebuildVideos} disabled={busy === "rebuild"}>{busy === "rebuild" ? "Rebuilding…" : "Rebuild all videos"}</Button>
+              <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={rebuildVideos} disabled aria-disabled title="Image generation is paused. Rebuild is offline.">{busy === "rebuild" ? "Rebuilding…" : "Rebuild all videos (disabled)"}</Button>
               <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={clearCalendar} disabled={busy === "clear-calendar"}>{busy === "clear-calendar" ? "Clearing…" : <><Trash2 size={14} className="mr-2"/>Clear calendar</>}</Button>
               <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
               <Button onClick={() => setEditing("new")}><Plus size={14} className="mr-2"/>Add post</Button>
             </>}
           />
+
+          {showFeatureDisabled && <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+            <strong>Image generation is paused.</strong> Manual calendar mode is on. Schedule, edit, and publish posts from here. Anything that used to call an image provider (Run autopilot, Generate, Retry generation) now returns a 410 until <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px]">IMAGE_GEN_ENABLED=true</code>.
+          </div>}
 
           {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
@@ -357,7 +364,7 @@ export default function CalendarPage() {
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase text-slate-700">{post.status}</span>
                       <div className="flex min-w-0 flex-wrap gap-2">
                         {post.status === "pending" && <Button size="sm" onClick={() => patch(post, { status: "approved" })} disabled={busy === post.id || generating}><Check size={13} className="mr-1"/>Approve</Button>}
-                        {retryable && <Button size="sm" variant="secondary" onClick={() => retryGeneration(post)} disabled={busy === `${post.id}:retry`}><RefreshCcw size={13} className={`mr-1 ${busy === `${post.id}:retry` ? "animate-spin" : ""}`}/>{busy === `${post.id}:retry` ? "Retrying…" : "Retry generation"}</Button>}
+                        {retryable && <Button size="sm" variant="secondary" onClick={() => retryGeneration(post)} disabled aria-disabled title="Image generation is paused. Retry is offline."><RefreshCcw size={13} className="mr-1"/>Retry generation (disabled)</Button>}
                         <Button size="sm" variant="secondary" onClick={() => patch(post, { autoPost: !post.autoPost, status: post.status === "pending" ? "approved" : post.status })} disabled={!autoCapable || busy === post.id || generating || (post.network === "website" && !post.contentBody?.trim())}>{post.autoPost ? "Disable auto" : "Enable auto"}</Button>
                         {publishable && <Button size="sm" variant="secondary" onClick={() => publish(post)} disabled={busy === `${post.id}:publish`}><Send size={13} className="mr-1"/>{busy === `${post.id}:publish` ? "Posting…" : "Post now"}</Button>}
                         {!publishable && post.network === "instagram" && <Button size="sm" variant="secondary" disabled title="Post now unlocks when the video finishes generating"><Send size={13} className="mr-1"/>{generating ? "Post now (generating…)" : "Post now (no media yet)"}</Button>}

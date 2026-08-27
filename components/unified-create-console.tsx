@@ -169,6 +169,9 @@ export function UnifiedCreateConsole() {
     <AuthGuard>
       <AppShell>
         <main>
+          <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+            <strong>Image generation is paused (operator directive 2026-08-27).</strong> The brief, avatar, language, horizon, and output-mix controls are kept so you can draft a campaign plan, but the Generate button now returns a 410. Manual schedule via the <a href="/calendar" className="underline">Calendar</a> or upload a video via the <a href="/creator" className="underline">Creator</a> tab.
+          </div>
           {/* Header */}
           <PageHeader
             eyebrow="Unified campaign builder"
@@ -291,12 +294,12 @@ export function UnifiedCreateConsole() {
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium text-slate-700">Image provider</span>
+                  <span className="font-medium text-slate-700">Image provider (disabled)</span>
                   <select value={imageProvider} onChange={e => {
                     const next = e.target.value;
                     setImageProvider(next);
                     setImageModel((IMAGE_MODELS[next] || IMAGE_MODELS.hedra)[0].id);
-                  }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                  }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" disabled aria-disabled>
                     <option value="hedra">Hedra (gpt-image-2 / FLUX / Imagen / Seedream)</option>
                     <option value="gemini">Google Gemini image</option>
                     <option value="a2e">A2E GPT Image</option>
@@ -305,8 +308,8 @@ export function UnifiedCreateConsole() {
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium text-slate-700">Image model</span>
-                  <select value={imageModel} onChange={e => setImageModel(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                  <span className="font-medium text-slate-700">Image model (disabled)</span>
+                  <select value={imageModel} onChange={e => setImageModel(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" disabled aria-disabled>
                     {(IMAGE_MODELS[imageProvider] || IMAGE_MODELS.hedra).map(m => (
                       <option key={m.id} value={m.id}>{m.label}</option>
                     ))}
@@ -378,11 +381,11 @@ export function UnifiedCreateConsole() {
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Button size="lg" onClick={submit} disabled={busy}>
-                {busy ? <><Loader2 size={16} className="mr-2 animate-spin" />Generating…</> : <><Sparkles size={16} className="mr-2" />Generate + schedule</>}
+              <Button size="lg" onClick={submit} disabled aria-disabled title="Image generation is paused. Use the Calendar or Creator tab to publish.">
+                {busy ? <><Loader2 size={16} className="mr-2 animate-spin" />Generating…</> : <><Sparkles size={16} className="mr-2" />Generate + schedule (disabled)</>}
               </Button>
-              <Button size="lg" variant="secondary" onClick={runCategoryAutomation} disabled={busy}>
-                <Sparkles size={16} className="mr-2" />Run 4-category IG autopilot
+              <Button size="lg" variant="secondary" onClick={runCategoryAutomation} disabled aria-disabled title="Image generation is paused. Campaign autopilot is offline.">
+                <Sparkles size={16} className="mr-2" />Run 4-category IG autopilot (disabled)
               </Button>
               {pollJobId && (
                 <div className="rounded-xl border bg-slate-50 px-3 py-2 text-xs text-slate-700">

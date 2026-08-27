@@ -3,9 +3,17 @@ import { requireAdmin } from "@/lib/auth";
 import { createJob } from "@/lib/jobs";
 import { parseGenerationBody } from "@/lib/request";
 import { contentTemplates, type ContentTemplateId } from "@/lib/prompts";
+import { isImageGenEnabled } from "@/lib/feature-flags";
 
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isImageGenEnabled()) {
+    return NextResponse.json({
+      error: "Image + video generation is disabled. Use the manual Calendar, Creator tab, or Library.",
+      feature: "image_generation",
+      disabled: true
+    }, { status: 410 });
+  }
   try {
     const body = await req.json();
     const templateId = body?.template as ContentTemplateId | undefined;

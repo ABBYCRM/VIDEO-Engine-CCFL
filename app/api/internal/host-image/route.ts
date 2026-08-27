@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getProviderKey } from "@/lib/providers";
 import { generateAvatarImage, isNvidiaImageModel } from "@/lib/nvidia/image";
 import { saveGeneratedImage } from "@/lib/media-library";
+import { isImageGenEnabled } from "@/lib/feature-flags";
 
 const XAI_MODELS = new Set(["grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-quality"]);
 
@@ -32,6 +33,13 @@ async function generateXai(prompt: string, model: string) {
 
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isImageGenEnabled()) {
+    return NextResponse.json({
+      error: "Image generation is disabled. Use the manual Calendar, Creator tab, or Library.",
+      feature: "image_generation",
+      disabled: true
+    }, { status: 410 });
+  }
   try {
     const body = await req.json().catch(() => ({}));
     const prompt = String(body.prompt || "").trim();
