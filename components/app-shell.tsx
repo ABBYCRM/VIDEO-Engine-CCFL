@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Clapperboard, LogOut, Users, Calendar, Library, X, Sliders, Globe, Plug, Cog, Megaphone, Bird, Menu } from "lucide-react";
+import { Clapperboard, LogOut, Users, Calendar, Library, X, Sliders, Globe, Plug, Cog, Megaphone, Bird, Menu, Film } from "lucide-react";
 import { DuckMark } from "@/components/duck-mark";
 import { MobileFrame } from "@/components/mobile-frame";
 
@@ -10,6 +10,7 @@ type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW"|"OPS";ex
 const NAV:NavItem[]=[
   {href:"/claw",label:"Claw",icon:Bird,group:"CREATE"},
   {href:"/",label:"Create",icon:Clapperboard,group:"CREATE",exact:true},
+  {href:"/creator",label:"Creator",icon:Film,group:"CREATE"},
   {href:"/avatars",label:"Avatars",icon:Users,group:"CREATE"},
   {href:"/campaigns",label:"Campaigns",icon:Megaphone,group:"REVIEW"},
   {href:"/library",label:"Library",icon:Library,group:"REVIEW"},
