@@ -173,17 +173,26 @@ async function hedraImageGenerate(referencePath: string | null, model: string, p
   // Hedra v3 image generation: submit + poll, return image bytes.
   // Same /v3/models/{model_id} submit + /v3/jobs/{id}/status poll + /v3/jobs/{id} read pattern as the video endpoint.
   // Model id is whatever the user selected in settings (gpt-image-2, flux2-max, imagen-4, seedream-5, etc.)
+  //
+  // The Hedra v3 catalog doesn't publish a typed per-model schema here, so we keep
+  // small per-model allowlists. The default payload is `{ prompt, aspect_ratio }`.
+  // Models that need it also get `quality` (gpt-image family) or `resolution` (some
+  // others). Sending fields the model rejects (e.g. `resolution` to flux2-max) causes
+  // HTTP 400 "Extra inputs are not permitted", so we set the right fields per model.
   const key = getProviderKey("hedra");
   const TIMEOUT_MS = 120000;
   const aspectRatio = "9:16";
-  const resolution = "1K";
-  // Some models (gpt-image-2) require a `quality` enum instead of (or alongside) resolution.
-  // Other models ignore unknown fields, so we attach it for the known gpt-image family.
   const MODELS_NEEDING_QUALITY = new Set(["gpt-image-2", "gpt-image-1.5"]);
+  const MODELS_ACCEPTING_RESOLUTION = new Set([
+    "gpt-image-2", "gpt-image-1.5",
+    "imagen-4", "nano-banana-pro",
+    "ideogram-v4", "recraft-v3", "seedream-5"
+  ]);
   const ac = new AbortController();
   const submitTimer = setTimeout(() => ac.abort(), TIMEOUT_MS);
-  const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, resolution };
+  const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio };
   if (MODELS_NEEDING_QUALITY.has(model)) input.quality = "high";
+  if (MODELS_ACCEPTING_RESOLUTION.has(model)) input.resolution = "1K";
   // Only attach reference image if a path is supplied AND the model supports it.
   // The text-to-image models (flux2-max, gpt-image-2, imagen-4) accept an optional input image as
   // an "assets" base64 pair; when we have a reference, attach it as the first frame.
