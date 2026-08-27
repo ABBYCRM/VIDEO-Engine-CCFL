@@ -198,6 +198,44 @@ export function CreatorConsole() {
     }
   }
 
+  async function uploadWithRetry(fd: FormData, attempt: number): Promise<any> {
+    // Cold-start on DO basic-tier can take 15-20s, and Cloudflare's edge will
+    // occasionally RST the connection during that window. If the fetch throws
+    // a "Failed to fetch" TypeError once, we wait 3s and try again before
+    // surfacing a real error.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 120_000);
+    try {
+      const r = await fetch("/api/creator/upload", {
+        method: "POST",
+        body: fd,
+        signal: ac.signal,
+        // Don't let the browser or any intermediary close the connection
+        // before we've sent the entire multipart body.
+        keepalive: true
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      return d;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isNetwork = /failed to fetch|networkerror|aborted|load failed|timeout/i.test(msg);
+      if (isNetwork && attempt < 2) {
+        // Try once more. The DO app may have been idle-evicted and the next
+        // request will wake it. 3s gives the cold-start time to finish.
+        setResult({ ok: false, error: "Connection dropped — retrying (server may be cold-starting)…" });
+        await new Promise(r => setTimeout(r, 3000));
+        return uploadWithRetry(fd, attempt + 1);
+      }
+      if (isNetwork) {
+        throw new Error("Network connection dropped (the server may be cold-starting). Tap Upload + schedule again to retry.");
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function upload() {
     setResult(null);
     if (!file) {
@@ -229,9 +267,7 @@ export function CreatorConsole() {
       fd.append("caption", caption);
       fd.append("category", category);
       fd.append("subject", subject);
-      const r = await fetch("/api/creator/upload", { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      const d = await uploadWithRetry(fd, 1);
       setResult({ ok: true, ids: d.scheduledPostIds, message: `Scheduled ${d.scheduledPostIds?.length || 0} post(s) for ${d.formats?.join(", ")}` });
       // Reset only the per-upload bits; keep topic + date+time
       setFile(null);
