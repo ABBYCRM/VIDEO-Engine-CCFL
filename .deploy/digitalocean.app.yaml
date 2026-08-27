@@ -74,7 +74,7 @@ services:
       - key: CLAW_NVIDIA_MODEL
         scope: RUN_TIME
         type: GENERAL
-        value: "nvidia/nvidia-nemotron-nano-9b-v2"
+        value: "nvidia/nemotron-3.5-lightning-30b-a3b"
       - key: GEMINI_API_KEY
         scope: RUN_TIME
         type: SECRET

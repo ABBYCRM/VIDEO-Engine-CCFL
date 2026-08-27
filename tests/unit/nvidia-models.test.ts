@@ -3,7 +3,7 @@ import test from "node:test";
 import { DEFAULT_CLAW_NVIDIA_MODEL, NVIDIA_MODELS, isNvidiaModelId } from "../../lib/nvidia/models.ts";
 
 test("Claw defaults to the supported low-latency Nemotron model", () => {
-  assert.equal(DEFAULT_CLAW_NVIDIA_MODEL, "nvidia/nvidia-nemotron-nano-9b-v2");
+  assert.equal(DEFAULT_CLAW_NVIDIA_MODEL, "nvidia/nemotron-3.5-lightning-30b-a3b");
   assert.equal(NVIDIA_MODELS[DEFAULT_CLAW_NVIDIA_MODEL].costTier, "low");
 });
 

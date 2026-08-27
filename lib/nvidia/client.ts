@@ -9,6 +9,7 @@
 // HTTP status, the truncated error message, and a redacted length.
 
 import { DEFAULT_CLAW_NVIDIA_MODEL, NVIDIA_BASE, isNvidiaModelId, type NvidiaModelId } from "./models";
+import { applyThinkingMode } from "./request";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 
@@ -66,6 +67,7 @@ export type ChatRequest = {
   topP?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  thinking?: boolean;
   signal?: AbortSignal;
 };
 
@@ -99,6 +101,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
     stream: false
   };
   if (req.jsonMode) body.response_format = { type: "json_object" };
+  applyThinkingMode(body, req.thinking);
   const ac = req.signal ? null : new AbortController();
   const t = ac ? setTimeout(() => ac.abort(), 30_000) : null;
   try {
@@ -154,6 +157,7 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
     max_tokens: req.maxTokens ?? 1600,
     stream: true
   };
+  applyThinkingMode(body, req.thinking);
   const ac = req.signal ? null : new AbortController();
   const t = ac ? setTimeout(() => ac.abort(), 45_000) : null;
   try {
