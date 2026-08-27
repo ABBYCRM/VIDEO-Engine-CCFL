@@ -177,9 +177,13 @@ async function hedraImageGenerate(referencePath: string | null, model: string, p
   const TIMEOUT_MS = 120000;
   const aspectRatio = "9:16";
   const resolution = "1K";
+  // Some models (gpt-image-2) require a `quality` enum instead of (or alongside) resolution.
+  // Other models ignore unknown fields, so we attach it for the known gpt-image family.
+  const MODELS_NEEDING_QUALITY = new Set(["gpt-image-2", "gpt-image-1.5"]);
   const ac = new AbortController();
   const submitTimer = setTimeout(() => ac.abort(), TIMEOUT_MS);
   const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, resolution };
+  if (MODELS_NEEDING_QUALITY.has(model)) input.quality = "high";
   // Only attach reference image if a path is supplied AND the model supports it.
   // The text-to-image models (flux2-max, gpt-image-2, imagen-4) accept an optional input image as
   // an "assets" base64 pair; when we have a reference, attach it as the first frame.
