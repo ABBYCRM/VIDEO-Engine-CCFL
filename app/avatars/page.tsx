@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, ImageOff, RefreshCcw, RotateCcw, ShieldCheck, Sparkles, Trash2, Upload, Users, Wand2, X, UserRound, Mic2 } from "lucide-react";
+import { AlertTriangle, Check, ImageOff, Plus, RefreshCcw, RotateCcw, ShieldCheck, Sparkles, Trash2, Upload, Users, Wand2, X, UserRound, Mic2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
@@ -89,6 +89,7 @@ export default function AvatarsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -255,6 +256,7 @@ export default function AvatarsPage() {
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
         <Button variant="secondary" onClick={() => setSettingsOpen(true)}><Sparkles size={14} className="mr-2"/>Image: {imageSettings ? `${imageSettings.provider} · ${imageSettings.model}` : "settings"}</Button>
+        <Button onClick={() => setCreateOpen(true)}><Plus size={14} className="mr-2"/>New avatar</Button>
       </div>
     </div>
 
@@ -278,7 +280,140 @@ export default function AvatarsPage() {
     {!loading && avatars.length === 0 && <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center text-sm text-slate-500">No avatars are stored yet.</div>}
 
     {settingsOpen && <ImageSettingsModal initial={imageSettings} onClose={() => setSettingsOpen(false)} onSaved={s => { setImageSettings(s); setSettingsOpen(false); load(); }}/>} 
+
+    {createOpen && <CreateAvatarModal onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }}/>}
   </main></AppShell></AuthGuard>;
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Create-avatar modal
+// 1. Operator fills name + gender + archetype + wardrobe standard + notes
+// 2. (optional) Uploads an identity photo
+// 3. We POST /api/admin/avatars to create the row (status=draft)
+// 4. If a photo was chosen, we POST /api/admin/avatars/[id]/upload kind=reference
+// 5. Reload the list — the new avatar appears as a draft with 0/4 views
+// ────────────────────────────────────────────────────────────────────────────────
+function CreateAvatarModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [id, setId] = useState("");
+  const [name, setName] = useState("");
+  const [gender, setGender] = useState<"male" | "female" | "non-binary">("male");
+  const [archetype, setArchetype] = useState("");
+  const [wardrobeStandard, setWardrobeStandard] = useState("");
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function autoId() {
+    const base = (id || name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    if (base) setId(`${base}-${Math.random().toString(36).slice(2, 6)}`);
+  }
+
+  async function submit() {
+    setErr(null);
+    if (!name.trim() || !archetype.trim() || !wardrobeStandard.trim() || !id.trim()) {
+      setErr("Id, name, archetype, and wardrobe standard are required.");
+      return;
+    }
+    if (!/^[a-z0-9-]{2,40}$/.test(id)) {
+      setErr("Id must be lowercase letters, numbers, and hyphens only (2-40 chars).");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/avatars", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, name, gender, archetype, wardrobeStandard, notes })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+
+      if (file) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("kind", "reference");
+        const up = await fetch(`/api/admin/avatars/${encodeURIComponent(id)}/upload`, { method: "POST", body: form });
+        const ud = await up.json();
+        if (!up.ok) throw new Error(`Created avatar, but reference upload failed: ${ud.error || `HTTP ${up.status}`}`);
+      }
+      onCreated();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-base font-semibold text-slate-900">New canonical avatar</div>
+            <div className="mt-0.5 text-xs text-slate-500">A reusable identity. Pick a clear front-facing photo for the reference; the four canonical views can be generated after creation.</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-slate-100"><X size={16} /></button>
+        </div>
+
+        <div className="max-h-[80vh] space-y-3 overflow-auto px-5 py-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-slate-700">ID (URL slug, lowercase)</span>
+              <input value={id} onChange={e => setId(e.target.value)} onBlur={autoId} placeholder="e.g. male-attorney-02" className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-slate-700">Display name</span>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Male Attorney 02" className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" />
+            </label>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-slate-700">Gender</span>
+              <select value={gender} onChange={e => setGender(e.target.value as any)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="non-binary">Non-binary</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-slate-700">Archetype</span>
+              <input value={archetype} onChange={e => setArchetype(e.target.value)} placeholder="e.g. law-firm principal" className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" />
+            </label>
+          </div>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">Wardrobe standard</span>
+            <input value={wardrobeStandard} onChange={e => setWardrobeStandard(e.target.value)} placeholder="e.g. navy suit, white shirt, muted gold tie" className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" />
+            <span className="text-[11px] text-slate-500">What the avatar is canonically wearing in the four campaign views. Drives the prompt when generating turns.</span>
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">Notes (optional)</span>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="e.g. New cartoon-style male attorney, light-skinned, brown hair, ~35yo." className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+          </label>
+
+          <div className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">Reference photo (optional)</span>
+            <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
+            <button onClick={() => inputRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600 hover:bg-slate-100">
+              <Upload size={14} /> {file ? file.name : "Click to upload identity photo"}
+            </button>
+            {file && <span className="text-[11px] text-emerald-700">Will upload as identity reference after creation. You can change this later from the avatar card.</span>}
+          </div>
+
+          {err && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{err}</div>}
+        </div>
+
+        <div className="sticky bottom-0 -mx-5 mt-5 flex justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} disabled={busy}>{busy ? "Creating…" : "Create avatar"}</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGenerateView, onReset, onTrainTwin, onDelete }: {
