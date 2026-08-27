@@ -15,8 +15,8 @@ export async function POST(req: Request) {
       body.mission = `HYPER-REALISTIC ${tmpl.title}. ${tmpl.instruction} ${body.prompt || ""}`.trim();
       body.aspectRatio = body.aspectRatio || tmpl.aspectRatio;
       body.durationSeconds = body.durationSeconds || tmpl.duration;
-      if (!body.model) body.model = "grok-imagine-video-1.5";
-      if (!body.provider) body.provider = "grok";
+      if (!body.model) body.model = "fal/grok-video-i2v";
+      if (!body.provider) body.provider = "hedra";
     }
     const input = parseGenerationBody(body);
     const job = await createJob({ ...input, source: "admin" });

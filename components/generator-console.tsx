@@ -37,10 +37,35 @@ const TEMPLATE_TABS: Array<{
   { id: "cinematic", label: "Cinematic", icon: Play },
 ];
 
-const VIDEO_MODELS = [
-  { id: "grok-imagine-video-1.5", label: "Grok Imagine 1.5" },
-  { id: "grok-imagine-video-1.0", label: "Grok Imagine 1.0" },
+const VIDEO_PROVIDERS = [
+  { id: "hedra", label: "Hedra" },
+  { id: "grok", label: "Grok Imagine" },
+  { id: "a2e", label: "A2E" },
+  { id: "veo", label: "Google Veo" },
 ];
+
+const VIDEO_MODELS: Record<string, Array<{ id: string; label: string }>> = {
+  hedra: [
+    { id: "fal/grok-video-i2v", label: "Hedra · Grok Video I2V" },
+    { id: "fal/grok-video-t2v", label: "Hedra · Grok Video T2V" },
+    { id: "hedra-character-3", label: "Hedra · Character 3" },
+    { id: "hedra-character-2", label: "Hedra · Character 2" },
+    { id: "together/hedra-avatar", label: "Hedra · Avatar" },
+  ],
+  grok: [
+    { id: "grok-imagine-video-1.5", label: "Grok Imagine 1.5" },
+    { id: "grok-imagine-video-1.0", label: "Grok Imagine 1.0" },
+  ],
+  a2e: [
+    { id: "sora2", label: "A2E · Sora 2" },
+    { id: "veo3", label: "A2E · Veo 3" },
+    { id: "kling3", label: "A2E · Kling 3.0" },
+  ],
+  veo: [
+    { id: "veo-3.1-generate-preview", label: "Veo 3.1" },
+    { id: "veo-3.1-fast-generate-preview", label: "Veo 3.1 Fast" },
+  ],
+};
 
 const LANGUAGES = [
   { id: "english", label: "English" },
@@ -50,10 +75,11 @@ const LANGUAGES = [
 
 export function GeneratorConsole() {
   const [activeTemplate, setActiveTemplate] = useState<ContentTemplateId>("reel");
-  const [selectedModel, setSelectedModel] = useState("grok-imagine-video-1.5");
+  const [selectedProvider, setSelectedProvider] = useState("hedra");
+  const [selectedModel, setSelectedModel] = useState("fal/grok-video-i2v");
   const [prompt, setPrompt] = useState("");
   const [script, setScript] = useState("");
-  const [duration, setDuration] = useState(8);
+  const [duration, setDuration] = useState(15);
   const [selectedMale, setSelectedMale] = useState<string | null>(null);
   const [selectedFemale, setSelectedFemale] = useState<string | null>(null);
   const [useMale, setUseMale] = useState(true);
@@ -95,7 +121,7 @@ export function GeneratorConsole() {
           resolution: "1080p",
           durationSeconds: duration,
           avatarId,
-          provider: "grok",
+          provider: selectedProvider,
           language,
         }),
       });
@@ -286,13 +312,25 @@ export function GeneratorConsole() {
 
             <div className="flex items-center gap-3 flex-wrap">
               <select
+                value={selectedProvider}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSelectedProvider(next);
+                  setSelectedModel(VIDEO_MODELS[next][0].id);
+                  setDuration(next === "hedra" || next === "a2e" ? 15 : 8);
+                }}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:border-amber-500/50"
+              >
+                {VIDEO_PROVIDERS.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+              <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:border-amber-500/50"
               >
-                {VIDEO_MODELS.map(m => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
+                {(VIDEO_MODELS[selectedProvider] || []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
               <select
                 value={duration}
@@ -303,6 +341,7 @@ export function GeneratorConsole() {
                 <option value={8}>8s</option>
                 <option value={10}>10s</option>
                 <option value={15}>15s</option>
+                <option value={30}>30s</option>
               </select>
               <select
                 value={language}
@@ -415,7 +454,7 @@ export function GeneratorConsole() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Engine</span>
-              <span className="text-amber-300 font-mono">Grok</span>
+              <span className="text-amber-300 font-mono">{selectedProvider}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Model</span>

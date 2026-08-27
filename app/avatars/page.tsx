@@ -7,7 +7,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
 
 type ViewKey = "front" | "left" | "right" | "back";
-type ImageProvider = "gemini" | "openai" | "xai" | "a2e" | "nvidia" | "mock";
+type ImageProvider = "hedra" | "gemini" | "openai" | "xai" | "a2e" | "nvidia" | "mock";
 const VIEWS: ViewKey[] = ["front", "left", "right", "back"];
 
 type AvatarViewStatus = {
@@ -356,8 +356,8 @@ function AvatarCard({ avatar, canTurnaround, busy, onUpload, onGenerateAll, onGe
 }
 
 function ImageSettingsModal({ initial, onClose, onSaved }: { initial: ImageSettings | null; onClose: () => void; onSaved: (settings: ImageSettings) => void }) {
-  const [provider,setProvider] = useState<ImageProvider>(initial?.provider || "gemini");
-  const [model,setModel] = useState(initial?.model || "gemini-2.5-flash-image");
+  const [provider,setProvider] = useState<ImageProvider>(initial?.provider || "hedra");
+  const [model,setModel] = useState(initial?.model || "gpt-image-2");
   const [apiKey,setApiKey] = useState("");
   const [choices,setChoices] = useState<ProviderChoice[]>(initial?.providers || []);
   const [busy,setBusy] = useState(false);

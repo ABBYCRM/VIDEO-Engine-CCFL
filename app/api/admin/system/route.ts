@@ -20,6 +20,7 @@ import { getComposio, isComposioConfigured } from "@/lib/composio/client";
 import { getGeminiApiKey } from "@/lib/settings";
 import { getNvidiaApiKey } from "@/lib/nvidia";
 import { getImageProvider, isImageProviderConfigured, getImageModel } from "@/lib/avatar-generation/client";
+import { instagramHealthcheck, isInstagramConfigured } from "@/lib/instagram-graph";
 
 const TIMEOUT_MS = 6000;
 
@@ -107,13 +108,21 @@ async function pingComposio() {
   }
 }
 
+async function pingInstagram() {
+  if (!isInstagramConfigured()) return instagramHealthcheck();
+  const t0 = Date.now();
+  const result = await withTimeout(instagramHealthcheck(), TIMEOUT_MS);
+  if (!result.ok) return { configured: true, live: false, error: result.error, latencyMs: Date.now() - t0 };
+  return { ...result.value!, latencyMs: Date.now() - t0 };
+}
+
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const t0 = Date.now();
 
   // Provider checks (parallel)
-  const [veo, grok, a2e, hedra, nvidia, composio, gemini, pg] = await Promise.all([
-    pingVideoProvider("veo"), pingVideoProvider("grok"), pingVideoProvider("a2e"), pingVideoProvider("hedra"), pingNvidia(), pingComposio(), pingGemini(), pingPg()
+  const [veo, grok, a2e, hedra, nvidia, composio, gemini, pg, instagram] = await Promise.all([
+    pingVideoProvider("veo"), pingVideoProvider("grok"), pingVideoProvider("a2e"), pingVideoProvider("hedra"), pingNvidia(), pingComposio(), pingGemini(), pingPg(), pingInstagram()
   ]);
 
   // Database (SQLite)
@@ -147,7 +156,8 @@ export async function GET() {
   if (!a2e.configured) actions.push("Set A2E_API_KEY in DO env");
   if (!hedra.configured) actions.push("Set HEDRA_API_KEY in DO env");
   if (!nvidia.configured) actions.push("Set NVIDIA_API_KEY in DO env");
-  if (!composio.configured) actions.push("Set COMPOSIO_API_KEY in DO env");
+  if (!instagram.configured) actions.push("Save Instagram Graph token + Business Account id on Integrations (instagram-mcp)");
+  if (instagram.configured && !instagram.live) actions.push(`Instagram Graph live check failed: ${instagram.error || "unknown"}`);
   if (!gemini.configured) actions.push("Set GEMINI_API_KEY in DO env (required for Veo and recommended for AI 4-view turnaround)");
   if (gemini.configured && !gemini.live && gemini.error?.includes("spending cap")) actions.push("Raise Gemini spending cap in AI Studio (aistudio.google.com → Settings → Billing)");
   if (process.env.DATABASE_URL && !pg.ok) actions.push("Enable 'trusted sources' on novaluis-pg cluster in DO dashboard (or use private connection string)");
@@ -164,8 +174,10 @@ export async function GET() {
       hedra,
       nvidia,
       composio,
-      gemini
+      gemini,
+      instagram
     },
+    instagram,
     imageApi,
     database: {
       sqlite,

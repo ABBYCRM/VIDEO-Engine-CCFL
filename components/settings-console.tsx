@@ -44,7 +44,7 @@ const providerMeta: Record<ProviderId, { label: string; icon: any; choices: stri
   hedra: {
     label: "Hedra (v3 multi-model)",
     icon: Bird,
-    choices: ["hedra-character-3", "hedra-character-2", "fal/grok-video-t2v", "fal/grok-video-i2v", "together/hedra-avatar"],
+    choices: ["fal/grok-video-i2v", "fal/grok-video-t2v", "hedra-character-3", "hedra-character-2", "together/hedra-avatar"],
     help: "Hedra API key from hedra.com/develop/api-keys. Single key unlocks Character-3, Hedra Avatar, and the fal/grok-video models on Hedra's v3 platform.",
     docs: "https://www.hedra.com/docs/pages/developer/v3/quickstart"
   }
@@ -78,7 +78,7 @@ export function SettingsConsole(){
  const [a2e,setA2e] = useState("");
  const [hedraKey,setHedraKey] = useState("");
  const [nvidiaKey,setNvidiaKey] = useState("");
- const [defaultProvider,setDefaultProvider] = useState<ProviderId>("veo");
+ const [defaultProvider,setDefaultProvider] = useState<ProviderId>("hedra");
  const [providerModels,setProviderModels] = useState<Record<ProviderId,string>>({ veo:"", grok:"", a2e:"", hedra:"" });
  const [imageProvider,setImageProvider] = useState<ImageProviderId>("hedra");
  const [imageModel,setImageModel] = useState<string>("gpt-image-2");
@@ -99,7 +99,7 @@ export function SettingsConsole(){
    if(s.ok){
      const d = await s.json();
      setSettings(d);
-     setDefaultProvider(d.defaultProvider || "veo");
+     setDefaultProvider(d.defaultProvider || "hedra");
      setProviderModels({
        veo: d.providers?.veo?.model || providerMeta.veo.choices[0],
        grok: d.providers?.grok?.model || providerMeta.grok.choices[0],
@@ -192,7 +192,7 @@ export function SettingsConsole(){
 
  if(!settings) return <div className="p-8 text-slate-600">Loading settings…</div>;
 
- const ALL_PROVIDERS: ProviderId[] = ["veo","grok","a2e","hedra"];
+ const ALL_PROVIDERS: ProviderId[] = ["hedra","a2e","grok","veo"];
 
  return <div className="mx-auto max-w-5xl">
    <h2 className="text-2xl font-semibold">Settings & API access</h2>

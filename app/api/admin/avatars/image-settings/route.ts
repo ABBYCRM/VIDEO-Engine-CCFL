@@ -31,7 +31,7 @@ export async function POST(req:Request){
     const body=await req.json().catch(()=>({}));
     if(body.provider){
       const provider=String(body.provider) as AvatarImageProvider;
-      if(!["nvidia","a2e","gemini","openai","xai","mock"].includes(provider))return NextResponse.json({error:"Invalid provider"},{status:400});
+      if(!["nvidia","hedra","a2e","gemini","openai","xai","mock"].includes(provider))return NextResponse.json({error:"Invalid provider"},{status:400});
       const previous=getAvatarImageProvider();setAvatarImageProvider(provider);if(previous!==provider||provider==="nvidia")clearStaleGenerationState();
     }
     if(body.model&&listAvatarImageModelChoices().includes(String(body.model)))setAvatarImageModel(String(body.model));

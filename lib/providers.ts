@@ -55,8 +55,8 @@ export const PROVIDERS: Record<ProviderId, {
   hedra: {
     id: "hedra",
     label: "Hedra Character / Avatar",
-    defaultModel: "hedra-character-3",
-    modelChoices: ["hedra-character-3", "hedra-character-2", "together/hedra-avatar", "fal/grok-video-t2v", "fal/grok-video-i2v"],
+    defaultModel: "fal/grok-video-i2v",
+    modelChoices: ["fal/grok-video-i2v", "fal/grok-video-t2v", "hedra-character-3", "hedra-character-2", "together/hedra-avatar"],
     durationCap: 30,
     supportsImage: true,
     envKey: "HEDRA_API_KEY",
@@ -65,7 +65,7 @@ export const PROVIDERS: Record<ProviderId, {
   }
 };
 
-export function listProviderIds(): ProviderId[] { return ["veo", "grok", "a2e", "hedra"]; }
+export function listProviderIds(): ProviderId[] { return ["hedra", "a2e", "grok", "veo"]; }
 export function getProviderKey(p: ProviderId): string {
   const def = PROVIDERS[p];
   const encrypted = (db.prepare("SELECT value FROM settings WHERE key = ?").get(def.settingsKey) as { value: string } | undefined)?.value;
@@ -79,7 +79,7 @@ export function getProviderModel(p: ProviderId): string {
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(`${p}_model`) as { value: string } | undefined)?.value || def.defaultModel;
 }
 export function getDefaultProvider(): ProviderId {
-  // Gemini/Veo is the only supported video provider. Other adapters remain in
-  // the registry for legacy job polling but are never selected for new work.
-  return "veo";
+  const raw = (db.prepare("SELECT value FROM settings WHERE key = ?").get("default_provider") as { value: string } | undefined)?.value;
+  if (raw === "veo" || raw === "grok" || raw === "a2e" || raw === "hedra") return raw;
+  return "hedra";
 }

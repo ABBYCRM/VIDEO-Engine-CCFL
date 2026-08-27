@@ -79,6 +79,26 @@ services:
         scope: RUN_TIME
         type: SECRET
         value: "REPLACE_WITH_A2E_KEY"
+      - key: INSTAGRAM_MCP_ACCESS_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: "REPLACE_WITH_INSTAGRAM_LONG_LIVED_TOKEN"
+      - key: INSTAGRAM_MCP_IG_USER_ID
+        scope: RUN_TIME
+        type: GENERAL
+        value: "REPLACE_WITH_IG_BUSINESS_ACCOUNT_ID"
+      - key: INSTAGRAM_MCP_APP_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: "REPLACE_WITH_INSTAGRAM_APP_SECRET"
+      - key: INSTAGRAM_MCP_DM_ENABLED
+        scope: RUN_TIME
+        type: GENERAL
+        value: "0"
+      - key: STEEL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: "REPLACE_WITH_STEEL_KEY"
 
 # Bind the existing NovaLuis managed PostgreSQL cluster to this app in the
 # DigitalOcean control plane. App Platform does not provide persistent local

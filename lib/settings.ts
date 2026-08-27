@@ -4,6 +4,7 @@ import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { isNvidiaModelId } from "@/lib/nvidia";
 import { COMPOSIO_TOOLKITS, isComposioConfigured, getAuthConfigId } from "@/lib/composio/client";
 import { isImageProviderConfigured, getImageProvider, getImageModel, type ImageProvider } from "@/lib/avatar-generation/client";
+import { isInstagramConfigured } from "@/lib/instagram-graph";
 
 export type EngineSettings = {
   defaultProvider: ProviderId;
@@ -15,6 +16,7 @@ export type EngineSettings = {
   };
   nvidia: { keyConfigured: boolean; model: string };
   composio: { keyConfigured: boolean; toolkits: Array<{ id: string; authConfigConfigured: boolean }> };
+  instagram: { configured: boolean };
   image: { configured: boolean; provider: ImageProvider; model: string };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
@@ -50,7 +52,7 @@ export function getEngineSettings(): EngineSettings {
   return {
     defaultProvider: (() => {
       const raw = getRaw("default_provider");
-      return isProviderId(raw) ? raw : "veo";
+      return isProviderId(raw) ? raw : "hedra";
     })(),
     providers: {
       veo: { keyConfigured: providerConfigured("veo"), model: getRaw("veo_model") || PROVIDERS.veo.defaultModel },
@@ -66,6 +68,7 @@ export function getEngineSettings(): EngineSettings {
       keyConfigured: isComposioConfigured(),
       toolkits: COMPOSIO_TOOLKITS.map(t => ({ id: t.id, authConfigConfigured: Boolean(getAuthConfigId(t.id)) }))
     },
+    instagram: { configured: isInstagramConfigured() },
     image: getImageSettings(),
     resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
     aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")

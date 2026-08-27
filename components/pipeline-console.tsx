@@ -40,6 +40,7 @@ type SystemPayload = {
   calendar?: { total: number; pending: number; approved: number; published: number; failed: number };
   campaignAutopilot?: { running: boolean; queued: number };
   youtube?: { configured: boolean; channelTitle?: string };
+  instagram?: { configured: boolean; live?: boolean; username?: string | null; igUserId?: string | null; error?: string | null };
   env?: Record<string, boolean>;
 };
 
@@ -109,8 +110,12 @@ function ActionButton({ call, onRun, busy, result }: { call: ApiCall; onRun: (c:
 
 // ─── pipeline sections ────────────────────────────────────────────────
 const PROVIDER_SWITCH_CALLS: ApiCall[] = [
+  { method: "PUT", path: "/api/admin/settings", body: { defaultProvider: "hedra", hedraModel: "fal/grok-video-i2v" }, label: "Video: Hedra · grok-video-i2v", description: "Default video jobs to Hedra Grok Video image-to-video (hero still as first frame).", tone: "primary" },
+  { method: "PUT", path: "/api/admin/settings", body: { defaultProvider: "hedra", hedraModel: "hedra-character-3" }, label: "Video: Hedra Character 3", description: "Default video jobs to Hedra Character 3 (talking avatar; needs start image + driving audio).", tone: "primary" },
   { method: "POST", path: "/api/admin/image-provider", body: { provider: "hedra", model: "flux2-max" }, label: "Image: Hedra · flux2-max", description: "Switch image generation to Hedra FLUX.2 [max] (3.5¢/gen).", tone: "primary" },
   { method: "POST", path: "/api/admin/image-provider", body: { provider: "hedra", model: "gpt-image-2" }, label: "Image: Hedra · gpt-image-2", description: "Switch image generation to Hedra-hosted GPT Image 2 (supports reference editing).", tone: "primary" },
+  { method: "POST", path: "/api/admin/image-provider", body: { provider: "hedra", model: "imagen-4" }, label: "Image: Hedra · imagen-4", description: "Switch image generation to Hedra Imagen 4.", tone: "primary" },
+  { method: "POST", path: "/api/admin/image-provider", body: { provider: "hedra", model: "seedream-5" }, label: "Image: Hedra · seedream-5", description: "Switch image generation to Hedra Seedream 5.", tone: "secondary" },
   { method: "POST", path: "/api/admin/image-provider", body: { provider: "gemini", model: "gemini-2.5-flash-image" }, label: "Image: Gemini 2.5 Flash", description: "Switch image generation to Google Gemini (multimodal, fast, ~30s).", tone: "secondary" },
   { method: "POST", path: "/api/admin/image-provider", body: { provider: "openai", model: "gpt-image-1" }, label: "Image: OpenAI gpt-image-1", description: "Switch image generation to OpenAI gpt-image-1 (supports reference editing, slow).", tone: "secondary" },
 ];
@@ -265,6 +270,10 @@ export function PipelineConsole() {
                   <div className="mt-1 text-sm">
                     {system.youtube ? <><StatusDot ok={Boolean(system.youtube.configured)} /> {system.youtube.configured ? (system.youtube.channelTitle || "connected") : "not connected"}</> : "—"}
                   </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Instagram Graph</div>
+                  <div className="mt-1 text-sm"><StatusDot ok={Boolean(system.instagram?.live)} /> {system.instagram?.live ? `@${system.instagram.username}` : system.instagram?.configured ? "configured · offline" : "not configured"}</div>
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Composio</div>

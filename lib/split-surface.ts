@@ -71,15 +71,14 @@ export function normalizeUpperProvider(value: unknown, lowerProvider?: string): 
 }
 
 export function unattendedLaneProvider(provider: ProviderId, model?: string | null): ProviderId {
-  // Gemini/Veo only: every unattended lane is coerced to veo regardless of the
-  // campaign's stored provider. grok/a2e/hedra are retired for generation.
-  void provider; void model;
-  return "veo";
+  void model;
+  return provider;
 }
 
 export function nextLaneFallback(failed: ProviderId): ProviderId | null {
-  // No cross-provider fallback: veo is the only video provider.
-  void failed;
+  if (failed === "hedra") return "a2e";
+  if (failed === "a2e") return "grok";
+  if (failed === "grok") return "veo";
   return null;
 }
 
@@ -92,6 +91,7 @@ export function laneModel(provider: ProviderId, requested?: string | null) {
   // Takes the avatar's reference photo as an image-to-video source
   // (preserving identity).
   if (provider === "a2e") return "wan3.0-video";
+  if (provider === "hedra") return "fal/grok-video-i2v";
   return undefined;
 }
 
@@ -107,15 +107,17 @@ export type SplitSurface = {
 };
 
 export function parseSplitSurface(body: any, fallbackLower: string): SplitSurface {
-  const videoProvider: ProviderId = "veo"; // Gemini/Veo only
+  const requested = String(body.videoProvider || body.provider || fallbackLower || "hedra").trim();
+  const videoProvider: ProviderId = isProviderId(requested) ? requested : "hedra";
   const upperProvider = normalizeUpperProvider(body.upperProvider, videoProvider);
+  const requestedModel = body.videoModel ? String(body.videoModel).slice(0, 120) : "";
   return {
     splitPercent: clampSplitPercent(body.splitPercent),
     splitRelationship: normalizeSplitRelationship(body.splitRelationship),
     splitTemplate: isSplitTemplateId(body.splitTemplate) ? body.splitTemplate : DEFAULT_SPLIT_TEMPLATE_ID,
     splitDurationSeconds: clampSplitDuration(body.splitDurationSeconds),
     videoProvider,
-    videoModel: body.videoModel ? String(body.videoModel).slice(0, 120) : null,
+    videoModel: requestedModel || (videoProvider === "hedra" ? "fal/grok-video-i2v" : null),
     upperProvider,
     upperModel: body.upperModel ? String(body.upperModel).slice(0, 120) : null
   };

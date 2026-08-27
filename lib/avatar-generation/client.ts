@@ -12,7 +12,7 @@ export type ImageProvider = "gemini" | "openai" | "xai" | "a2e" | "hedra" | "moc
 const SETTING_KEY = "image_api_key";
 const SETTING_MODEL_KEY = "image_model";
 const SETTING_PROVIDER_KEY = "image_provider";
-const PROVIDER_MODELS: Record<ImageProvider, string[]> = {
+export const IMAGE_PROVIDER_MODELS: Record<ImageProvider, string[]> = {
   gemini: ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview", "gemini-3.1-flash-image", "gemini-3.1-flash-lite-image"],
   openai: ["gpt-image-1", "dall-e-3"],
   xai: ["grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-quality"],
@@ -20,6 +20,7 @@ const PROVIDER_MODELS: Record<ImageProvider, string[]> = {
   hedra: ["gpt-image-2", "flux2-max", "flux-kontext", "nano-banana-pro", "imagen-4", "seedream-5", "ideogram-v4", "recraft-v3"],
   mock: ["mock-stable-diffusion-1"]
 };
+const PROVIDER_MODELS = IMAGE_PROVIDER_MODELS;
 
 function getRaw(key: string) {
   return (db.prepare("SELECT value FROM settings WHERE key=?").get(key) as { value: string } | undefined)?.value ?? null;
@@ -71,6 +72,10 @@ export function listImageProviders() {
   ] as const;
 }
 export function listImageModelChoices() { return PROVIDER_MODELS[getImageProvider()]; }
+export function listImageModelsFor(provider: ImageProvider) { return PROVIDER_MODELS[provider] ?? []; }
+export function isImageProviderId(value: string): value is ImageProvider {
+  return value === "gemini" || value === "openai" || value === "xai" || value === "a2e" || value === "hedra" || value === "mock";
+}
 
 export class ImageKeyMissingError extends Error {
   constructor() { super("Image API key is not configured"); this.name = "ImageKeyMissingError"; }

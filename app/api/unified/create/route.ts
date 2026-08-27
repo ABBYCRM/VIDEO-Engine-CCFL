@@ -12,6 +12,15 @@ import { runCampaignAutopilotOnce, startCampaignAutopilotLoop } from "@/lib/camp
 import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
 import { mandatoryVideoContactDirective } from "@/lib/brand-contact";
 import { publicCaptionForSlot } from "@/lib/public-copy";
+import {
+  getImageModel,
+  getImageProvider,
+  IMAGE_PROVIDER_MODELS,
+  isImageProviderId,
+  listImageProviders,
+  setImageModel,
+  setImageProvider
+} from "@/lib/avatar-generation/client";
 
 const TABS = ["car_accident","rideshare","trucking","slip_fall","ugc"] as const;
 type Tab = (typeof TABS)[number];
@@ -87,9 +96,16 @@ export async function POST(req: Request) {
     const horizonDays = [3, 7, 14, 30, 60].includes(Number(body.horizonDays)) ? Number(body.horizonDays) : 7;
     const outputMode: "image" | "video" | "auto_mix" = ["image","video","auto_mix"].includes(body.outputMode) ? body.outputMode : "auto_mix";
     const approvalMode: "manual" | "auto" = body.approvalMode === "auto" ? "auto" : "auto"; // default auto
-    const model = body.model ? String(body.model) : "sora2"; // default A2E Sora 2 Pro for hyper realism
-    const providerChoice = body.provider ? String(body.provider) : "a2e";
-    // A2E supports 15-30s (Seedance 2.5 etc); Grok Imagine is 8s; Veo 3.1 caps at 8s
+    const model = body.model ? String(body.model) : "fal/grok-video-i2v";
+    const providerChoice = ["veo","grok","a2e","hedra"].includes(String(body.provider || "")) ? String(body.provider) : "hedra";
+    if (body.imageProvider && isImageProviderId(String(body.imageProvider))) {
+      setImageProvider(body.imageProvider);
+    }
+    if (body.imageModel) {
+      try { setImageModel(String(body.imageModel)); } catch { /* keep current model if the new one is invalid for the provider */ }
+    }
+    const imageProviderChoice = getImageProvider();
+    const imageModelChoice = getImageModel();
     const defaultDuration = (providerChoice === "grok" || providerChoice === "veo") ? 8 : 15;
     const durationSeconds = Number.isFinite(Number(body.durationSeconds)) && [2,3,5,6,8,10,12,15,20,25,30].includes(Number(body.durationSeconds)) ? Number(body.durationSeconds) : defaultDuration;
     // Language support: 'en', 'es', or 'mix' (English + Spanish in same video)
@@ -137,6 +153,8 @@ export async function POST(req: Request) {
       templateId,
       templateLabel: selectedTemplate.label,
       model,
+      imageProvider: imageProviderChoice,
+      imageModel: imageModelChoice,
       horizonDays,
       outputMode,
       approvalMode,
@@ -166,7 +184,7 @@ export async function POST(req: Request) {
       results.imageWarning = `Hero image skipped: ${e instanceof Error ? e.message : String(e)}`;
     }
 
-    // Step 2: Create the video job (A2E - hyper realism)
+    // Step 2: Create the video job (Hedra default — Character 3 / Grok Video)
     try {
       const job = await createJob({
         source: "api",
@@ -178,6 +196,7 @@ export async function POST(req: Request) {
         resolution: "1080p",
         avatarId: avatarId ?? undefined,
         imageBase64: results.imageAsset?.base64 ?? undefined,
+        imageMimeType: results.imageAsset?.mimeType || (results.imageAsset?.base64 ? "image/png" : undefined),
         durationSeconds: durationSeconds,
       });
       results.videoJobId = job.id;
@@ -263,10 +282,15 @@ export async function GET() {
     horizonOptions: [3, 7, 14, 30, 60],
     outputModes: ["image", "video", "auto_mix"],
     approvalModes: ["auto", "manual"],
-    defaultModel: "sora2",
+    defaultModel: "fal/grok-video-i2v",
     languages: ["en", "es", "mix"],
     defaultLanguage: "mix",
+    defaultImageProvider: getImageProvider(),
+    defaultImageModel: getImageModel(),
+    imageProviders: listImageProviders(),
+    imageModels: IMAGE_PROVIDER_MODELS,
     providers: [
+      { id: "hedra", label: "Hedra (Character 3 / Grok Video)", defaultModel: "fal/grok-video-i2v", defaultDuration: 15 },
       { id: "a2e", label: "A2E (Sora 2 / Veo 3 / Kling)", defaultModel: "sora2", defaultDuration: 15 },
       { id: "grok", label: "xAI · Grok Imagine Video", defaultModel: "grok-imagine-video-1.5", defaultDuration: 8 },
       { id: "veo", label: "Google · Veo 3.1 (Gemini)", defaultModel: "veo-3.1-generate-preview", defaultDuration: 8 }

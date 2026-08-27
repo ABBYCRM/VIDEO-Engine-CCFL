@@ -1,0 +1,438 @@
+import { db } from "@/lib/db";
+import { createJob, getJob } from "@/lib/jobs";
+import { generateCampaignStill } from "@/lib/campaign-image";
+import { listAvatars } from "@/lib/avatars";
+import { listSites } from "@/lib/sites";
+import { listGeneratedImages, deleteGeneratedImage } from "@/lib/media-library";
+import { listPersistentLibraryAssets, deletePersistentLibraryAsset } from "@/lib/persistent-library";
+import { publishInstagram } from "@/lib/instagram-publish";
+import { claimInstagramPublish, publishInstagramPair, releaseInstagramPublish } from "@/lib/calendar-publisher";
+import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
+import { getEngineSettings } from "@/lib/settings";
+import { type ProviderId } from "@/lib/providers";
+import type { CampaignCategory } from "@/lib/prompts";
+import {
+  instagramHealthcheck,
+  isInstagramConfigured,
+  isInstagramDmEnabled,
+  listMedia,
+  getComments,
+  replyToComment,
+  hideComment,
+  deleteComment,
+  listConversations,
+  getConversationMessages,
+  sendDirectMessage
+} from "@/lib/instagram-graph";
+import {
+  composioGetComments,
+  composioGetMessages,
+  composioListConversations,
+  composioListMedia,
+  composioReplyComment,
+  composioSendMessage,
+  composioUserInfo,
+  isComposioInstagramConnected
+} from "@/lib/instagram-composio";
+import { withInstagramFallback } from "@/lib/claw/fallback";
+import { deleteClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
+import { isComposioConfigured } from "@/lib/composio/client";
+import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
+
+export type ClawTool = {
+  name: string;
+  description: string;
+  args: string;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+};
+
+const CATEGORIES = new Set(["car_accident", "rideshare", "trucking", "slip_fall", "ugc"]);
+function isProviderId(v: string): v is ProviderId {
+  return v === "veo" || v === "grok" || v === "a2e" || v === "hedra";
+}
+
+function str(v: unknown, fallback = "") { return v == null ? fallback : String(v); }
+function num(v: unknown, fallback: number) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+function clip(v: unknown, n = 4000) { const s = JSON.stringify(v); return s.length > n ? s.slice(0, n) + "…" : s; }
+
+function publicJob(j: any) {
+  if (!j) return null;
+  return {
+    id: j.id,
+    category: j.category,
+    provider: j.provider,
+    model: j.model,
+    status: j.status,
+    error: j.error,
+    createdAt: j.createdAt,
+    fileUrl: j.status === "succeeded" ? `/api/v1/video/${j.id}/file` : null
+  };
+}
+
+export const CLAW_TOOLS: ClawTool[] = [
+  {
+    name: "app_status",
+    description: "Pipeline snapshot: providers, Instagram Graph+Composio fallback, Steel, NVIDIA, open jobs.",
+    args: "{}",
+    handler: async () => {
+      const settings = getEngineSettings();
+      const jobs = db.prepare("SELECT status, COUNT(*) as n FROM video_jobs GROUP BY status").all() as { status: string; n: number }[];
+      const ig = await instagramHealthcheck();
+      return {
+        defaultProvider: settings.defaultProvider,
+        video: settings.providers,
+        nvidia: settings.nvidia,
+        image: settings.image,
+        instagram: { ...ig, composioFallback: isComposioInstagramConnected(), dmEnabled: isInstagramDmEnabled() },
+        composio: { configured: isComposioConfigured() },
+        steel: { configured: isSteelConfigured() },
+        jobs
+      };
+    }
+  },
+  {
+    name: "list_jobs",
+    description: "Recent video jobs.",
+    args: "{\"limit\":20}",
+    handler: async (a) => {
+      const limit = Math.max(1, Math.min(40, num(a.limit, 20)));
+      const rows = db.prepare("SELECT id,category,provider,model,status,error,created_at,updated_at FROM video_jobs ORDER BY created_at DESC LIMIT ?").all(limit);
+      return { jobs: rows };
+    }
+  },
+  {
+    name: "get_job",
+    description: "One video job by id.",
+    args: "{\"id\":\"uuid\"}",
+    handler: async (a) => publicJob(getJob(str(a.id)))
+  },
+  {
+    name: "generate_video",
+    description: "Start one Hedra/Veo/Grok/A2E video. Same as Create.",
+    args: "{\"mission\":\"...\",\"category\":\"car_accident|rideshare|trucking|slip_fall|ugc\",\"provider\":\"hedra\",\"model\":\"fal/grok-video-i2v\"}",
+    handler: async (a) => {
+      const category = str(a.category, "ugc") as CampaignCategory;
+      if (!CATEGORIES.has(category)) throw new Error("category must be car_accident, rideshare, trucking, slip_fall, or ugc");
+      const provider = (isProviderId(str(a.provider)) ? str(a.provider) : undefined) as ProviderId | undefined;
+      const job = await createJob({
+        source: "admin",
+        category,
+        mission: str(a.mission || a.prompt),
+        subject: str(a.subject) || undefined,
+        script: str(a.script) || undefined,
+        provider,
+        model: str(a.model) || undefined,
+        avatarId: str(a.avatarId) || undefined
+      });
+      return { started: true, job: publicJob(job) };
+    }
+  },
+  {
+    name: "generate_still",
+    description: "Generate a campaign still into Library + Calendar.",
+    args: "{\"prompt\":\"...\",\"avatarId\":\"optional\"}",
+    handler: async (a) => {
+      const prompt = str(a.prompt || a.mission);
+      if (!prompt) throw new Error("prompt is required");
+      const still = await generateCampaignStill({ prompt, avatarId: str(a.avatarId) || null });
+      return { assetId: still.assetId, assetUrl: still.assetUrl, model: still.model };
+    }
+  },
+  {
+    name: "list_library",
+    description: "Recent Library assets.",
+    args: "{\"limit\":20}",
+    handler: async (a) => {
+      const limit = Math.max(1, Math.min(40, num(a.limit, 20)));
+      const persistent = await listPersistentLibraryAssets().catch(() => []);
+      const generated = listGeneratedImages(limit).map((image) => ({
+        id: `generated:${image.id}`, kind: "generated", mediaType: "image", title: image.model || "Generated image", url: image.url, createdAt: image.createdAt
+      }));
+      const videos = (db.prepare("SELECT id,category,provider,status,created_at FROM video_jobs WHERE status='succeeded' AND output_path IS NOT NULL ORDER BY updated_at DESC LIMIT ?").all(limit) as any[])
+        .map((v) => ({ id: `video:${v.id}`, kind: "video", url: `/api/v1/video/${v.id}/file`, title: `${v.provider} ${v.category}`, createdAt: v.created_at }));
+      const assets = [...persistent, ...generated, ...videos].slice(0, limit);
+      return { assets: assets.map((x: any) => ({ id: x.id, kind: x.kind, title: x.title, url: x.url, createdAt: x.createdAt })) };
+    }
+  },
+  {
+    name: "delete_library_asset",
+    description: "Delete a Library asset by id (generated: / video: / persistent).",
+    args: "{\"id\":\"generated:...\"}",
+    handler: async (a) => {
+      const id = str(a.id);
+      if (!id) throw new Error("id is required");
+      if (id.startsWith("avatar:")) throw new Error("Avatar assets are managed from Avatars");
+      if (id.startsWith("generated:")) await deleteGeneratedImage(id.slice("generated:".length));
+      else if (id.startsWith("video:")) {
+        db.prepare("DELETE FROM video_jobs WHERE id=?").run(id.slice("video:".length));
+        await deletePersistentLibraryAsset(id).catch(() => {});
+      } else {
+        await deletePersistentLibraryAsset(id);
+      }
+      return { ok: true, id };
+    }
+  },
+  {
+    name: "list_calendar",
+    description: "Calendar slots. Filter by status.",
+    args: "{\"status\":\"pending|approved|published|failed\",\"limit\":20}",
+    handler: async (a) => {
+      const limit = Math.max(1, Math.min(40, num(a.limit, 20)));
+      const status = str(a.status);
+      const rows = status
+        ? db.prepare("SELECT id,title,network,scheduled_at,status,auto_post,caption,content_type,generation_status,instagram_permalink,error FROM scheduled_posts WHERE status=? ORDER BY scheduled_at DESC LIMIT ?").all(status, limit)
+        : db.prepare("SELECT id,title,network,scheduled_at,status,auto_post,caption,content_type,generation_status,instagram_permalink,error FROM scheduled_posts ORDER BY scheduled_at DESC LIMIT ?").all(limit);
+      return { posts: rows };
+    }
+  },
+  {
+    name: "update_calendar",
+    description: "Patch a calendar item: status, caption, autoPost.",
+    args: "{\"id\":\"...\",\"status\":\"approved\",\"caption\":\"...\",\"autoPost\":true}",
+    handler: async (a) => {
+      const id = str(a.id);
+      const current = db.prepare("SELECT * FROM scheduled_posts WHERE id=?").get(id) as any;
+      if (!current) throw new Error("Calendar item not found");
+      const status = a.status ? str(a.status) : current.status;
+      const caption = a.caption !== undefined ? str(a.caption).slice(0, 5000) : current.caption;
+      const autoPost = a.autoPost === undefined ? current.auto_post : (a.autoPost ? 1 : 0);
+      db.prepare("UPDATE scheduled_posts SET status=?,caption=?,auto_post=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(status, caption, autoPost, id);
+      return db.prepare("SELECT id,title,status,auto_post,caption,scheduled_at FROM scheduled_posts WHERE id=?").get(id);
+    }
+  },
+  {
+    name: "publish_calendar",
+    description: "Publish one approved Instagram calendar item now.",
+    args: "{\"id\":\"...\"}",
+    handler: async (a) => {
+      const id = str(a.id);
+      const post = db.prepare("SELECT * FROM scheduled_posts WHERE id=?").get(id) as any;
+      if (!post) throw new Error("Calendar item not found");
+      if (post.network !== "instagram") throw new Error("Only Instagram calendar items auto-publish here");
+      if (!claimInstagramPublish(post.id)) throw new Error("Already publishing");
+      try {
+        const result = await publishInstagramPair(post);
+        db.prepare("UPDATE scheduled_posts SET status='published',published_at=?,error=NULL,publishing_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(new Date().toISOString(), id);
+        setTimeout(() => { void verifyPublishedInstagramOnce(); }, 15_000).unref?.();
+        return { ok: true, via: result?.reel?.via || result?.story?.via || "instagram-mcp", result };
+      } catch (e) {
+        releaseInstagramPublish(id);
+        const message = e instanceof Error ? e.message : String(e);
+        db.prepare("UPDATE scheduled_posts SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(message.slice(0, 2000), id);
+        throw e;
+      }
+    }
+  },
+  {
+    name: "delete_calendar",
+    description: "Delete a calendar slot.",
+    args: "{\"id\":\"...\"}",
+    handler: async (a) => {
+      const r = db.prepare("DELETE FROM scheduled_posts WHERE id=?").run(str(a.id));
+      if (!r.changes) throw new Error("Not found");
+      return { ok: true };
+    }
+  },
+  {
+    name: "list_campaigns",
+    description: "Campaigns.",
+    args: "{\"limit\":20}",
+    handler: async (a) => {
+      const rows = db.prepare("SELECT id,name,category,status,video_provider,output_mode,created_at FROM campaigns ORDER BY created_at DESC LIMIT ?").all(Math.max(1, Math.min(40, num(a.limit, 20))));
+      return { campaigns: rows };
+    }
+  },
+  {
+    name: "list_avatars",
+    description: "Canonical avatars.",
+    args: "{}",
+    handler: async () => ({ avatars: listAvatars().map((x) => ({ id: x.id, name: x.name, status: x.status, turnaroundStatus: x.turnaroundStatus, a2eTwinStatus: x.a2eTwinStatus })) })
+  },
+  {
+    name: "list_sites",
+    description: "Connected websites.",
+    args: "{}",
+    handler: async () => ({ sites: listSites().map((s: any) => ({ id: s.id, name: s.name, url: s.url, status: s.status })) })
+  },
+  {
+    name: "ig_health",
+    description: "Instagram Graph live check + Composio fallback state. Always report which path is live.",
+    args: "{}",
+    handler: async () => {
+      const graph = await instagramHealthcheck();
+      let composio: unknown = null;
+      if (isComposioInstagramConnected()) {
+        try { composio = { connected: true, info: await composioUserInfo() }; }
+        catch (e) { composio = { connected: true, error: e instanceof Error ? e.message : String(e) }; }
+      } else {
+        composio = { connected: false };
+      }
+      return {
+        primary: "instagram-mcp",
+        graph,
+        composio,
+        dmEnabled: isInstagramDmEnabled(),
+        note: graph.live ? "Graph (instagram-mcp) is live. Composio is fallback only." : isComposioInstagramConnected() ? "Graph is down/offline. Claw will use Composio Instagram as fallback and tell you." : "Neither Graph nor Composio Instagram is ready."
+      };
+    }
+  },
+  {
+    name: "ig_list_media",
+    description: "List recent Instagram media. Graph first, Composio fallback.",
+    args: "{\"limit\":12}",
+    handler: async (a) => withInstagramFallback(
+      "ig_list_media",
+      async () => listMedia(num(a.limit, 12)),
+      isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined
+    )
+  },
+  {
+    name: "ig_get_comments",
+    description: "Read comments on an Instagram media id.",
+    args: "{\"mediaId\":\"...\"}",
+    handler: async (a) => {
+      const mediaId = str(a.mediaId || a.id);
+      if (!mediaId) throw new Error("mediaId is required");
+      return withInstagramFallback(
+        "ig_get_comments",
+        async () => getComments(mediaId),
+        isComposioInstagramConnected() ? async () => composioGetComments(mediaId) : undefined
+      );
+    }
+  },
+  {
+    name: "ig_reply_comment",
+    description: "Reply to an Instagram comment.",
+    args: "{\"commentId\":\"...\",\"message\":\"...\"}",
+    handler: async (a) => {
+      const commentId = str(a.commentId);
+      const message = str(a.message || a.text);
+      if (!commentId || !message) throw new Error("commentId and message are required");
+      return withInstagramFallback(
+        "ig_reply_comment",
+        async () => replyToComment(commentId, message),
+        isComposioInstagramConnected() ? async () => composioReplyComment(commentId, message) : undefined
+      );
+    }
+  },
+  {
+    name: "ig_hide_comment",
+    description: "Hide or unhide an Instagram comment (Graph).",
+    args: "{\"commentId\":\"...\",\"hide\":true}",
+    handler: async (a) => hideComment(str(a.commentId), a.hide !== false)
+  },
+  {
+    name: "ig_delete_comment",
+    description: "Delete an Instagram comment (Graph).",
+    args: "{\"commentId\":\"...\"}",
+    handler: async (a) => deleteComment(str(a.commentId))
+  },
+  {
+    name: "ig_list_conversations",
+    description: "List Instagram DMs. Requires instagram_manage_messages + INSTAGRAM_MCP_DM_ENABLED=1. Graph first, Composio fallback.",
+    args: "{}",
+    handler: async () => withInstagramFallback(
+      "ig_list_conversations",
+      async () => listConversations(),
+      isComposioInstagramConnected() ? async () => composioListConversations() : undefined
+    )
+  },
+  {
+    name: "ig_get_messages",
+    description: "Read an Instagram DM thread.",
+    args: "{\"conversationId\":\"...\"}",
+    handler: async (a) => {
+      const conversationId = str(a.conversationId);
+      if (!conversationId) throw new Error("conversationId is required");
+      return withInstagramFallback(
+        "ig_get_messages",
+        async () => getConversationMessages(conversationId),
+        isComposioInstagramConnected() ? async () => composioGetMessages(conversationId) : undefined
+      );
+    }
+  },
+  {
+    name: "ig_send_dm",
+    description: "Send an Instagram DM (24h window). recipientId is the IGSID.",
+    args: "{\"recipientId\":\"...\",\"text\":\"...\"}",
+    handler: async (a) => {
+      const recipientId = str(a.recipientId);
+      const text = str(a.text || a.message);
+      if (!recipientId || !text) throw new Error("recipientId and text are required");
+      return withInstagramFallback(
+        "ig_send_dm",
+        async () => sendDirectMessage(recipientId, text),
+        isComposioInstagramConnected() ? async () => composioSendMessage(recipientId, text) : undefined
+      );
+    }
+  },
+  {
+    name: "ig_publish",
+    description: "Publish a public https media URL or library/video asset to Instagram (Reel/feed/story). Graph first, Composio fallback. Always report `via`.",
+    args: "{\"mediaUrl\":\"/api/library/assets/.../file\",\"mediaType\":\"video/mp4\",\"caption\":\"...\",\"postType\":\"feed|story\",\"jobId\":\"optional\"}",
+    handler: async (a) => publishInstagram({
+      jobId: str(a.jobId) || null,
+      mediaUrl: str(a.mediaUrl) || null,
+      mediaType: str(a.mediaType) || null,
+      caption: str(a.caption),
+      postType: str(a.postType) === "story" ? "story" : "feed"
+    })
+  },
+  {
+    name: "steel_scrape",
+    description: "Browse a public web page with Steel.dev and return clean Markdown, metadata, links, and an optional screenshot. Never use it for local/private URLs.",
+    args: "{\"url\":\"https://example.com\",\"delayMs\":0,\"useProxy\":false,\"screenshot\":false}",
+    handler: async (a) => scrapeWithSteel({
+      url: a.url,
+      delayMs: a.delayMs,
+      useProxy: a.useProxy,
+      screenshot: a.screenshot
+    })
+  },
+  {
+    name: "list_files",
+    description: "Files uploaded into Claw.",
+    args: "{\"conversationId\":\"optional\"}",
+    handler: async (a) => ({ files: listFiles(str(a.conversationId) || null).map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, url: f.url })) })
+  },
+  {
+    name: "read_file",
+    description: "Read a Claw file (text excerpt or metadata).",
+    args: "{\"id\":\"...\"}",
+    handler: async (a) => ({ id: str(a.id), text: await readClawFileText(str(a.id)) })
+  },
+  {
+    name: "rename_file",
+    description: "Rename a Claw file.",
+    args: "{\"id\":\"...\",\"name\":\"...\"}",
+    handler: async (a) => renameClawFile(str(a.id), str(a.name))
+  },
+  {
+    name: "delete_file",
+    description: "Delete a Claw file.",
+    args: "{\"id\":\"...\"}",
+    handler: async (a) => ({ ok: await deleteClawFile(str(a.id)) })
+  },
+  {
+    name: "draft_caption",
+    description: "Draft PI-safe Instagram caption. Does not post.",
+    args: "{\"topic\":\"...\",\"network\":\"instagram\"}",
+    handler: async (a) => ({
+      caption: `${str(a.topic || a.mission).slice(0, 400)}\n\nQuestions after an accident? Call. This is advertising, not legal advice.`.slice(0, 2200),
+      note: "PI-safe draft. No fake results. Confirm before posting."
+    })
+  }
+];
+
+export const CLAW_TOOL_MAP = new Map(CLAW_TOOLS.map((t) => [t.name, t]));
+
+export function toolsCatalog(): string {
+  return CLAW_TOOLS.map((t) => `- ${t.name} ${t.args} — ${t.description}`).join("\n");
+}
+
+export async function executeClawTool(name: string, args: Record<string, unknown>) {
+  const tool = CLAW_TOOL_MAP.get(name);
+  if (!tool) throw new Error(`Unknown tool ${name}`);
+  const data = await tool.handler(args);
+  return typeof data === "string" ? data : clip(data, 6000);
+}

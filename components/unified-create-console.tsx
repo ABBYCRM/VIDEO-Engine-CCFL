@@ -38,6 +38,34 @@ const TABS: { id: Tab; label: string; emoji: string; description: string }[] = [
 
 type Avatar = { id: string; name: string; gender: "male" | "female" | "non-binary"; archetype: string; hasReference: boolean };
 
+const IMAGE_MODELS: Record<string, Array<{ id: string; label: string }>> = {
+  hedra: [
+    { id: "gpt-image-2", label: "Hedra · gpt-image-2" },
+    { id: "flux2-max", label: "Hedra · FLUX.2 [max]" },
+    { id: "flux-kontext", label: "Hedra · flux-kontext" },
+    { id: "nano-banana-pro", label: "Hedra · nano-banana-pro" },
+    { id: "imagen-4", label: "Hedra · imagen-4" },
+    { id: "seedream-5", label: "Hedra · seedream-5" },
+    { id: "ideogram-v4", label: "Hedra · ideogram-v4" },
+    { id: "recraft-v3", label: "Hedra · recraft-v3" },
+  ],
+  gemini: [
+    { id: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image" },
+    { id: "gemini-3.1-flash-image-preview", label: "Gemini 3.1 Flash Image preview" },
+  ],
+  openai: [
+    { id: "gpt-image-1", label: "OpenAI · gpt-image-1" },
+    { id: "dall-e-3", label: "OpenAI · DALL·E 3" },
+  ],
+  xai: [
+    { id: "grok-imagine-image", label: "xAI · Grok Imagine Image" },
+  ],
+  a2e: [
+    { id: "gpt-image-1.5", label: "A2E · gpt-image-1.5" },
+    { id: "gpt-image-2", label: "A2E · gpt-image-2" },
+  ],
+};
+
 export function UnifiedCreateConsole() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("car_accident");
@@ -47,9 +75,11 @@ export function UnifiedCreateConsole() {
   const [horizonDays, setHorizonDays] = useState(7);
   const [outputMode, setOutputMode] = useState<"image" | "video" | "auto_mix">("auto_mix");
   const [approvalMode, setApprovalMode] = useState<"auto" | "manual">("auto");
-  const [model, setModel] = useState("sora2");
-  const [provider, setProvider] = useState("a2e");
-  const [duration, setDuration] = useState(15); // A2E Seedance 15-30s; Grok Imagine 8s
+  const [model, setModel] = useState("fal/grok-video-i2v");
+  const [provider, setProvider] = useState("hedra");
+  const [duration, setDuration] = useState(15); // Hedra 8-30s; A2E Seedance 15-30s; Grok/Veo 8s
+  const [imageProvider, setImageProvider] = useState("hedra");
+  const [imageModel, setImageModel] = useState("gpt-image-2");
   const [language, setLanguage] = useState("mix"); // en | es | mix
   const [templateId, setTemplateId] = useState<VisualTemplateId>("auto");
 
@@ -65,7 +95,13 @@ export function UnifiedCreateConsole() {
     let alive = true;
     fetch("/api/unified/create", { cache: "no-store" })
       .then(r => r.json())
-      .then(d => { if (alive) { setAvatars(d.avatars || []); setPromptSuggestions((d.prompts?.[tab]?.focus || "").split(/[,;.]/).map((s:string)=>s.trim()).filter(Boolean)); } })
+      .then(d => {
+        if (!alive) return;
+        setAvatars(d.avatars || []);
+        setPromptSuggestions((d.prompts?.[tab]?.focus || "").split(/[,;.]/).map((s:string)=>s.trim()).filter(Boolean));
+        if (d.defaultImageProvider) setImageProvider(d.defaultImageProvider);
+        if (d.defaultImageModel) setImageModel(d.defaultImageModel);
+      })
       .catch(e => { if (alive) setError(e.message); });
     return () => { alive = false; };
   }, [tab]);
@@ -104,7 +140,7 @@ export function UnifiedCreateConsole() {
       const r = await fetch("/api/unified/create", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, outputMode, approvalMode, model, provider, durationSeconds: duration, language, templateId })
+        body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, outputMode, approvalMode, model, provider, durationSeconds: duration, language, templateId, imageProvider, imageModel })
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
@@ -123,7 +159,7 @@ export function UnifiedCreateConsole() {
   async function runCategoryAutomation() {
     setError(null); setResult(null); setBusy(true); setPollJobId(null); setJobStatus(null);
     try {
-      const r = await fetch("/api/unified/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, approvalMode, model, provider, language, templateId, automationMode: "category-run" }) });
+      const r = await fetch("/api/unified/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, prompt, avatarId, avatarGender, horizonDays, approvalMode, model, provider, language, templateId, imageProvider, imageModel, automationMode: "category-run" }) });
       const d = await r.json(); if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`); setResult(d);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -140,7 +176,7 @@ export function UnifiedCreateConsole() {
               </div>
               <h1 className="text-[34px] font-semibold tracking-tight">Create</h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                One screen for every campaign. Pick a scenario, write or generate the brief, choose the spokesperson, and let A2E handle the hyper-realistic video. Every job lands in the Library and is auto-scheduled to the Calendar (1 reel + 1 stories daily).
+                One screen for every campaign. Pick a scenario, write or generate the brief, choose the spokesperson, and let Hedra render the video (Character 3 or Grok Video). Every job lands in the Library and is auto-scheduled to the Calendar (1 reel + 1 stories daily).
               </p>
             </div>
             <div className="flex gap-2">
@@ -181,7 +217,7 @@ export function UnifiedCreateConsole() {
                     value={prompt}
                     onChange={e => setPrompt(e.target.value)}
                     rows={4}
-                    placeholder={`Describe the scene you want. The A2E router appends the wardrobe, gender, and hyper-realism cues automatically.`}
+                    placeholder={`Describe the scene you want. Hedra uses the hero still as the start frame; wardrobe, gender, and hyper-realism cues are appended automatically.`}
                   />
                 </label>
                 {promptSuggestions.length > 0 && (
@@ -195,7 +231,8 @@ export function UnifiedCreateConsole() {
               <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium text-slate-700">Video provider</span>
-                  <select value={provider} onChange={e => { setProvider(e.target.value); if (e.target.value === "grok") { setModel("grok-imagine-video-1.5"); setDuration(8); } else if (e.target.value === "veo") { setModel("veo-3.1-generate-preview"); setDuration(8); } else { setModel("sora2"); setDuration(15); } }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                  <select value={provider} onChange={e => { const next = e.target.value; setProvider(next); if (next === "hedra") { setModel("fal/grok-video-i2v"); setDuration(15); } else if (next === "grok") { setModel("grok-imagine-video-1.5"); setDuration(8); } else if (next === "veo") { setModel("veo-3.1-generate-preview"); setDuration(8); } else { setModel("sora2"); setDuration(15); } }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    <option value="hedra">Hedra (Character 3 / Grok Video)</option>
                     <option value="a2e">A2E (Sora 2 / Veo 3 / Kling)</option>
                     <option value="grok">xAI · Grok Imagine Video</option>
                     <option value="veo">Google · Veo 3.1 (Gemini)</option>
@@ -204,6 +241,13 @@ export function UnifiedCreateConsole() {
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium text-slate-700">Video model</span>
                   <select value={model} onChange={e => setModel(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    {provider === "hedra" && (<>
+                      <option value="fal/grok-video-i2v">Hedra · Grok Video I2V (uses hero still)</option>
+                      <option value="fal/grok-video-t2v">Hedra · Grok Video T2V</option>
+                      <option value="hedra-character-3">Hedra · Character 3 (needs audio)</option>
+                      <option value="hedra-character-2">Hedra · Character 2 (needs audio)</option>
+                      <option value="together/hedra-avatar">Hedra · Avatar (needs audio)</option>
+                    </>)}
                     {provider === "a2e" && (<>
                       <option value="sora2">A2E · Sora 2 Pro (hyper-real, 8s)</option>
                       <option value="veo3">A2E · Veo 3 (8s, native audio)</option>
@@ -223,12 +267,22 @@ export function UnifiedCreateConsole() {
                       <option value="veo-3.1-lite-generate-preview">Google · Veo 3.1 Lite (preview, 8s)</option>
                     </>)}
                   </select>
+                  {provider === "hedra" && (model === "hedra-character-3" || model === "hedra-character-2" || model === "together/hedra-avatar") && (
+                    <p className="text-[11px] leading-snug text-amber-700">Character / Avatar models need driving audio plus a start image. For still-to-video campaigns, pick Grok Video I2V.</p>
+                  )}
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium text-slate-700">Video duration (seconds)</span>
                   <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
                     {(provider === "grok" || provider === "veo") ? (
                       <option value={8}>8 seconds (8s cap)</option>
+                    ) : provider === "hedra" ? (
+                      <>
+                        <option value={8}>8 seconds</option>
+                        <option value={10}>10 seconds</option>
+                        <option value={15}>15 seconds</option>
+                        <option value={30}>30 seconds (Character default)</option>
+                      </>
                     ) : (
                       <>
                         <option value={8}>8 seconds</option>
@@ -238,6 +292,28 @@ export function UnifiedCreateConsole() {
                         <option value={30}>30 seconds (Seedance)</option>
                       </>
                     )}
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium text-slate-700">Image provider</span>
+                  <select value={imageProvider} onChange={e => {
+                    const next = e.target.value;
+                    setImageProvider(next);
+                    setImageModel((IMAGE_MODELS[next] || IMAGE_MODELS.hedra)[0].id);
+                  }} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    <option value="hedra">Hedra (gpt-image-2 / FLUX / Imagen / Seedream)</option>
+                    <option value="gemini">Google Gemini image</option>
+                    <option value="a2e">A2E GPT Image</option>
+                    <option value="openai">OpenAI image</option>
+                    <option value="xai">xAI Grok Imagine image</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium text-slate-700">Image model</span>
+                  <select value={imageModel} onChange={e => setImageModel(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                    {(IMAGE_MODELS[imageProvider] || IMAGE_MODELS.hedra).map(m => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
                   </select>
                 </label>
                 <label className="grid gap-1.5 text-sm">
@@ -385,12 +461,12 @@ export function UnifiedCreateConsole() {
           {/* Footer info */}
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border bg-white p-4 text-xs text-slate-600">
-              <div className="mb-1 flex items-center gap-1.5 font-semibold text-slate-900"><Film size={13} className="text-violet-600" />A2E video</div>
-              Hyper-realistic 8s continuous shot. Hero image is generated first, then used as the video reference frame.
+              <div className="mb-1 flex items-center gap-1.5 font-semibold text-slate-900"><Film size={13} className="text-violet-600" />Hedra video</div>
+              Hedra is the default renderer. Hero still is generated first (Hedra image models), then used as the video start frame.
             </div>
             <div className="rounded-2xl border bg-white p-4 text-xs text-slate-600">
-              <div className="mb-1 flex items-center gap-1.5 font-semibold text-slate-900"><ImageIcon size={13} className="text-violet-600" />Library</div>
-              Every generated asset (image + video) is persisted to the Library with model + prompt metadata.
+              <div className="mb-1 flex items-center gap-1.5 font-semibold text-slate-900"><ImageIcon size={13} className="text-violet-600" />Hedra image</div>
+              Hero still uses the selected Hedra image model (or Gemini / A2E / OpenAI). The still becomes the video start frame.
             </div>
             <div className="rounded-2xl border bg-white p-4 text-xs text-slate-600">
               <div className="mb-1 flex items-center gap-1.5 font-semibold text-slate-900"><CalendarIcon size={13} className="text-violet-600" />Calendar</div>

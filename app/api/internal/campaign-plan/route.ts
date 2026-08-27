@@ -5,7 +5,7 @@ import { planCampaign } from "@/lib/nvidia/campaign-planner";
 const VIDEO_PROVIDERS=new Set(["veo","grok","a2e","hedra"]);
 export async function POST(req:Request){
   if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});
-  const body=await req.json().catch(()=>({})),provider=VIDEO_PROVIDERS.has(String(body.provider))?String(body.provider):"veo";
+  const body=await req.json().catch(()=>({})),provider=VIDEO_PROVIDERS.has(String(body.provider))?String(body.provider):"hedra";
   try{
     const plan=await planCampaign({
       category:String(body.category||"ugc"),

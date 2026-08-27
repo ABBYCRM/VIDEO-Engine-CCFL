@@ -4,7 +4,7 @@
 //     -> { configured, keyPresent, toolkits: [{ id, label, status, connectedAccountId, alias, requiresBusiness, publishable }] }
 //
 //   POST   /api/integrations/composio
-//     body: { toolkit: "instagram", alias?: string }
+//     body: { toolkit: "youtube", alias?: string }
 //     -> 200 { redirectUrl }   (operator must navigate the browser to this URL)
 //
 //   DELETE /api/integrations/composio?connectedAccountId=ca_xxx

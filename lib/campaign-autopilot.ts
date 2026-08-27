@@ -54,7 +54,11 @@ export function normalizeCategory(value:string):CampaignCategory{
   if(value==="car_accident"||value==="rideshare"||value==="trucking"||value==="slip_fall"||value==="ugc")return value;
   return "ugc";
 }
-function provider(value:string):ProviderId{void value;return "veo";} // Gemini/Veo only
+function provider(value:string):ProviderId{
+  return isProviderId(value) ? value : "hedra";
+}
+
+const HEDRA_CHARACTER_MODELS = new Set(["hedra-character-3", "hedra-character-2", "together/hedra-avatar"]);
 
 function fallbackProvider(failed:ProviderId):ProviderId|null{
   return nextLaneFallback(failed);
@@ -103,7 +107,7 @@ async function loadAvatarReference(avatarId: string | null | undefined) {
 }
 
 function campaignSurface(row:any){
-  const lowerRequested=provider(String(row.video_provider||"veo"));
+  const lowerRequested=provider(String(row.video_provider||"hedra"));
   const upperRequested=normalizeUpperProvider(row.upper_provider, lowerRequested);
   return {
     splitPercent:clampSplitPercent(row.split_percent),
@@ -165,7 +169,7 @@ async function startSlotJob(row:any, chosen:ProviderId, avatarRef:{imageBase64:s
     durationSeconds:clampSplitDuration(row.split_duration_seconds),
     // Wan 3.0: A2E's model with the widest duration range (3-30s), needed
     // since split-screen lanes now run 15-30s instead of a rushed 8s clip.
-    model: extra?.model || (chosen === "a2e" ? laneModel("a2e") : undefined),
+    model: extra?.model || laneModel(chosen, row.video_model),
     avatarId: avatarRef?.avatarId || resolveCampaignAvatarId(row.avatar_id) || undefined,
     imageBase64: avatarRef?.imageBase64,
     imageMimeType: avatarRef?.imageMimeType
@@ -292,7 +296,7 @@ async function finishSplit(row:any){
 }
 
 async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase64:string;imageMimeType:string;avatarId?:string}|null){
-  const job=await startSlotJob(row, chosen, avatarRef);
+  const job=await startSlotJob(row, chosen, avatarRef, { model: laneModel(chosen, row.video_model) });
   db.prepare("UPDATE scheduled_posts SET video_job_id=?,generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(job.id,row.id);
   return job;
 }
@@ -404,13 +408,13 @@ async function generateNext(slotId?:string){
     return true;
   }
   const retryingA2e = row.generation_status === "failed";
-  const chosenRequested=provider(String(row.video_provider||"veo"));
+  const chosenRequested=provider(String(row.video_provider||"hedra"));
   const avatarRef = !retryingA2e ? await loadAvatarReference(row.avatar_id) : null;
-  const chosen: ProviderId = retryingA2e
-    ? "grok"
-    : (chosenRequested === "hedra" && !avatarRef ? "a2e" : (chosenRequested === "hedra" ? "a2e" : chosenRequested));
-  if(!retryingA2e && chosenRequested==="hedra" && !avatarRef){
-    db.prepare("UPDATE scheduled_posts SET generation_status='pending_manual',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run("Hedra requires driving audio for each avatar video. The autopilot routed this slot to A2E (seedance2.5 native audio) but the campaign avatar has no canonical front view yet. Upload an identity reference and run Generate all 4 on the Avatars page, then Approve this slot to retry.",row.id);
+  const videoModel = String(row.video_model || "");
+  const characterHedra = chosenRequested === "hedra" && HEDRA_CHARACTER_MODELS.has(videoModel);
+  const chosen: ProviderId = retryingA2e ? "grok" : chosenRequested;
+  if(!retryingA2e && characterHedra){
+    db.prepare("UPDATE scheduled_posts SET generation_status='pending_manual',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run("Hedra Character/Avatar needs driving audio. Switch this campaign video model to fal/grok-video-i2v (still-to-video) or generate the slot from Create with audio.",row.id);
     return true;
   }
   try{

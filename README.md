@@ -41,6 +41,16 @@ Browser / external software
 - VIDEO-Engine API tokens use the format `ve_live_*`; the raw token is displayed once and only a SHA-256 hash is stored.
 - Revoke exposed credentials immediately.
 
+## Instagram publishing
+
+Calendar auto-post, Library **Post to Instagram**, split-screen publish, and **Claw** use the official Instagram Graph API connector ported from [adelaidasofia/instagram-mcp](https://github.com/adelaidasofia/instagram-mcp). If Graph fails, the same call retries on Composio Instagram and Claw reports the fallback.
+
+On **Integrations**, save a long-lived Graph token (scopes `instagram_basic` + `instagram_content_publish` + `instagram_manage_comments`; DMs also need `instagram_manage_messages`) and the numeric Instagram Business Account id. Same env names as the MCP: `INSTAGRAM_MCP_ACCESS_TOKEN`, `INSTAGRAM_MCP_IG_USER_ID`. Set `INSTAGRAM_MCP_DM_ENABLED=1` after App Review. Instagram fetches the media itself, so `PUBLIC_BASE_URL` must be public https.
+
+**Claw** is the left-nav operator chat (NVIDIA NIM already on DigitalOcean). It can generate, approve, post, read/reply comments, and DMs, with a Grok-style thread/file tray.
+
+Set `STEEL_API_KEY` to let Claw research public web pages through Steel.dev. Claw receives clean Markdown, page metadata, links, and optional screenshots; local and private network targets are rejected.
+
 ## Local setup
 
 ```bash

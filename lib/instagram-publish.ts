@@ -1,40 +1,12 @@
-import { getActiveConnectedAccountId, getComposio } from "@/lib/composio/client";
 import { db } from "@/lib/db";
 import { publicLibraryAssetUrl, publicMediaUrl } from "@/lib/publish-media";
-
-const USER_ID = "admin";
-
-function pickId(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
-  const obj = value as Record<string, any>;
-  return (
-    obj?.data?.id ||
-    obj?.data?.data?.id ||
-    obj?.id ||
-    obj?.creation_id ||
-    obj?.data?.creation_id ||
-    null
-  );
-}
-
-function pickStatus(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  const obj = value as Record<string, any>;
-  return String(
-    obj?.data?.status_code ||
-    obj?.data?.status ||
-    obj?.data?.data?.status_code ||
-    obj?.status_code ||
-    obj?.status ||
-    ""
-  ).toUpperCase();
-}
-
-function toolError(label: string, result: unknown): never {
-  const obj = result && typeof result === "object" ? (result as Record<string, any>) : {};
-  const msg = obj.error || obj.data?.error || obj.message || JSON.stringify(result).slice(0, 400);
-  throw new Error(`${label}: ${msg}`);
-}
+import {
+  createMediaContainer,
+  isInstagramConfigured,
+  publishContainer,
+  waitContainerReady
+} from "@/lib/instagram-graph";
+import { composioPublishInstagram, isComposioInstagramConnected } from "@/lib/instagram-composio";
 
 function absoluteMediaUrl(url: string) {
   if (/^https?:\/\//i.test(url)) return url;
@@ -48,44 +20,50 @@ function publishingUrl(url: string) {
   return match ? publicLibraryAssetUrl(decodeURIComponent(match[1])) : absoluteMediaUrl(url);
 }
 
-async function executeTool(slug: string, args: Record<string, unknown>) {
-  const composio: any = getComposio();
-  const connectedAccountId = getActiveConnectedAccountId("instagram") || undefined;
-  const result = await composio.tools.execute(slug, {
-    userId: USER_ID,
-    connectedAccountId,
-    arguments: args,
-    dangerouslySkipVersionCheck: true
-  });
-  if (result && typeof result === "object" && (result as any).successful === false) {
-    toolError(slug, result);
-  }
-  return result;
-}
+export type InstagramPublishResult = {
+  creationId: string;
+  mediaId: string | null;
+  result: unknown;
+  via: "instagram-mcp" | "composio";
+  fallbackNote?: string;
+};
 
-async function waitUntilFinished(creationId: string) {
-  const deadline = Date.now() + 90_000;
-  let last = "";
-  while (Date.now() < deadline) {
-    const statusResult = await executeTool("INSTAGRAM_GET_POST_STATUS", { creation_id: creationId });
-    last = pickStatus(statusResult);
-    if (last === "FINISHED" || last === "PUBLISHED" || last === "READY" || last === "SUCCESS") return last;
-    if (last === "ERROR" || last === "EXPIRED" || last === "FAILED") {
-      throw new Error(`Instagram container ${creationId} failed with status ${last}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-  }
-  throw new Error(`Instagram container ${creationId} was not ready in time (last status: ${last || "unknown"})`);
-}
-
-export async function publishInstagram(input: {
-  jobId?: string | null;
-  mediaUrl?: string | null;
+async function publishViaGraph(input: {
+  mediaUrl: string;
   mediaType?: string | null;
   caption?: string;
   postType?: "feed" | "story";
-}) {
+}): Promise<Omit<InstagramPublishResult, "via" | "fallbackNote">> {
   const caption = String(input.caption || "").trim().slice(0, 2200);
+  const isVideo = String(input.mediaType || "").startsWith("video/");
+  const isStory = input.postType === "story";
+  const fields: Record<string, unknown> = {};
+
+  if (isStory) {
+    fields.media_type = "STORIES";
+    if (isVideo) fields.video_url = input.mediaUrl;
+    else fields.image_url = input.mediaUrl;
+  } else if (isVideo) {
+    fields.media_type = "REELS";
+    fields.video_url = input.mediaUrl;
+    if (caption) fields.caption = caption;
+    fields.share_to_feed = true;
+  } else {
+    fields.image_url = input.mediaUrl;
+    if (caption) fields.caption = caption;
+  }
+
+  const creationId = await createMediaContainer(fields);
+  if (isVideo) await waitContainerReady(creationId);
+  const published = await publishContainer(creationId);
+  return { creationId, mediaId: published.mediaId, result: published.result };
+}
+
+function resolveMedia(input: {
+  jobId?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+}) {
   let mediaUrl = input.mediaUrl ? publishingUrl(input.mediaUrl) : null;
   let mediaType = input.mediaType || null;
   if (input.jobId) {
@@ -95,35 +73,47 @@ export async function publishInstagram(input: {
     mediaType = "video/mp4";
   }
   if (!mediaUrl) throw new Error("A generated media asset is required before publishing");
+  if (!/^https:\/\//i.test(mediaUrl)) throw new Error("Instagram requires a public https media URL");
+  return { mediaUrl, mediaType };
+}
 
-  const info = await executeTool("INSTAGRAM_GET_USER_INFO", {});
-  const igUserId = pickId(info);
-  if (!igUserId) throw new Error("Could not resolve the connected Instagram Business/Creator account id. Reconnect Instagram in Integrations.");
+export async function publishInstagram(input: {
+  jobId?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  caption?: string;
+  postType?: "feed" | "story";
+}): Promise<InstagramPublishResult> {
+  const { mediaUrl, mediaType } = resolveMedia(input);
+  const payload = { mediaUrl, mediaType, caption: input.caption, postType: input.postType };
+  const graphReady = isInstagramConfigured();
+  const composioReady = isComposioInstagramConnected();
 
-  const isVideo = String(mediaType || "").startsWith("video/");
-  const isStory = input.postType === "story";
-  const containerArgs: Record<string, unknown> = {
-    ig_user_id: igUserId,
-    caption,
-    content_type: isStory ? (isVideo ? "video" : "photo") : isVideo ? "reel" : "photo"
-  };
-  if (isVideo) {
-    containerArgs.video_url = mediaUrl;
-    containerArgs.media_type = isStory ? "STORIES" : "REELS";
-  } else {
-    containerArgs.image_url = mediaUrl;
-    if (isStory) containerArgs.media_type = "STORIES";
+  if (graphReady) {
+    try {
+      const result = await publishViaGraph(payload);
+      return { ...result, via: "instagram-mcp" };
+    } catch (mcpErr) {
+      const mcpMsg = mcpErr instanceof Error ? mcpErr.message : String(mcpErr);
+      if (!composioReady) throw mcpErr;
+      try {
+        const result = await composioPublishInstagram(payload);
+        return {
+          ...result,
+          via: "composio",
+          fallbackNote: `instagram-mcp failed (${mcpMsg}). Used Composio Instagram.`
+        };
+      } catch (composioErr) {
+        const cMsg = composioErr instanceof Error ? composioErr.message : String(composioErr);
+        throw new Error(`Instagram publish failed on both paths. Graph (instagram-mcp): ${mcpMsg}. Composio: ${cMsg}`);
+      }
+    }
   }
 
-  const created = await executeTool("INSTAGRAM_CREATE_MEDIA_CONTAINER", containerArgs);
-  const creationId = pickId(created);
-  if (!creationId) throw new Error(`Instagram media container was created without a creation id: ${JSON.stringify(created).slice(0, 400)}`);
+  if (composioReady) {
+    const result = await composioPublishInstagram(payload);
+    return { ...result, via: "composio", fallbackNote: "instagram-mcp is not configured. Used Composio Instagram." };
+  }
 
-  await waitUntilFinished(creationId);
-
-  const published = await executeTool("INSTAGRAM_CREATE_POST", {
-    ig_user_id: igUserId,
-    creation_id: creationId
-  });
-  return { creationId, mediaId: pickId(published), result: published };
+  throw new Error("Instagram is not configured. Save Graph credentials on Integrations, or connect Composio Instagram as fallback.");
 }

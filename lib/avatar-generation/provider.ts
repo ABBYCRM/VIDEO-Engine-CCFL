@@ -11,7 +11,7 @@ function save(value:string){db.prepare("INSERT INTO settings(key,value,updated_a
 export function getAvatarImageProvider():AvatarImageProvider{
   const value=raw();
   if(value==="nvidia")return "nvidia";
-  if(value==="gemini"||value==="openai"||value==="xai"||value==="a2e"||value==="mock")return value;
+  if(value==="gemini"||value==="openai"||value==="xai"||value==="a2e"||value==="hedra"||value==="mock")return value;
   return legacy.getImageProvider();
 }
 export function setAvatarImageProvider(provider:AvatarImageProvider){save(provider);if(provider!=="nvidia")legacy.setImageProvider(provider);}
@@ -43,13 +43,13 @@ export function listAvatarImageProviders(){return [
   },
   ...legacy.listImageProviders().map(p=>({
     ...p,
-    models:p.id==="gemini"?["gemini-2.5-flash-image","gemini-3.1-flash-image-preview","gemini-3.1-flash-image","gemini-3.1-flash-lite-image"]:p.id==="a2e"?["gpt-image-1.5","gpt-image-2"]:p.id==="openai"?["gpt-image-1","dall-e-3"]:p.id==="xai"?["grok-imagine-image","grok-imagine-image-2.0","grok-imagine-image-quality"]:["mock-stable-diffusion-1"],
-    supportsTurnaround:p.id==="gemini"||p.id==="a2e"||p.id==="openai"||p.id==="mock"
+    models: legacy.listImageModelsFor(p.id),
+    supportsTurnaround:p.id==="gemini"||p.id==="a2e"||p.id==="openai"||p.id==="hedra"||p.id==="mock"
   }))
 ];}
 export async function startAvatarTurnaround(id:string,opts:{views?:AvatarView[]}={}){
   const provider=getAvatarImageProvider();
-  if(provider==="nvidia")throw new Error("NVIDIA FLUX.2 hosted API cannot edit your uploaded reference image for the canonical 4-view turnaround. Choose Gemini or OpenAI for Generate all 4; NVIDIA remains available for generating a fresh portrait reference.");
-  if(provider==="xai")throw new Error("xAI Grok Imagine does not support reference-image editing for the canonical 4-view turnaround. Choose Gemini or OpenAI.");
+  if(provider==="nvidia")throw new Error("NVIDIA FLUX.2 hosted API cannot edit your uploaded reference image for the canonical 4-view turnaround. Choose Hedra, Gemini, or OpenAI for Generate all 4; NVIDIA remains available for generating a fresh portrait reference.");
+  if(provider==="xai")throw new Error("xAI Grok Imagine does not support reference-image editing for the canonical 4-view turnaround. Choose Hedra, Gemini, or OpenAI.");
   return legacy.startTurnaround(id,opts);
 }

@@ -44,6 +44,15 @@ export function getNvidiaModel(): NvidiaModelId {
   return "meta/llama-3.1-70b-instruct";
 }
 
+const CLAW_MODEL_KEY = "claw_nvidia_model";
+
+export function getClawModel(): NvidiaModelId {
+  const raw = getRaw(CLAW_MODEL_KEY);
+  if (isNvidiaModelId(raw) && raw !== "disabled") return raw;
+  // Fast + precise for the operator agent. 70B content writer stays on getNvidiaModel().
+  return "meta/llama-3.1-8b-instruct";
+}
+
 export function isNvidiaEnabled(): boolean {
   return getNvidiaModel() !== "disabled" && (Boolean(getRaw(SETTINGS_KEY)) || Boolean(process.env.NVIDIA_API_KEY));
 }
@@ -129,6 +138,71 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
       } : null,
       rawModel: json.model ?? req.model
     };
+  } finally {
+    if (t) clearTimeout(t);
+  }
+}
+
+export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: string) => void): Promise<ChatResponse> {
+  if (req.model === "disabled") throw new NvidiaDisabledError();
+  const key = getNvidiaApiKey();
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages: req.messages,
+    temperature: req.temperature ?? 0.3,
+    top_p: req.topP ?? 0.9,
+    max_tokens: req.maxTokens ?? 1600,
+    stream: true
+  };
+  const ac = req.signal ? null : new AbortController();
+  const t = ac ? setTimeout(() => ac.abort(), 45_000) : null;
+  try {
+    const r = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Accept: "text/event-stream"
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: req.signal ?? ac!.signal
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      console.warn(`[nvidia] stream HTTP ${r.status} for model ${req.model} (body ${redact(text)})`);
+      if (r.status === 401 || r.status === 403) throw new NvidiaAuthError(`NVIDIA rejected the API key (HTTP ${r.status})`);
+      throw new NvidiaUpstreamError(`NVIDIA upstream HTTP ${r.status}: ${redact(text)}`, r.status);
+    }
+    if (!r.body) throw new NvidiaUpstreamError("NVIDIA stream returned no body", 502);
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let text = "";
+    let finishReason = "stop";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split("\n");
+      buf = parts.pop() || "";
+      for (const line of parts) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const json = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }> };
+          const delta = json.choices?.[0]?.delta?.content || "";
+          if (delta) {
+            text += delta;
+            onToken(delta);
+          }
+          if (json.choices?.[0]?.finish_reason) finishReason = String(json.choices[0].finish_reason);
+        } catch { /* ignore malformed SSE lines */ }
+      }
+    }
+    return { text, finishReason, usage: null, rawModel: req.model };
   } finally {
     if (t) clearTimeout(t);
   }

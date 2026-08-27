@@ -7,6 +7,7 @@ node_modules
 /data/*.db-*
 /data/videos/*
 !/data/videos/.gitkeep
+/data/claw-files/*
 npm-debug.log*
 .DS_Store
 

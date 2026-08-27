@@ -29,7 +29,7 @@ export async function GET(){
 
 export async function POST(req:Request){
   if(!(await requireAdmin()))return NextResponse.json({error:"Unauthorized"},{status:401});
-  const body=await req.json().catch(()=>({})),cookieProvider=(await cookies()).get("ve_campaign_provider")?.value||"veo";
+  const body=await req.json().catch(()=>({})),cookieProvider=(await cookies()).get("ve_campaign_provider")?.value||"hedra";
   const name=String(body.name||"").trim().slice(0,180),category=String(body.category||"").trim().slice(0,80),website=String(body.website||"").trim().slice(0,500),mission=String(body.mission||"").trim().slice(0,4000),tone=String(body.tone||"").trim().slice(0,200),platform=String(body.platform||"instagram").trim().slice(0,80),avatarId=resolveCampaignAvatarId(String(body.avatarId||"").trim().slice(0,120)),backgroundId=String(body.backgroundId||"").trim().slice(0,120),horizon=Number(body.planningHorizonDays||7),contentType=CONTENT_TYPES.has(String(body.contentType))?String(body.contentType):"cinematic",outputMode=OUTPUT_MODES.has(String(body.outputMode))?String(body.outputMode):"video";
   const surface=parseSplitSurface(body,cookieProvider);
   const upperVideoIds=parseUpperVideoIds(body.upperVideoIds);
