@@ -8,7 +8,7 @@
 //  material" (e.g. client campaign content). We log only the model id, the
 // HTTP status, the truncated error message, and a redacted length.
 
-import { NVIDIA_BASE, isNvidiaModelId, type NvidiaModelId } from "./models";
+import { DEFAULT_CLAW_NVIDIA_MODEL, NVIDIA_BASE, isNvidiaModelId, type NvidiaModelId } from "./models";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 
@@ -47,10 +47,10 @@ export function getNvidiaModel(): NvidiaModelId {
 const CLAW_MODEL_KEY = "claw_nvidia_model";
 
 export function getClawModel(): NvidiaModelId {
-  const raw = getRaw(CLAW_MODEL_KEY);
+  const raw = process.env.CLAW_NVIDIA_MODEL || getRaw(CLAW_MODEL_KEY);
   if (isNvidiaModelId(raw) && raw !== "disabled") return raw;
-  // Fast + precise for the operator agent. 70B content writer stays on getNvidiaModel().
-  return "meta/llama-3.1-8b-instruct";
+  // A retired or invalid persisted model automatically moves to the supported fast default.
+  return DEFAULT_CLAW_NVIDIA_MODEL;
 }
 
 export function isNvidiaEnabled(): boolean {

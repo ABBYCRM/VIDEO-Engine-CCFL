@@ -16,8 +16,8 @@ export type NvidiaCapability = "chat" | "vision" | "json-mode";
 
 export type NvidiaModelId =
   | "meta/llama-3.1-70b-instruct"
-  | "meta/llama-3.1-8b-instruct"
   | "meta/llama-3.3-70b-instruct"
+  | "nvidia/nvidia-nemotron-nano-9b-v2"
   | "nvidia/llama-3.1-nemotron-70b-instruct"
   | "nvidia/nemotron-mini-4b-instruct"
   | "mistralai/mistral-large-2-instruct"
@@ -39,13 +39,13 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     costTier: "high",
     notes: "Default for content intelligence — strongest structured-JSON output in the catalog."
   },
-  "meta/llama-3.1-8b-instruct": {
-    id: "meta/llama-3.1-8b-instruct",
-    label: "Llama 3.1 8B Instruct",
+  "nvidia/nvidia-nemotron-nano-9b-v2": {
+    id: "nvidia/nvidia-nemotron-nano-9b-v2",
+    label: "NVIDIA Nemotron Nano 9B v2",
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "Cheap, fast, good for the monitor's KPI summarization when active ads are available."
+    notes: "Fast hybrid Mamba-Transformer model for agentic chat, instruction following, and tool use."
   },
   "meta/llama-3.3-70b-instruct": {
     id: "meta/llama-3.3-70b-instruct",
@@ -88,6 +88,8 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     notes: "NVIDIA subsystems are turned off. Content generation and monitor will return dormant / null."
   }
 };
+
+export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nvidia-nemotron-nano-9b-v2";
 
 export const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
 

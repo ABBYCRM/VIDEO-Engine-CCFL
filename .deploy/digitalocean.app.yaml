@@ -71,6 +71,10 @@ services:
         scope: RUN_TIME
         type: SECRET
         value: "REPLACE_WITH_NVIDIA_KEY"
+      - key: CLAW_NVIDIA_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "nvidia/nvidia-nemotron-nano-9b-v2"
       - key: GEMINI_API_KEY
         scope: RUN_TIME
         type: SECRET

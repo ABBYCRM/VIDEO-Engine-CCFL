@@ -47,7 +47,7 @@ Calendar auto-post, Library **Post to Instagram**, split-screen publish, and **C
 
 On **Integrations**, save a long-lived Graph token (scopes `instagram_basic` + `instagram_content_publish` + `instagram_manage_comments`; DMs also need `instagram_manage_messages`) and the numeric Instagram Business Account id. Same env names as the MCP: `INSTAGRAM_MCP_ACCESS_TOKEN`, `INSTAGRAM_MCP_IG_USER_ID`. Set `INSTAGRAM_MCP_DM_ENABLED=1` after App Review. Instagram fetches the media itself, so `PUBLIC_BASE_URL` must be public https.
 
-**Claw** is the left-nav operator chat (NVIDIA NIM already on DigitalOcean). It can generate, approve, post, read/reply comments, and DMs, with a Grok-style thread/file tray.
+**Claw** is the left-nav operator chat, using NVIDIA Nemotron Nano 9B v2 on DigitalOcean for low-latency agent and tool work. Override it with `CLAW_NVIDIA_MODEL`. It can generate, approve, post, read/reply comments, and DMs, with a Grok-style thread/file tray.
 
 Set `STEEL_API_KEY` to let Claw research public web pages through Steel.dev. Claw receives clean Markdown, page metadata, links, and optional screenshots; local and private network targets are rejected.
 
