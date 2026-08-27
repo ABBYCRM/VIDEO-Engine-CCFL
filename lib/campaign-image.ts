@@ -51,11 +51,15 @@ async function editWithOpenAI(referencePath:string|null,prompt:string,model:stri
 async function editWithHedra(referencePath:string|null,prompt:string,model:string){
   // Hedra v3 image: submit + poll + read result. Same shape as the other image adapters.
   // Model id is the user-selected one (gpt-image-2, flux2-max, imagen-4, seedream-5, etc.)
-  // The Hedra v3 catalog doesn't publish a typed per-model schema here, so we keep
-  // small per-model allowlists: only models known to accept `resolution` get it.
-  // Sending `resolution` to models that don't accept it returns HTTP 400 with
-  // "Extra inputs are not permitted". The gpt-image family additionally needs
-  // `quality: "high"`.
+  //
+  // Field compatibility:
+  //  - gpt-image-2/1.5: needs `quality: high` (and accepts `resolution: 1K`).
+  //  - Most text-to-image models: accept `resolution`. Sending it to flux2-max
+  //    returns HTTP 400 "Extra inputs are not permitted", so it's gated.
+  //  - Reference image: gpt-image-2 is an EDIT model — it REQUIRES an input image.
+  //    The reference is sent as `images: [{ source: "url", url: <uploaded file url> }]`,
+  //    so we first POST the avatar file to /v3/files and get back a server URL.
+  //    flux2-max is a text-to-image model; it ignores `images`.
   const { getProviderKey } = await import("@/lib/providers");
   const key=getProviderKey("hedra"),ac=new AbortController();
   const TIMEOUT_MS=120_000;
@@ -66,17 +70,45 @@ async function editWithHedra(referencePath:string|null,prompt:string,model:strin
     "imagen-4", "nano-banana-pro",
     "ideogram-v4", "recraft-v3", "seedream-5"
   ]);
-  const input:Record<string,unknown>={prompt,aspect_ratio:"9:16"};
+  const MODELS_REQUIRING_REFERENCE = new Set(["gpt-image-2", "gpt-image-1.5"]);
+
+  // If a reference is required and we have one, upload it first and capture the URL.
+  let referenceImageUrl: string | null = null;
+  if (MODELS_REQUIRING_REFERENCE.has(model) && referencePath) {
+    try {
+      const bytes = await fs.readFile(referencePath);
+      const mime = mimeFor(referencePath);
+      const form = new FormData();
+      form.append("file", new Blob([bytes]), `reference.${mime === "image/png" ? "png" : "jpg"}`);
+      const up = await fetch("https://api.hedra.com/v3/files", {
+        method: "POST",
+        headers: { "Authorization": `Key ${key}` },
+        body: form,
+        signal: ac.signal
+      });
+      if (!up.ok) throw new ImageUpstreamError(`Hedra file upload HTTP ${up.status}: ${(await up.text()).slice(0,300)}`, up.status);
+      const upJson = await up.json() as { url?: string; data?: { url?: string } };
+      referenceImageUrl = upJson.url || upJson.data?.url || null;
+      if (!referenceImageUrl) throw new ImageUpstreamError("Hedra file upload returned no url", 502);
+    } catch (e) {
+      if (e instanceof ImageUpstreamError) throw e;
+      throw new ImageUpstreamError(`Hedra file upload failed: ${e instanceof Error ? e.message : String(e)}`, 502);
+    }
+  }
+
+  const input:Record<string,unknown> = { prompt, aspect_ratio: "9:16" };
   if (MODELS_NEEDING_QUALITY.has(model)) input.quality = "high";
   if (MODELS_ACCEPTING_RESOLUTION.has(model)) input.resolution = "1K";
+  if (referenceImageUrl) input.images = [{ source: "url", url: referenceImageUrl }];
+
   try{
-    let submit:Response;
-    if(referencePath){
-      const bytes=await fs.readFile(referencePath),mime=mimeFor(referencePath),b64=bytes.toString("base64");
-      submit=await fetch(`https://api.hedra.com/v3/models/${encodeURIComponent(model)}`,{method:"POST",headers:{"Authorization":`Key ${key}`,"Content-Type":"application/json"},cache:"no-store",signal:ac.signal,body:JSON.stringify({input:{...input,input_image:{type:"base64",media_type:mime,data:b64}}})});
-    }else{
-      submit=await fetch(`https://api.hedra.com/v3/models/${encodeURIComponent(model)}`,{method:"POST",headers:{"Authorization":`Key ${key}`,"Content-Type":"application/json"},cache:"no-store",signal:ac.signal,body:JSON.stringify({input})});
-    }
+    const submit:Response = await fetch(`https://api.hedra.com/v3/models/${encodeURIComponent(model)}`, {
+      method: "POST",
+      headers: { "Authorization": `Key ${key}`, "Content-Type": "application/json" },
+      cache: "no-store",
+      signal: ac.signal,
+      body: JSON.stringify({ input })
+    });
     if(!submit.ok)throw new ImageUpstreamError(`Hedra image submit HTTP ${submit.status}: ${(await submit.text()).slice(0,300)}`,submit.status);
     const sub=await submit.json() as {job_id?:string;id?:string};
     const jobId=sub.job_id||sub.id;
