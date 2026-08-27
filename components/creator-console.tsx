@@ -138,13 +138,35 @@ export function CreatorConsole() {
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
   function pickFile() { fileInputRef.current?.click(); }
+  function replaceFile() {
+    // Clear input so picking the same filename re-triggers onChange on mobile
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setFile(null);
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+      setFilePreview(null);
+    }
+    pickFile();
+  }
+  function clearFile() {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setFile(null);
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+      setFilePreview(null);
+    }
+  }
   function onFileChosen(f: File | null) {
     setFile(f);
     if (f) {
+      if (filePreview) URL.revokeObjectURL(filePreview);
       const url = URL.createObjectURL(f);
       setFilePreview(url);
       if (!title) setTitle(f.name.replace(/\.[a-z0-9]+$/i, ""));
     } else {
+      if (filePreview) URL.revokeObjectURL(filePreview);
       setFilePreview(null);
     }
   }
@@ -266,22 +288,55 @@ export function CreatorConsole() {
               <span className="text-[11px] text-slate-500">MP4 / WebM / MOV — up to 250MB</span>
             </div>
             <input ref={fileInputRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/*" className="hidden" onChange={e => onFileChosen(e.target.files?.[0] || null)} />
-            <button
-              type="button"
-              onClick={pickFile}
-              className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-500 hover:border-violet-300 hover:bg-violet-50/40"
-            >
-              {filePreview ? (
-                <video src={filePreview} controls className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-xs">
-                  <FileVideo2 size={32} className="text-slate-400" />
-                  <span className="font-medium">Tap to pick a video</span>
+            {filePreview ? (
+              <>
+                <button
+                  type="button"
+                  onClick={replaceFile}
+                  className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-200 bg-black text-slate-500 hover:border-violet-300"
+                  aria-label="Replace video"
+                >
+                  <video src={filePreview} controls className="h-full w-full object-cover" />
+                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-500 truncate min-w-0">
+                    {file?.name} · {file ? (file.size / 1024 / 1024).toFixed(1) : "0"} MB
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={replaceFile}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-violet-300 hover:text-violet-700"
+                    >
+                      <RefreshCcw size={12} />
+                      Change video
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-medium text-red-600 hover:border-red-300 hover:bg-red-50"
+                      aria-label="Remove video"
+                    >
+                      <Trash2 size={12} />
+                      Remove
+                    </button>
+                  </div>
                 </div>
-              )}
-            </button>
-            {file && (
-              <div className="text-[11px] text-slate-500 truncate">{file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</div>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={pickFile}
+                  className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-500 hover:border-violet-300 hover:bg-violet-50/40"
+                >
+                  <div className="flex flex-col items-center gap-2 text-xs">
+                    <FileVideo2 size={32} className="text-slate-400" />
+                    <span className="font-medium">Tap to pick a video</span>
+                  </div>
+                </button>
+                <div className="text-[11px] text-slate-500 truncate">No video selected yet</div>
+              </>
             )}
           </div>
 
