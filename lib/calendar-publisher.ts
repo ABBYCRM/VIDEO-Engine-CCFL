@@ -155,8 +155,29 @@ async function backfillOneYouTubeShort(){
   }
 }
 
+export async function publishYouTubeShort(post:any){
+  if(!isYouTubeConnected())throw new Error("YouTube is not connected. Save the OAuth client + connect the channel in Settings.");
+  if(post.generation_status&&post.generation_status!=="ready")throw new Error("Media is "+post.generation_status+"; it is not ready to publish");
+  if(!post.media_url)throw new Error("YouTube auto-post needs a media_url pointing to a library video asset");
+  const match=/^\/api\/library\/assets\/([^/]+)\/file(?:\?.*)?$/.exec(String(post.media_url));
+  if(!match)throw new Error("YouTube upload needs a library video asset");
+  const asset=await getPersistentLibraryAsset(decodeURIComponent(match[1]));
+  if(!asset)throw new Error("Library asset not found for YouTube upload");
+  const mimeType=String(asset.mimeType||"");
+  if(!mimeType.startsWith("video/"))throw new Error("YouTube Shorts upload needs a video asset, got "+mimeType);
+  // Skip if already uploaded (idempotent retry).
+  if(post.youtube_video_id)return{mediaId:post.youtube_video_id,resumed:true};
+  const title=String(post.title||"YouTube Short").slice(0,100);
+  const description=String(post.caption||"").trim();
+  const videoId=await uploadYouTubeShort({bytes:asset.bytes,mimeType,caption:description,title});
+  // Persist immediately so a crash between the upload and the status update is safe.
+  db.prepare("UPDATE scheduled_posts SET youtube_video_id=?,youtube_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(videoId,post.id);
+  return{videoId,resumed:false};
+}
+
 async function publishRow(post:any){
   if(post.network==="instagram"){const pair=await publishInstagramPair(post);await maybePublishYouTubeShort(post);return pair;}
+  if(post.network==="youtube"){return publishYouTubeShort(post);}
   if(post.network==="website"){
     if(!post.site_id)throw new Error("Website auto-post item has no Site");
     if(post.generation_status&&post.generation_status!=="ready")throw new Error("Website draft is "+post.generation_status+"; it is not ready to publish");

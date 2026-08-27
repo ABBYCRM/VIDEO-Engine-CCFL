@@ -140,11 +140,12 @@ function shortsTitle(caption: string): string {
 }
 
 /** Resumable upload. Vertical video under 3 minutes is automatically surfaced as a Short. */
-export async function uploadYouTubeShort(input: { bytes: Buffer; mimeType?: string; caption: string }): Promise<string> {
+export async function uploadYouTubeShort(input: { bytes: Buffer; mimeType?: string; caption: string; title?: string }): Promise<string> {
   const accessToken = await getAccessToken();
   const description = `${input.caption.replace(/[<>]/g, "").trim()}\n\n#Shorts`.slice(0, 4900);
   const mimeType = input.mimeType || "video/mp4";
   const body = new Uint8Array(input.bytes);
+  const title = (input.title && input.title.trim()) ? input.title.replace(/[<>]/g, "").trim().slice(0, 100) : shortsTitle(input.caption);
   const init = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
     method: "POST",
     headers: {
@@ -154,7 +155,7 @@ export async function uploadYouTubeShort(input: { bytes: Buffer; mimeType?: stri
       "x-upload-content-length": String(body.byteLength)
     },
     body: JSON.stringify({
-      snippet: { title: shortsTitle(input.caption), description, categoryId: "22" },
+      snippet: { title, description, categoryId: "22" },
       status: { privacyStatus: "public", selfDeclaredMadeForKids: false }
     })
   });

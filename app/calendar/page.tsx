@@ -44,6 +44,8 @@ type Post = {
   publishedAt?: string | null;
   verifiedAt?: string | null;
   instagramPermalink?: string | null;
+  youtubeVideoId?: string | null;
+  youtubeError?: string | null;
   verificationError?: string | null;
   error?: string | null;
   contentBody?: string | null;
@@ -84,6 +86,13 @@ function canPublish(post: Post) {
       post.siteId &&
       (!post.generationStatus || post.generationStatus === "ready") &&
       post.contentBody?.trim()
+    );
+  }
+  if (post.network === "youtube") {
+    return Boolean(
+      (!post.generationStatus || post.generationStatus === "ready") &&
+      post.mediaUrl &&
+      /^video\//.test(String(post.mediaType || ""))
     );
   }
   return false;
@@ -357,7 +366,7 @@ function CalendarInner() {
         <div className="grid gap-3">
           {posts.filter(p => p.status !== "published").map(post => {
             const publishable = canPublish(post);
-            const autoCapable = post.network === "instagram" || post.network === "website";
+            const autoCapable = post.network === "instagram" || post.network === "website" || post.network === "youtube";
             const generating = post.generationStatus === "pending" || post.generationStatus === "generating";
             const retryable = Boolean(post.campaignId) && (post.generationStatus === "failed" || post.generationStatus === "pending_manual");
             return (
@@ -391,7 +400,7 @@ function CalendarInner() {
       </div>
 
       <div className="mt-6 rounded-2xl border bg-white p-4">
-        <div className="mb-3 flex items-center gap-2 font-semibold">Published <span className="text-xs font-normal text-slate-500">green light = confirmed live on Instagram</span></div>
+        <div className="mb-3 flex items-center gap-2 font-semibold">Published <span className="text-xs font-normal text-slate-500">green light = confirmed live on the destination</span></div>
         <div className="grid gap-2">
           {posts.filter(p => p.status === "published").map(post => (
             <article key={post.id} className="flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center">
@@ -399,9 +408,12 @@ function CalendarInner() {
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-slate-900">{post.title}</div>
                 <div className="text-xs text-slate-500">{post.network} · published {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ""}{post.verifiedAt ? ` · verified ${new Date(post.verifiedAt).toLocaleString()}` : " · verifying…"}</div>
+                {post.youtubeVideoId && <div className="mt-1 text-[11px] text-emerald-700">YouTube video id: {post.youtubeVideoId}</div>}
+                {post.youtubeError && <div className="mt-1 text-[11px] text-rose-700">YouTube error: {post.youtubeError}</div>}
                 {!post.verifiedAt && post.verificationError && <div className="text-[11px] text-amber-700">{post.verificationError}</div>}
               </div>
               {post.instagramPermalink && <a href={post.instagramPermalink} target="_blank" rel="noreferrer" className="text-xs font-semibold text-violet-700 hover:underline">View on Instagram</a>}
+              {post.youtubeVideoId && <a href={`https://youtu.be/${post.youtubeVideoId}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-rose-700 hover:underline">View on YouTube</a>}
             </article>
           ))}
           {posts.every(p => p.status !== "published") && <div className="text-sm text-slate-500">Nothing published yet.</div>}
@@ -431,7 +443,7 @@ function PostModal({ post, onClose, onSave }: { post: Post | null; onClose: () =
   const [focusKeyword, setFocusKeyword] = useState(post?.focusKeyword || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const autoCapable = network === "instagram" || network === "website";
+  const autoCapable = network === "instagram" || network === "website" || network === "youtube";
   const isBlog = contentType === "blog" || Boolean(contentBody);
 
   async function submit(e: React.FormEvent) {

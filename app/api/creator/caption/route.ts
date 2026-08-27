@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { chatCompletion, getNvidiaModel } from "@/lib/nvidia/client";
 import { db } from "@/lib/db";
+import { applyBrandFooter, BRAND_FOOTER } from "@/lib/brand-footer";
 
 export const runtime = "nodejs";
 
@@ -29,8 +30,8 @@ function fallbackCaption(subject: string, format: "reel" | "story" | "post") {
     ? "📍 Tap through for a free case review."
     : "🚨 Don't let this happen to you.";
   const body = `If you or a loved one was hurt, you have rights.\n\nWe fight the insurance companies so you can focus on healing.\n\nFree eligibility check. No pressure. No fees until you win.`;
-  const cta = `📞 Free case review: ${PHONE}\n🌐 ${URL}\n\n#CaseClosedFL #FloridaAttorney #PersonalInjuryLawyer #InjuryAttorney #FreeCaseReview`;
-  return { caption: `${opener} ${subject}\n\n${body}\n\n${cta}`.slice(0, 4900), hashtags: ["#CaseClosedFL", "#FloridaAttorney", "#PersonalInjuryLawyer", "#InjuryAttorney", "#FreeCaseReview"], cta: `Call ${PHONE} or visit ${URL}` };
+  const caption = applyBrandFooter(`${opener} ${subject}\n\n${body}`);
+  return { caption, hashtags: ["#CaseClosedFL", "#FloridaAttorney", "#PersonalInjuryLawyer", "#InjuryAttorney", "#FreeCaseReview"], cta: `Call ${PHONE} or visit ${URL}` };
 }
 
 export async function POST(req: Request) {
@@ -62,7 +63,12 @@ export async function POST(req: Request) {
 7. CTA: end with the phone + URL on a new line, then a "Free case review" or "Free eligibility check" signoff. No exclamation chains.
 8. Never invent case facts, outcomes, settlement amounts, or testimonials. The operator supplies the subject — write the hook, not the result.
 9. Plain language. Florida Spanish-speaking audience is part of the mix; the brand voice is bilingual-friendly but the response should be in English.
-10. Return ONLY a JSON object: { caption: string, hashtags: string[], cta: string }.
+10. CLOSER (operator-locked, never rewrite): the LAST three lines of the caption must be exactly these three lines, in this order, with a blank line before them:
+    Visit CaseClosedFL.com or call (561) 566-1360 for a free consultation, no pressure.
+    General information only—not legal advice.
+    #Florida #SlipAndFall #CaseClosedFL
+   The "#SlipAndFall" hashtag may be swapped for a category-relevant tag (e.g. #CarAccident, #TruckingAccident) — but the first and second lines, the exact URL/phone, and the closing #CaseClosedFL are LOCKED.
+11. Return ONLY a JSON object: { caption: string, hashtags: string[], cta: string }.
 
 Subject the operator wants the caption to be about: ${subject}
 Category on the site: ${category}${topic ? "\nOperator-picked topic angle: " + topic : ""}`
@@ -86,7 +92,7 @@ Category on the site: ${category}${topic ? "\nOperator-picked topic angle: " + t
     const cleaned = text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
     const parsed = JSON.parse(cleaned) as { caption?: string; hashtags?: string[]; cta?: string };
     if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON shape");
-    const caption = String(parsed.caption || "").slice(0, 4900);
+    const caption = applyBrandFooter(String(parsed.caption || "")).slice(0, 4900);
     const hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags.filter(h => typeof h === "string").slice(0, 5) : fallback.hashtags;
     const cta = String(parsed.cta || fallback.cta).slice(0, 500);
     if (!caption) throw new Error("Empty caption");
