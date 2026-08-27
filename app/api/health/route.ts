@@ -73,12 +73,16 @@ async function pingNvidia() {
     : null;
   const modelIds = catalog?.data?.map(entry => entry.id).filter((id): id is string => Boolean(id)) || [];
   const available = modelIds.length ? modelIds.includes(model) : undefined;
+  const alternatives = available === false
+    ? modelIds.filter(id => /(?:nemotron|llama|mistral)/i.test(id)).slice(0, 30)
+    : undefined;
   return {
     configured: true,
     live: response.ok && available !== false,
     status: response.status,
     model,
     available,
+    alternatives,
     error: !response.ok ? `HTTP ${response.status}` : available === false ? "configured model is unavailable" : undefined,
     latencyMs: Date.now() - t0
   };
