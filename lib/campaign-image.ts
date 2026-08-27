@@ -51,11 +51,24 @@ async function editWithOpenAI(referencePath:string|null,prompt:string,model:stri
 async function editWithHedra(referencePath:string|null,prompt:string,model:string){
   // Hedra v3 image: submit + poll + read result. Same shape as the other image adapters.
   // Model id is the user-selected one (gpt-image-2, flux2-max, imagen-4, seedream-5, etc.)
+  // The Hedra v3 catalog doesn't publish a typed per-model schema here, so we keep
+  // small per-model allowlists: only models known to accept `resolution` get it.
+  // Sending `resolution` to models that don't accept it returns HTTP 400 with
+  // "Extra inputs are not permitted". The gpt-image family additionally needs
+  // `quality: "high"`.
   const { getProviderKey } = await import("@/lib/providers");
   const key=getProviderKey("hedra"),ac=new AbortController();
   const TIMEOUT_MS=120_000;
   const submitTimer=setTimeout(()=>ac.abort(),TIMEOUT_MS);
-  const input:Record<string,unknown>={prompt,aspect_ratio:"9:16",resolution:"1K"};
+  const MODELS_NEEDING_QUALITY = new Set(["gpt-image-2", "gpt-image-1.5"]);
+  const MODELS_ACCEPTING_RESOLUTION = new Set([
+    "gpt-image-2", "gpt-image-1.5",
+    "imagen-4", "nano-banana-pro",
+    "ideogram-v4", "recraft-v3", "seedream-5"
+  ]);
+  const input:Record<string,unknown>={prompt,aspect_ratio:"9:16"};
+  if (MODELS_NEEDING_QUALITY.has(model)) input.quality = "high";
+  if (MODELS_ACCEPTING_RESOLUTION.has(model)) input.resolution = "1K";
   try{
     let submit:Response;
     if(referencePath){
