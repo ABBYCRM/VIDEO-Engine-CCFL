@@ -195,10 +195,8 @@ export function SettingsConsole(){
  const ALL_PROVIDERS: ProviderId[] = ["hedra","a2e","grok","veo"];
 
  return <div className="mx-auto max-w-5xl">
-   <h2 className="text-2xl font-semibold">Settings & API access</h2>
-   <p className="mt-2 text-slate-600">All provider keys are encrypted server-side with AES-256-GCM. Generated VIDEO-Engine tokens are stored only as SHA-256 hashes.</p>
 
-   <div className="mt-7 grid gap-6">
+   <div className="mt-2 grid gap-6">
 
      <Card className="p-5">
        <div className="mb-4 flex items-center justify-between">

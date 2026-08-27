@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { visualTemplates, type VisualTemplateId } from "@/lib/visual-templates";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Tab = "car_accident" | "rideshare" | "trucking" | "slip_fall" | "ugc";
 const TABS: { id: Tab; label: string; emoji: string; description: string }[] = [
@@ -169,21 +170,16 @@ export function UnifiedCreateConsole() {
       <AppShell>
         <main className="max-w-6xl">
           {/* Header */}
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-700">
-                <Sparkles size={16} /> Unified campaign builder
-              </div>
-              <h1 className="text-[34px] font-semibold tracking-tight">Create</h1>
-              <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                One screen for every campaign. Pick a scenario, write or generate the brief, choose the spokesperson, and let Hedra render the video (Character 3 or Grok Video). Every job lands in the Library and is auto-scheduled to the Calendar (1 reel + 1 stories daily).
-              </p>
-            </div>
-            <div className="flex gap-2">
+          <PageHeader
+            eyebrow="Unified campaign builder"
+            eyebrowIcon={<Sparkles size={16} />}
+            title="Create"
+            description="One screen for every campaign. Pick a scenario, write or generate the brief, choose the spokesperson, and let Hedra render the video (Character 3 or Grok Video). Every job lands in the Library and is auto-scheduled to the Calendar (1 reel + 1 stories daily)."
+            actions={<>
               <Button variant="secondary" onClick={() => router.push("/library")}><Library size={14} className="mr-2" />Library</Button>
               <Button variant="secondary" onClick={() => router.push("/calendar")}><CalendarIcon size={14} className="mr-2" />Calendar</Button>
-            </div>
-          </div>
+            </>}
+          />
 
           {/* Scenario tabs */}
           <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-5">

@@ -16,6 +16,7 @@ import {
   Power,
   PowerOff,
   RefreshCcw,
+  Sliders,
   Sparkles,
   Trash2,
   Wand2,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -199,12 +201,12 @@ export function PipelineConsole() {
     <AuthGuard>
       <AppShell>
         <div className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Pipeline Control Center</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">
-              Every admin operation in one place. Run autopilot passes, switch providers, rebuild calendars, scrub captions, import stock footage, debug providers. No need to open a terminal.
-            </p>
-          </div>
+          <PageHeader
+            eyebrow="Operator control center"
+            eyebrowIcon={<Sliders size={16} />}
+            title="Pipeline"
+            description="Every admin operation in one place. Run autopilot passes, switch providers, rebuild calendars, scrub captions, import stock footage, debug providers. No need to open a terminal."
+          />
 
           <Panel title="System status" icon={Activity} right={<Button size="sm" variant="ghost" onClick={loadSystem}><RefreshCcw size={12} className={`mr-1 ${busyKey === "refresh" ? "animate-spin" : ""}`} />Refresh</Button>}>
             {systemErr && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">{systemErr}</div>}

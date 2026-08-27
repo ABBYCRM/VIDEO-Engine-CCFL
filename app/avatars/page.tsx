@@ -5,6 +5,7 @@ import { AlertTriangle, Check, ImageOff, Plus, RefreshCcw, RotateCcw, ShieldChec
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ViewKey = "front" | "left" | "right" | "back";
 type ImageProvider = "hedra" | "gemini" | "openai" | "xai" | "a2e" | "nvidia" | "mock";
@@ -247,18 +248,17 @@ export default function AvatarsPage() {
   }), [avatars]);
 
   return <AuthGuard><AppShell><main>
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-700"><Users size={16}/> Canonical identities</div>
-        <h1 className="text-[34px] font-semibold leading-tight tracking-tight text-slate-900">Avatars</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">One identity per spokesperson. Reference photo first, then four canonical views used across campaign production. A campaign-safe front view can also train a reusable A2E Video Twin.</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
+    <PageHeader
+      eyebrow="Canonical identities"
+      eyebrowIcon={<Users size={16}/>}
+      title="Avatars"
+      description="One identity per spokesperson. Reference photo first, then four canonical views used across campaign production. A campaign-safe front view can also train a reusable A2E Video Twin."
+      actions={<>
         <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
         <Button variant="secondary" onClick={() => setSettingsOpen(true)}><Sparkles size={14} className="mr-2"/>Image: {imageSettings ? `${imageSettings.provider} · ${imageSettings.model}` : "settings"}</Button>
         <Button onClick={() => setCreateOpen(true)}><Plus size={14} className="mr-2"/>New avatar</Button>
-      </div>
-    </div>
+      </>}
+    />
 
     <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
       <strong>Wardrobe rule.</strong> The default female spokesperson never uses beachwear in the canonical turnaround. Lifestyle/beach imagery may identify the person, but campaign-ready views and Video Twin training must use regenerated professional wardrobe.

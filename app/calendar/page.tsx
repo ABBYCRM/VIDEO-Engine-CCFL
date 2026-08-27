@@ -17,6 +17,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 
 const NETWORKS = ["instagram", "facebook", "youtube", "tiktok", "linkedin", "website"] as const;
 const STATUSES = ["draft", "pending", "approved", "published", "failed"] as const;
@@ -280,13 +281,12 @@ export default function CalendarPage() {
     <AuthGuard>
       <AppShell>
         <main>
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-700"><CalendarDays size={16}/> Publishing workflow</div>
-              <h1 className="text-[34px] font-semibold tracking-tight">Content Calendar</h1>
-              <p className="mt-1 max-w-3xl text-sm text-slate-600">Generated blog articles, images and videos land here automatically. Review and edit them, approve them, publish immediately, or enable auto-post for connected Instagram and Website publishers. Planning supports 3, 7, 14 or 30 days.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <PageHeader
+            eyebrow="Publishing workflow"
+            eyebrowIcon={<CalendarDays size={16}/>}
+            title="Content Calendar"
+            description="Generated blog articles, images and videos land here automatically. Review and edit them, approve them, publish immediately, or enable auto-post for connected Instagram and Website publishers. Planning supports 3, 7, 14 or 30 days."
+            actions={<>
               <Button variant="secondary" onClick={runAutopilot} disabled={busy === "autopilot"}>{busy === "autopilot" ? "Running…" : <><Play size={14} className="mr-2"/>Run autopilot</>}</Button>
               <Button variant="secondary" onClick={rearmPending} disabled={busy === "rearm"}>{busy === "rearm" ? "Rearming…" : "Rearm pending"}</Button>
               <Button variant="secondary" onClick={bulkApproveAll} disabled={busy === "bulk-approve"}>{busy === "bulk-approve" ? "Approving…" : "Bulk-approve"}</Button>
@@ -297,8 +297,8 @@ export default function CalendarPage() {
               <Button variant="secondary" className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" onClick={clearCalendar} disabled={busy === "clear-calendar"}>{busy === "clear-calendar" ? "Clearing…" : <><Trash2 size={14} className="mr-2"/>Clear calendar</>}</Button>
               <Button variant="secondary" onClick={load} disabled={loading}><RefreshCcw size={14} className={`mr-2 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
               <Button onClick={() => setEditing("new")}><Plus size={14} className="mr-2"/>Add post</Button>
-            </div>
-          </div>
+            </>}
+          />
 
           {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
