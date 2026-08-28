@@ -6,6 +6,7 @@
 
 import { decryptSecret } from "@/lib/crypto";
 import { db } from "@/lib/db";
+import { redactSecretPatterns } from "@/lib/coding-agent/secret-patterns";
 
 function rawSetting(key: string): string | null {
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
@@ -40,15 +41,6 @@ function configuredSecrets(): string[] {
   return values;
 }
 
-const PATTERN_REDACTIONS: [RegExp, string][] = [
-  [/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer ***"],
-  [/(["']?(?:api[_-]?key|access[_-]?token|authorization|secret)["']?\s*[:=]\s*["']?)[A-Za-z0-9._~+/-]{12,}(["']?)/gi, "$1***$2"],
-  [/EAA[A-Za-z0-9]+/g, "EAA…"],
-  [/IGQV[A-Za-z0-9]+/g, "IGQV…"],
-  [/shpat_[A-Za-z0-9]+/g, "shpat_…"],
-  [/ve_live_[A-Za-z0-9_-]+/g, "ve_live_…"]
-];
-
 /** Redact any known configured secret value, plus common secret-shaped
  *  patterns, from a block of text before it can reach a chat transcript or
  *  API response. */
@@ -58,8 +50,5 @@ export function scrubSecrets(text: string): string {
     if (!secret) continue;
     out = out.split(secret).join("***REDACTED***");
   }
-  for (const [pattern, replacement] of PATTERN_REDACTIONS) {
-    out = out.replace(pattern, replacement);
-  }
-  return out;
+  return redactSecretPatterns(out);
 }
