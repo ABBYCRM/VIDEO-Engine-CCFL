@@ -45,6 +45,9 @@ import { generateFullBlogPost, getBlogPost } from "@/lib/nvidia/blog-writer";
 import { publishWebsite } from "@/lib/site-publish";
 import { getSite } from "@/lib/sites";
 import { generateGeoForPost, buildLlmsTxt } from "@/lib/geo/generate";
+import { createStrategy, getStrategy, listStrategies, updateStrategy } from "@/lib/strategies";
+import { planStrategy } from "@/lib/nvidia/strategy-planner";
+import { isYouTubeConnected } from "@/lib/youtube";
 
 export type ClawTool = {
   name: string;
@@ -476,6 +479,41 @@ export const CLAW_TOOLS: ClawTool[] = [
         featuredImageUrl: post.imageUrl
       });
       return { id: postId, site: site.name, result };
+    }
+  },
+  {
+    name: "list_strategies",
+    description: "Strategies Agent: list saved cross-channel marketing strategies (optionally for one site).",
+    args: "{\"siteId\":\"optional\"}",
+    handler: async (a) => ({ strategies: listStrategies(str(a.siteId) || undefined) })
+  },
+  {
+    name: "generate_strategy",
+    description: "Strategies Agent: generate a cross-channel marketing strategy (goals, channel mix, content pillars) as a draft.",
+    args: "{\"title\":\"Q1 growth plan\",\"horizon\":\"monthly\",\"siteId\":\"optional\"}",
+    handler: async (a) => {
+      const title = str(a.title);
+      if (!title) throw new Error("title is required");
+      const horizon = ["weekly", "monthly", "quarterly"].includes(str(a.horizon)) ? str(a.horizon) as "weekly" | "monthly" | "quarterly" : "monthly";
+      const channels: string[] = [];
+      if (isInstagramConfigured()) channels.push("instagram");
+      if (isYouTubeConnected()) channels.push("youtube");
+      const rows = db.prepare("SELECT DISTINCT toolkit FROM connected_accounts WHERE UPPER(status)='ACTIVE'").all() as { toolkit: string }[];
+      for (const r of rows) if (!channels.includes(r.toolkit)) channels.push(r.toolkit);
+      const plan = await planStrategy({ title, horizon, siteContext: str(a.siteContext) || null, auditSummary: str(a.auditSummary) || null, liveChannels: channels, recentPerformanceSummary: str(a.recentPerformanceSummary) || null });
+      const strategy = createStrategy({ siteId: str(a.siteId) || null, title, horizon, goals: plan.goals, channelMix: plan.channelMix, contentPillars: plan.contentPillars, rationale: plan.rationale, model: "nvidia" });
+      return { strategy };
+    }
+  },
+  {
+    name: "approve_strategy",
+    description: "Strategies Agent: mark a draft strategy approved.",
+    args: "{\"id\":\"...\"}",
+    handler: async (a) => {
+      const id = str(a.id);
+      const strategy = updateStrategy(id, { status: "approved" });
+      if (!strategy) throw new Error("Strategy not found");
+      return { strategy };
     }
   },
   {
