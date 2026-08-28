@@ -16,6 +16,15 @@ test.use({ ignoreHTTPSErrors: true, viewport: { width: 412, height: 915 } });
 
 test("creator upload: 2.6MB real file posts successfully", async ({ page, request }) => {
   test.setTimeout(120000);
+  const readiness = await request.get("/api/ready");
+  expect(readiness.status(), `readiness HTTP ${readiness.status()}`).toBe(200);
+  const readinessBody = await readiness.json();
+  expect(readinessBody).toMatchObject({
+    ok: true,
+    service: "VIDEO-Engine",
+    check: "readiness"
+  });
+
   const login = await request.post("/api/admin/login", {
     data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
     ignoreHTTPSErrors: true
@@ -24,8 +33,18 @@ test("creator upload: 2.6MB real file posts successfully", async ({ page, reques
   const storage = await request.storageState();
   await page.context().addCookies(storage.cookies);
 
+  const probeRequests: string[] = [];
+  page.on("request", (req) => {
+    const pathname = new URL(req.url()).pathname;
+    if (pathname === "/api/ready" || pathname === "/api/health") {
+      probeRequests.push(pathname);
+    }
+  });
+
   await page.goto("/creator", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Creator", exact: true })).toBeVisible();
+  // Opening the form must not start readiness or deep-health keepalive traffic.
+  expect(probeRequests).toHaveLength(0);
 
   // 2.6MB file (matches the operator's clip)
   const ftyp = Buffer.from(
@@ -49,11 +68,17 @@ test("creator upload: 2.6MB real file posts successfully", async ({ page, reques
     (r) => r.url().includes("/api/creator/upload") && r.request().method() === "POST",
     { timeout: 90000 }
   );
+  const readinessPromise = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/ready" && r.request().method() === "GET",
+    { timeout: 15000 }
+  );
 
   const uploadBtn = page.getByRole("button", { name: "Upload + schedule" });
   await expect(uploadBtn).toBeEnabled();
   await uploadBtn.click();
 
+  const preflightResponse = await readinessPromise;
+  expect(preflightResponse.status(), `preflight HTTP ${preflightResponse.status()}`).toBe(200);
   const response = await responsePromise;
   expect(response.status(), `upload HTTP ${response.status()}`).toBe(200);
 
@@ -62,6 +87,7 @@ test("creator upload: 2.6MB real file posts successfully", async ({ page, reques
   expect(body.scheduledPostIds?.length, "should have 2 scheduled post ids (reel + story)").toBe(2);
   // Confirm the file was actually uploaded (not empty body)
   expect(body.bytes, "file bytes should be ~2.6MB").toBeGreaterThan(2_500_000);
+  expect(probeRequests, "only one lightweight readiness preflight should run per upload").toEqual(["/api/ready"]);
 
   // The regression contract: the busy spinner clears and the real scheduled
   // upload appears in the UI, not merely in the API response.
