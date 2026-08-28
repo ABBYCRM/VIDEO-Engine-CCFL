@@ -7,15 +7,17 @@ import { DuckMark } from "@/components/duck-mark";
 import { MobileFrame } from "@/components/mobile-frame";
 
 type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW"|"OPS";exact?:boolean};
-// 2026-08-27 operator directive: image generation is disabled. Show only the
-// surfaces that work without it — Creator (manual upload), Calendar, Library,
-// Claw, Settings. The other pages still exist on disk (commented / 410-gated)
-// so we can re-enable later by reverting the IMAGE_GEN_ENABLED flag.
-// 2026-08-28: Create dropped from the nav too — Claw's generate_video /
+// 2026-08-27 operator directive simplified the live nav down to Creator
+// (manual upload), Calendar, Library, Claw, Settings. Avatars / Campaigns /
+// Pipeline / Sites / Integrations stay off the rail (still on disk,
+// 410/redirect-gated in next.config.ts) — that's a surface-simplification
+// call independent of image generation, so it's unchanged by the
+// 2026-08-28 directive that turned IMAGE_GEN_ENABLED back on.
+// 2026-08-28: Create also dropped from the nav — Claw's generate_video /
 // generate_still / ugc_batch_generate tools are the same server functions
-// Create called, so the page was a redundant (and, with generation disabled,
-// fully inert) front end. Root "/" now redirects to Calendar; app/page.tsx
-// and unified-create-console.tsx are left on disk, unlinked.
+// Create called, so the page was a redundant front end regardless of the
+// image-gen flag. Root "/" now redirects to Calendar; app/page.tsx and
+// unified-create-console.tsx are left on disk, unlinked.
 const NAV:NavItem[]=[
   {href:"/claw",label:"Claw",icon:Bird,group:"CREATE"},
   {href:"/creator",label:"Creator",icon:Film,group:"CREATE"},

@@ -240,9 +240,6 @@ export function SettingsConsole(){
            <RefreshCcw size={14} className="mr-1"/>Reload
          </Button>
        </div>
-       <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">
-        <strong>Image generation is paused (operator directive 2026-08-27).</strong> The provider, model, and key are still configurable below so the setting is preserved, but the save button is disabled and the <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px]">/api/admin/image-provider</code> endpoint returns 410 until you set <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px]">IMAGE_GEN_ENABLED=true</code>.
-       </div>
        <p className="mb-4 text-xs text-slate-500">Powers the campaign hero still and the 4-view avatar turnaround. Hedra is the default — 75+ image models behind one v3 endpoint, ~3.5¢ per generation. Same key as the Hedra video provider above.</p>
        <div className="grid gap-3 md:grid-cols-2">
          <label className="grid gap-2 text-sm">
@@ -253,7 +250,7 @@ export function SettingsConsole(){
              // Snap model to the first valid choice for the new provider
              const defaults: Record<ImageProviderId,string> = { hedra: "gpt-image-2", gemini: "gemini-2.5-flash-image", openai: "gpt-image-1", xai: "grok-imagine-image", a2e: "gpt-image-1.5", mock: "mock-stable-diffusion-1" };
              setImageModel(defaults[p]);
-           }} disabled>
+           }}>
              <option value="hedra">Hedra multi-model image (gpt-image-2, flux2-max, imagen-4, seedream-5, ideogram-v4, recraft-v3)</option>
              <option value="gemini">Google Gemini image generation</option>
              <option value="a2e">A2E GPT Image (gpt-image-1.5 / gpt-image-2)</option>
@@ -264,7 +261,7 @@ export function SettingsConsole(){
          </label>
          <label className="grid gap-2 text-sm">
            <span className="font-medium">Model</span>
-           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageModel} onChange={e => setImageModel(e.target.value)} disabled>
+           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageModel} onChange={e => setImageModel(e.target.value)}>
              {imageProvider === "hedra" && (<>
                <option value="gpt-image-2">gpt-image-2</option>
                <option value="flux2-max">flux2-max (FLUX.2 [max])</option>
@@ -299,9 +296,9 @@ export function SettingsConsole(){
          </label>
        </div>
        <div className="mt-4 flex items-center gap-3">
-         <Button onClick={saveImageProvider} disabled={imageBusy} aria-disabled>
+         <Button onClick={saveImageProvider} disabled={imageBusy}>
            {imageBusy ? <RefreshCcw size={14} className="mr-2 animate-spin"/> : <Save size={14} className="mr-2"/>}
-           Save image provider (disabled)
+           Save image provider
          </Button>
          {imageMsg && <span className="text-xs text-slate-600">{imageMsg}</span>}
        </div>
