@@ -49,6 +49,10 @@ import { createStrategy, getStrategy, listStrategies, updateStrategy } from "@/l
 import { planStrategy } from "@/lib/nvidia/strategy-planner";
 import { isYouTubeConnected } from "@/lib/youtube";
 import { auditWebsite } from "@/lib/site-audit";
+import { composioDeleteTweet, composioGetTweet, composioListMentions, composioPostTweet, composioReplyTweet, isXComposioConnected } from "@/lib/x-composio";
+import { composioCommentOnPost, composioGetMyInfo, composioPostUpdate, isLinkedInComposioConnected } from "@/lib/linkedin-composio";
+import { composioListComments as composioRedditListComments, composioReplyComment as composioRedditReplyComment, composioSearchSubreddits, composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
+import { redditPreSubmitReminder } from "@/lib/reddit/rules-check";
 
 export type ClawTool = {
   name: string;
@@ -481,6 +485,94 @@ export const CLAW_TOOLS: ClawTool[] = [
       });
       return { id: postId, site: site.name, result };
     }
+  },
+  {
+    name: "x_health",
+    description: "Check whether X / Twitter is connected via Composio.",
+    args: "{}",
+    handler: async () => ({ connected: isXComposioConnected() })
+  },
+  {
+    name: "x_post",
+    description: "Post a tweet (text only — media attachment not wired yet).",
+    args: "{\"text\":\"...\"}",
+    handler: async (a) => composioPostTweet({ text: str(a.text) })
+  },
+  {
+    name: "x_reply",
+    description: "Reply to a tweet.",
+    args: "{\"tweetId\":\"...\",\"text\":\"...\"}",
+    handler: async (a) => composioReplyTweet(str(a.tweetId), str(a.text))
+  },
+  {
+    name: "x_get_tweet",
+    description: "Fetch one tweet by id.",
+    args: "{\"tweetId\":\"...\"}",
+    handler: async (a) => composioGetTweet(str(a.tweetId))
+  },
+  {
+    name: "x_delete_tweet",
+    description: "Delete a tweet.",
+    args: "{\"tweetId\":\"...\"}",
+    handler: async (a) => composioDeleteTweet(str(a.tweetId))
+  },
+  {
+    name: "x_list_mentions",
+    description: "Approximate recent mentions via a recent-search for @handle (X has no dedicated mentions action confirmed for this app).",
+    args: "{\"handle\":\"yourhandle\"}",
+    handler: async (a) => composioListMentions(str(a.handle))
+  },
+  {
+    name: "linkedin_health",
+    description: "Check whether LinkedIn is connected via Composio, and report the connected profile.",
+    args: "{}",
+    handler: async () => {
+      const connected = isLinkedInComposioConnected();
+      if (!connected) return { connected };
+      try { return { connected, info: await composioGetMyInfo() }; } catch (e) { return { connected, error: e instanceof Error ? e.message : String(e) }; }
+    }
+  },
+  {
+    name: "linkedin_post",
+    description: "Post a LinkedIn update (defaults to the connected person's profile; pass authorUrn for a company Page if that's what's connected).",
+    args: "{\"text\":\"...\",\"authorUrn\":\"optional urn:li:organization:...\"}",
+    handler: async (a) => composioPostUpdate({ text: str(a.text), authorUrn: str(a.authorUrn) || null })
+  },
+  {
+    name: "linkedin_comment",
+    description: "Comment on a LinkedIn post.",
+    args: "{\"actorUrn\":\"...\",\"postUrn\":\"...\",\"message\":\"...\"}",
+    handler: async (a) => composioCommentOnPost({ actorUrn: str(a.actorUrn), postUrn: str(a.postUrn), message: str(a.message) })
+  },
+  {
+    name: "reddit_search_subreddits",
+    description: "Search subreddits by name/topic.",
+    args: "{\"query\":\"personalinjury\"}",
+    handler: async (a) => composioSearchSubreddits(str(a.query))
+  },
+  {
+    name: "reddit_submit_post",
+    description: "Submit a Reddit post. Always report the pre-submit rules reminder — Reddit self-promotion rules are per-community and cannot be fully automated.",
+    args: "{\"subreddit\":\"...\",\"title\":\"...\",\"text\":\"optional self-post body\",\"url\":\"optional link post URL\"}",
+    handler: async (a) => {
+      const subreddit = str(a.subreddit);
+      if (!subreddit) throw new Error("subreddit is required");
+      const reminder = redditPreSubmitReminder(subreddit);
+      const result = await composioSubmitPost({ subreddit, title: str(a.title), text: str(a.text) || undefined, url: str(a.url) || undefined });
+      return { ...result, reminder };
+    }
+  },
+  {
+    name: "reddit_list_comments",
+    description: "List comments on a Reddit post.",
+    args: "{\"postId\":\"base-36 article id\"}",
+    handler: async (a) => composioRedditListComments(str(a.postId))
+  },
+  {
+    name: "reddit_reply",
+    description: "Reply to a Reddit post or comment (thingId is the fullname, e.g. t3_xxx or t1_xxx).",
+    args: "{\"thingId\":\"...\",\"text\":\"...\"}",
+    handler: async (a) => composioRedditReplyComment(str(a.thingId), str(a.text))
   },
   {
     name: "audit_website",
