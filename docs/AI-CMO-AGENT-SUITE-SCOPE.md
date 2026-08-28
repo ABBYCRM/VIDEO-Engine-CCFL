@@ -576,12 +576,87 @@ from one-off Create.
    `tests/e2e/image-gen-disabled.spec.ts` patterns to cover the batch
    endpoint and the re-enabled-flag path.
 
+### 3.12 Bulk Upload (cross-cutting — not one of the 11 screenshot agents, added on request)
+
+**Exists today**: every upload path in this app takes exactly **one file
+per request**. Verified by grep across `app/api/**`: `app/api/library/upload`,
+`app/api/creator/upload`, `app/api/claw/files`,
+`app/api/campaigns/[id]/upper-videos`, `app/api/admin/avatars/[id]/upload`,
+`app/api/split-templates`, and `app/api/internal/podcast/source` all read a
+single `form.get("file")`. There is one partial exception:
+`app/api/admin/stock-uppers` (`POST`) already accepts a JSON `items[]`
+array — but that's bulk *import of already-stored asset ids*, not bulk
+*file* upload; it never touches `multipart/form-data`.
+
+All of these ultimately persist through one shared primitive,
+`savePersistentLibraryAsset()` (`lib/persistent-library.ts`), which already
+takes an arbitrary `id`/`kind`/`mediaType`/`label`/`title`/`mimeType`/`bytes`
+per call — so bulk upload is an orchestration problem, not a storage-layer
+problem. No new storage code is needed, only a loop and a UI that can pick
+more than one file.
+
+**Gap**: no endpoint reads `form.getAll(...)` (plural) anywhere in the
+repo — an operator wanting to add 20 UGC source clips, 30 stock-upper
+videos, or a batch of Library images today must submit 20–30 separate
+requests through the UI, one file at a time.
+
+**Steps**:
+1. Add one shared helper, `lib/bulk-upload.ts`, exporting
+   `async function saveBulkUploads(files: File[], opts: {kind, mediaType, label, titlePrefix?}): Promise<{ok:{id,url,title}[], failed:{name,error}[]}>` —
+   validates each file's size/MIME the same way the existing single-file
+   routes do (`file.type.startsWith("video/")`, the 250MB cap already used
+   in `app/api/creator/upload/route.ts` and `app/api/library/upload/route.ts`),
+   then calls `savePersistentLibraryAsset()`/`saveUploadedVideo()` per
+   file, continuing past individual failures so one bad file in a batch of
+   30 doesn't fail the other 29 — return a per-file `ok`/`failed` result
+   list rather than an all-or-nothing response.
+2. Extend the two highest-value existing routes to accept multiple files
+   in the same request shape they already use, rather than inventing a
+   new bulk-only endpoint per surface:
+   - `app/api/library/upload/route.ts`: read `form.getAll("files")`
+     (falling back to the existing single `form.get("file")` for
+     backward compatibility with any existing caller), loop through
+     `saveBulkUploads`.
+   - `app/api/creator/upload/route.ts`: same `getAll("files")` extension,
+     applying the *same* `formats`/`scheduledAt`/`network`/`autoPost`
+     options (already parsed once per request in that route) to every
+     file in the batch — i.e. "upload these 10 clips, schedule all of
+     them as Reel+Story at 9am tomorrow" in one call.
+   - `app/api/admin/stock-uppers/route.ts`: add a third input mode
+     alongside its existing `items[]` JSON body — accept
+     `multipart/form-data` with `files[]` + a single `category`, so an
+     operator can bulk-import raw stock-upper video files per category in
+     one request instead of uploading one, then bulk-tagging via the
+     existing `items[]` path.
+3. UI: add the `multiple` attribute to the file `<input>` in the Creator
+   and Library upload components (`app/creator/page.tsx`,
+   `app/library/page.tsx`) and switch their submit handler from
+   `form.set("file", ...)` to appending every selected file under
+   `files`, with a simple per-file progress/result list (reusing the
+   `ok`/`failed` array shape from step 1) rather than a single
+   success/error toast.
+4. Claw tool: `bulk_upload_status` is not meaningful for Claw (file bytes
+   can't travel through the chat tool-call JSON contract) — skip a Claw
+   tool for the upload itself, but add `list_recent_uploads` if the
+   operator wants to ask Claw "did the last batch make it in."
+5. Size/throughput guardrails: keep the existing per-file 250MB cap
+   unchanged; add a batch-level cap (e.g. 25 files or 1GB total per
+   request, whichever is smaller) so one request can't exhaust the
+   Node process's memory buffering every file's `arrayBuffer()` at once
+   — process files sequentially inside `saveBulkUploads`, not with
+   `Promise.all`, to bound peak memory to roughly one file's size.
+6. Tests: unit test `saveBulkUploads`'s partial-failure behavior (mix of
+   one oversized file + valid files → valid ones still saved, oversized
+   one reported in `failed`); extend
+   `tests/e2e/creator-upload-retry.spec.ts` for a multi-file selection.
+
 ---
 
 ## 4. Suggested build order
 
 | Phase | Agents | Why this order |
 |---|---|---|
+| 0 | Bulk Upload | Pure orchestration on an existing storage primitive, zero new infrastructure, unblocks faster manual content loading (relevant right now under manual-calendar mode) — do this first, independent of every other phase. |
 | 1 | AI Content Writer (extend), SEO Agent (expose), Strategies | Reuse the existing NVIDIA content pipeline and revision model almost as-is; lowest new-infrastructure cost. |
 | 2 | GEO Agent | Composes directly onto Phase 1's `blog_posts` rows. |
 | 3 | X/Twitter, LinkedIn, Reddit Distribution | One repeatable Composio-adapter pattern, proven three times over; mostly copy-paste-and-adapt from `lib/instagram-composio.ts`. |
