@@ -122,6 +122,24 @@ export function CreatorConsole() {
     if (t) setCategory(t.category);
   }, [topicId]);
 
+  // 2026-08-27 cold-start fix: ping /api/health on mount to wake the DO
+  // basic-tier instance before the operator taps Upload. If we don't do
+  // this, the first request to /api/creator/upload often hits a half-
+  // booted instance and Cloudflare's edge RSTs the connection — leaving
+  // the operator staring at a frozen button. The fetch below is fire-
+  // and-forget; we don't surface any state to the user.
+  //
+  // Plus a keepalive ping every 25s while the page is open so the DO
+  // basic-tier instance doesn't idle-evict (it goes cold after ~5 min
+  // of no traffic and takes 15-20s to wake).
+  useEffect(() => {
+    fetch("/api/health", { cache: "no-store" }).catch(() => {});
+    const t = setInterval(() => {
+      fetch("/api/health", { cache: "no-store" }).catch(() => {});
+    }, 25_000);
+    return () => clearInterval(t);
+  }, []);
+
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
@@ -202,14 +220,25 @@ export function CreatorConsole() {
   // this upload does is take a pre-existing video file, persist it to the
   // library, and write scheduled_posts rows that the existing calendar
   // publisher loop will pick up at the scheduled time. There is no AI
-  // generation in this path. The retry wrapper that lived here before was
-  // reusing the same FormData stream on the second attempt — FormData is a
-  // ReadableStream and is consumed on first read, so the retry was sending
-  // an empty body. That was the operator-visible 'Network connection
-  // dropped' error. The video is on the operator's device, so the only
-  // safe thing to do on a network failure is surface a clear message and let
-  // them tap again. No silent retry, no half-baked second attempt.
+  // generation in this path.
+  //
+  // Cold-start strategy: ping /api/health right before the upload. The
+  // DO basic-tier instance goes idle after ~5 min of no traffic and
+  // takes 15-20s to wake. The previous "retry" wrapper that lived here
+  // before was broken because FormData is a ReadableStream and gets
+  // consumed on first read — the second attempt sent an empty body. The
+  // video is on the operator's device, so the only safe thing to do on a
+  // network failure is surface a clean message and let them tap again.
   async function postUploadToServer(): Promise<any> {
+    // Preflight: warm the server. Failures here are silently swallowed —
+    // we never block the upload on a preflight glitch.
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 8_000);
+      await fetch("/api/health", { cache: "no-store", signal: ac.signal });
+      clearTimeout(t);
+    } catch { /* ignore */ }
+
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 120_000);
     const fd = buildFormData();
