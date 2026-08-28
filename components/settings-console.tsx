@@ -78,6 +78,7 @@ export function SettingsConsole(){
  const [a2e,setA2e] = useState("");
  const [hedraKey,setHedraKey] = useState("");
  const [nvidiaKey,setNvidiaKey] = useState("");
+ const [steelKey,setSteelKey] = useState("");
  const [defaultProvider,setDefaultProvider] = useState<ProviderId>("hedra");
  const [providerModels,setProviderModels] = useState<Record<ProviderId,string>>({ veo:"", grok:"", a2e:"", hedra:"" });
  const [imageProvider,setImageProvider] = useState<ImageProviderId>("hedra");
@@ -165,6 +166,7 @@ export function SettingsConsole(){
        hedraApiKey: hedraKey || undefined,
        nvidiaApiKey: nvidiaKey || undefined,
        nvidiaModel: nvidiaSelection.id,
+       steelApiKey: steelKey || undefined,
        defaultProvider,
        veoModel: providerModels.veo,
        grokModel: providerModels.grok,
@@ -176,7 +178,7 @@ export function SettingsConsole(){
    });
    if(r.ok){
      setSettings(await r.json());
-     setGemini(""); setXai(""); setA2e(""); setHedraKey(""); setNvidiaKey("");
+     setGemini(""); setXai(""); setA2e(""); setHedraKey(""); setNvidiaKey(""); setSteelKey("");
      alert("Settings saved");
      loadLive();
    }
@@ -402,6 +404,23 @@ export function SettingsConsole(){
            </ul>
          </details>
        </div>
+     </Card>
+
+     <Card className="p-5">
+       <div className="mb-4 flex items-center justify-between">
+         <div className="flex items-center gap-2 font-medium"><Cloud size={18} className="text-slate-700"/>Steel.dev (Claw web research)</div>
+         <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${settings?.steel?.configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{settings?.steel?.configured ? "configured" : "not configured"}</span>
+       </div>
+       <p className="mb-3 text-sm text-slate-600">
+         Powers Claw's <code>steel_scrape</code> tool: renders a public web page and returns clean Markdown + metadata + links for live research. Local/private targets are always rejected server-side.
+       </p>
+       <label className="grid gap-2 text-sm">
+         <span>Steel API key</span>
+         <Input type="password" placeholder="ste-… paste to replace" onChange={e => setSteelKey(e.target.value)} />
+         <span className="text-[11px] text-slate-500">
+           Get one at <a className="text-cyan-700 underline-offset-2 hover:underline" href="https://steel.dev" target="_blank" rel="noreferrer">steel.dev</a>. Stored encrypted AES-256-GCM, same as every other provider key here.
+         </span>
+       </label>
      </Card>
 
      <Card className="p-5">

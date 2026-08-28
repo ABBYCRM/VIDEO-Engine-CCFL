@@ -10,6 +10,7 @@ import {
   saveXaiApiKey
 } from "@/lib/settings";
 import { saveComposioApiKey } from "@/lib/composio/client";
+import { saveSteelApiKey } from "@/lib/steel";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { isNvidiaModelId } from "@/lib/nvidia";
 
@@ -28,6 +29,7 @@ export async function PUT(req: Request) {
   if (body.hedraApiKey) saveHedraApiKey(String(body.hedraApiKey));
   if (body.nvidiaApiKey) saveNvidiaApiKey(String(body.nvidiaApiKey));
   if (body.composioApiKey) saveComposioApiKey(String(body.composioApiKey));
+  if (body.steelApiKey) saveSteelApiKey(String(body.steelApiKey));
 
   if (body.resolution && !["720p","1080p","4k"].includes(body.resolution)) return NextResponse.json({ error: "Invalid resolution" }, { status: 400 });
   if (body.aspectRatio && !["9:16","16:9"].includes(body.aspectRatio)) return NextResponse.json({ error: "Invalid aspect ratio" }, { status: 400 });

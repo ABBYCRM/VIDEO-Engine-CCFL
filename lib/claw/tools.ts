@@ -115,6 +115,30 @@ export const CLAW_TOOLS: ClawTool[] = [
     }
   },
   {
+    // Named to match what the model naturally reaches for when a user asks
+    // about "Composio" — the system prompt mentions Composio as a fallback
+    // concept without ever listing a bare tool literally named "composio",
+    // which was causing "Unknown tool composio" hallucinated calls. This
+    // tool exists so that instinct resolves to something real.
+    name: "composio_health",
+    description: "Composio status: API key configured, and every cataloged toolkit's auth-config + live-connection state.",
+    args: "{}",
+    handler: async () => {
+      const settings = getEngineSettings();
+      const connected = db.prepare("SELECT toolkit, status, last_sync_at FROM connected_accounts WHERE UPPER(status)='ACTIVE'").all() as { toolkit: string; status: string; last_sync_at: string | null }[];
+      const connectedByToolkit = new Map(connected.map((c) => [c.toolkit, c]));
+      return {
+        keyConfigured: settings.composio.keyConfigured,
+        toolkits: settings.composio.toolkits.map((t) => ({
+          id: t.id,
+          authConfigConfigured: t.authConfigConfigured,
+          connected: connectedByToolkit.has(t.id),
+          lastSyncAt: connectedByToolkit.get(t.id)?.last_sync_at || null
+        }))
+      };
+    }
+  },
+  {
     name: "list_jobs",
     description: "Recent video jobs.",
     args: "{\"limit\":20}",
