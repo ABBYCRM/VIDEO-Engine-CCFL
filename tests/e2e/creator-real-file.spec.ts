@@ -93,7 +93,7 @@ test("creator upload: 2.6MB real file posts successfully", async ({ page, reques
   // upload appears in the UI, not merely in the API response.
   await expect(uploadBtn).toBeEnabled();
   await expect(uploadBtn.locator("svg.animate-spin")).toHaveCount(0);
-  await expect(page.getByText(/Scheduled 2 post\(s\) for reel, story/)).toBeVisible();
+  await expect(page.getByText(/scheduled 2 post\(s\) for reel, story/i)).toBeVisible();
   await expect(page.getByRole("heading", { name: /car-crash · (reel|story)/ })).toBeVisible();
   await expect(page.getByText(/reel \+ story|story \+ reel/)).toBeVisible();
 
