@@ -10,22 +10,43 @@ import { stubAuthenticatedSession } from "./helpers";
  * "neither Graph nor Composio configured" branch, exercised directly
  * against the real handler during this change's review.
  */
-async function stubConvo(page: import("@playwright/test").Page, id: string) {
+async function stubConvo(page: import("@playwright/test").Page, id: string, finalMessage: string) {
+  let sent = false;
   await page.route("**/api/claw/conversations", async (route) => {
     if (route.request().method() === "POST") {
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ conversation: { id, title: "New thread", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }) });
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ conversations: [] }) });
   });
-  await page.route(`**/api/claw/conversations/${id}`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ conversation: { id, title: "New thread" }, messages: [] }) }));
+  // The real backend persists the assistant's final message and this GET
+  // re-fetches it once "done" clears the live-streaming buffer - a mock
+  // that always returns messages: [] would make that text vanish, which is
+  // a mock-fidelity bug, not a real Claw bug (see claw.spec.ts's identical
+  // fix for the same root cause).
+  await page.route(`**/api/claw/conversations/${id}`, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      conversation: { id, title: "New thread" },
+      messages: sent ? [
+        { id: "m1", role: "user", content: "Post the latest reel to Instagram" },
+        { id: "m2", role: "assistant", content: finalMessage }
+      ] : []
+    })
+  }));
   await page.route("**/api/claw/files**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ files: [] }) }));
+  return {
+    markSent: () => { sent = true; }
+  };
 }
 
 test("Claw reports a successful ig_publish and which path published it", async ({ page }) => {
   await stubAuthenticatedSession(page);
-  await stubConvo(page, "c-ig-ok");
+  const finalMessage = "Published to Instagram via instagram-mcp.";
+  const convo = await stubConvo(page, "c-ig-ok", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-ok", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: true, via: "instagram-mcp", preview: "mediaId: 17999999999" })}\n\ndata: ${JSON.stringify({ type: "token", text: "Published to Instagram via instagram-mcp." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "Published to Instagram via instagram-mcp." })}\n\n`;
+    convo.markSent();
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-ok", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: true, via: "instagram-mcp", preview: "mediaId: 17999999999" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
@@ -33,15 +54,17 @@ test("Claw reports a successful ig_publish and which path published it", async (
   await page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…").fill("Post the latest reel to Instagram");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Did ig_publish")).toBeVisible();
-  await expect(page.getByText("via instagram-mcp")).toBeVisible();
-  await expect(page.getByText("Published to Instagram via instagram-mcp.")).toBeVisible();
+  await expect(page.getByText("via instagram-mcp", { exact: true })).toBeVisible();
+  await expect(page.getByText(finalMessage)).toBeVisible();
 });
 
 test("Claw surfaces an ig_publish failure as text, not a crash, when nothing is configured", async ({ page }) => {
   await stubAuthenticatedSession(page);
-  await stubConvo(page, "c-ig-fail");
+  const finalMessage = "I couldn't publish - Instagram isn't connected yet.";
+  const convo = await stubConvo(page, "c-ig-fail", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-fail", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: false, preview: "Instagram is not configured. Save Graph credentials on Integrations, or connect Composio Instagram as fallback." })}\n\ndata: ${JSON.stringify({ type: "token", text: "I couldn't publish - Instagram isn't connected yet." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "I couldn't publish - Instagram isn't connected yet." })}\n\n`;
+    convo.markSent();
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-fail", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: false, preview: "Instagram is not configured. Save Graph credentials on Integrations, or connect Composio Instagram as fallback." })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
@@ -50,5 +73,5 @@ test("Claw surfaces an ig_publish failure as text, not a crash, when nothing is 
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Failed ig_publish")).toBeVisible();
   await expect(page.getByText(/Instagram is not configured/)).toBeVisible();
-  await expect(page.getByText("I couldn't publish - Instagram isn't connected yet.")).toBeVisible();
+  await expect(page.getByText(finalMessage)).toBeVisible();
 });

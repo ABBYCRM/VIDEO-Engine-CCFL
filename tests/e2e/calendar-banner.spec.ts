@@ -13,16 +13,18 @@ test("calendar renders the disabled-image-gen banner when redirected", async ({ 
   const storage = await request.storageState();
   await page.context().addCookies(storage.cookies);
 
-  // Visit the page as if we just clicked a deep link to /avatars
+  // Visit the page as if we just clicked a deep link to a retired page
+  // (Avatars/Campaigns/Pipeline/Sites/Integrations) - that redirect stands
+  // independently of the image-gen flag (re-enabled 2026-08-28).
   await page.goto("/calendar?feature_disabled=image_generation", { waitUntil: "networkidle" });
   await page.waitForSelector("h1");
   await page.waitForTimeout(800);
 
   const data = await page.evaluate(() => ({
-    hasBanner: !!document.body.textContent?.includes("Image generation is paused"),
-    hasRunAutopilotDisabled: !!Array.from(document.querySelectorAll("button")).find(b => /Run autopilot \(disabled\)/.test(b.textContent || "")),
-    hasRearmDisabled: !!Array.from(document.querySelectorAll("button")).find(b => /Rearm pending \(disabled\)/.test(b.textContent || "")),
-    hasRebuildDisabled: !!Array.from(document.querySelectorAll("button")).find(b => /Rebuild all videos \(disabled\)/.test(b.textContent || "")),
+    hasBanner: !!document.body.textContent?.includes("That page has moved"),
+    hasRunAutopilotEnabled: !!Array.from(document.querySelectorAll("button")).find(b => /^Run autopilot$/.test(b.textContent?.trim() || "") && !b.disabled),
+    hasRearmEnabled: !!Array.from(document.querySelectorAll("button")).find(b => /^Rearm pending$/.test(b.textContent?.trim() || "") && !b.disabled),
+    hasRebuildEnabled: !!Array.from(document.querySelectorAll("button")).find(b => /^Rebuild all videos$/.test(b.textContent?.trim() || "") && !b.disabled),
     hasBulkApprove: !!Array.from(document.querySelectorAll("button")).find(b => b.textContent?.trim() === "Bulk-approve"),
     hasAddPost: !!Array.from(document.querySelectorAll("button")).find(b => b.textContent?.includes("Add post")),
   }));
@@ -30,10 +32,10 @@ test("calendar renders the disabled-image-gen banner when redirected", async ({ 
   await page.screenshot({ path: "tests/e2e/screenshots/calendar-disabled-banner-412.png", fullPage: false });
 
   expect(data.hasBanner).toBe(true);
-  expect(data.hasRunAutopilotDisabled).toBe(true);
-  expect(data.hasRearmDisabled).toBe(true);
-  expect(data.hasRebuildDisabled).toBe(true);
-  // Bulk-approve and Add post are still enabled (manual flow)
+  // Image gen is back on (2026-08-28): these are real, clickable actions now.
+  expect(data.hasRunAutopilotEnabled).toBe(true);
+  expect(data.hasRearmEnabled).toBe(true);
+  expect(data.hasRebuildEnabled).toBe(true);
   expect(data.hasBulkApprove).toBe(true);
   expect(data.hasAddPost).toBe(true);
 });
