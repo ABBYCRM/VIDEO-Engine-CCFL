@@ -198,18 +198,21 @@ export function CreatorConsole() {
     }
   }
 
-  async function uploadWithRetry(fd: FormData, attempt: number): Promise<any> {
-    // Cold-start on DO basic-tier can take 15-20s, and Cloudflare's edge will
-    // occasionally RST the connection during that window. If the fetch throws
-    // a "Failed to fetch" TypeError once, we wait 3s and try again before
-    // surfacing a real error.
-    //
-    // Note: keepalive: true is intentionally NOT used. Chrome silently drops
-    // the body of multipart/form-data requests that include a File (from
-    // <input type="file">) when keepalive is set — see the WHATWG fetch
-    // spec and Chromium issue #1084001.
+  // 2026-08-27 operator directive: the videos are already made. The only thing
+  // this upload does is take a pre-existing video file, persist it to the
+  // library, and write scheduled_posts rows that the existing calendar
+  // publisher loop will pick up at the scheduled time. There is no AI
+  // generation in this path. The retry wrapper that lived here before was
+  // reusing the same FormData stream on the second attempt — FormData is a
+  // ReadableStream and is consumed on first read, so the retry was sending
+  // an empty body. That was the operator-visible 'Network connection
+  // dropped' error. The video is on the operator's device, so the only
+  // safe thing to do on a network failure is surface a clear message and let
+  // them tap again. No silent retry, no half-baked second attempt.
+  async function postUploadToServer(): Promise<any> {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 120_000);
+    const fd = buildFormData();
     try {
       const r = await fetch("/api/creator/upload", {
         method: "POST",
@@ -219,22 +222,6 @@ export function CreatorConsole() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       return d;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const isNetwork = /failed to fetch|networkerror|aborted|load failed|timeout/i.test(msg);
-      if (isNetwork && attempt < 2) {
-        // Try once more. The DO app may have been idle-evicted and the next
-        // request will wake it. 3s gives the cold-start time to finish.
-        // We rebuild a fresh FormData so the browser doesn't hand us a
-        // partially-consumed one.
-        setResult({ ok: false, error: "Connection dropped — retrying (server may be cold-starting)…" });
-        await new Promise(r => setTimeout(r, 3000));
-        return uploadWithRetry(fd, attempt + 1);
-      }
-      if (isNetwork) {
-        throw new Error("Network connection dropped (the server may be cold-starting). Tap Upload + schedule again to retry.");
-      }
-      throw e;
     } finally {
       clearTimeout(timer);
     }
@@ -277,7 +264,7 @@ export function CreatorConsole() {
     }
     setBusy("upload");
     try {
-      const d = await uploadWithRetry(buildFormData(), 1);
+      const d = await postUploadToServer();
       setResult({ ok: true, ids: d.scheduledPostIds, message: `Scheduled ${d.scheduledPostIds?.length || 0} post(s) for ${d.formats?.join(", ")}` });
       // Reset only the per-upload bits; keep topic + date+time
       setFile(null);
