@@ -53,6 +53,7 @@ import { composioDeleteTweet, composioGetTweet, composioListMentions, composioPo
 import { composioCommentOnPost, composioGetMyInfo, composioPostUpdate, isLinkedInComposioConnected } from "@/lib/linkedin-composio";
 import { composioListComments as composioRedditListComments, composioReplyComment as composioRedditReplyComment, composioSearchSubreddits, composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
 import { redditPreSubmitReminder } from "@/lib/reddit/rules-check";
+import { isImageGenEnabled } from "@/lib/feature-flags";
 
 export type ClawTool = {
   name: string;
@@ -144,6 +145,32 @@ export const CLAW_TOOLS: ClawTool[] = [
         avatarId: str(a.avatarId) || undefined
       });
       return { started: true, job: publicJob(job) };
+    }
+  },
+  {
+    name: "ugc_batch_generate",
+    description: "UGC Videos Agent: enqueue up to 25 UGC video briefs in one call (each still one Veo/Hedra/Grok/A2E job — no fan-out per brief).",
+    args: "{\"briefs\":[{\"mission\":\"...\",\"subject\":\"optional\",\"script\":\"optional\",\"avatarId\":\"optional\"}],\"provider\":\"hedra\"}",
+    handler: async (a) => {
+      if (!isImageGenEnabled()) throw new Error("Image/video generation is disabled (manual-calendar mode). Set IMAGE_GEN_ENABLED=true to re-enable.");
+      const briefs = Array.isArray(a.briefs) ? a.briefs : [];
+      if (!briefs.length) throw new Error("briefs[] is required");
+      if (briefs.length > 25) throw new Error("A batch is limited to 25 briefs");
+      const provider = (isProviderId(str(a.provider)) ? str(a.provider) : undefined) as ProviderId | undefined;
+      const jobs: any[] = [];
+      const failed: { index: number; error: string }[] = [];
+      for (let i = 0; i < briefs.length; i++) {
+        const brief = briefs[i] as Record<string, unknown>;
+        const mission = str(brief?.mission);
+        if (!mission) { failed.push({ index: i, error: "mission is required" }); continue; }
+        try {
+          const job = await createJob({ source: "admin", category: "ugc", mission, subject: str(brief?.subject) || undefined, script: str(brief?.script) || undefined, provider, model: str(a.model) || undefined, avatarId: str(brief?.avatarId) || undefined });
+          jobs.push({ index: i, id: job.id, status: job.status });
+        } catch (e) {
+          failed.push({ index: i, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return { queued: jobs.length, jobs, failed };
     }
   },
   {
