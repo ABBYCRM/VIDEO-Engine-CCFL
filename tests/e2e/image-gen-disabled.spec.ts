@@ -64,10 +64,14 @@ test("image-gen disabled state is correct on the live build", async ({ page, req
   await page.waitForTimeout(400);
   const navItems = await page.evaluate(() => Array.from(document.querySelectorAll("nav a[href]")).map(a => a.getAttribute("href")));
   console.log("Nav items:", navItems);
-  // Must include kept items
-  for (const kept of ["/", "/creator", "/calendar", "/library", "/settings", "/claw"]) {
+  // Must include kept items. "/" (Create) is intentionally not a nav link
+  // anymore - Claw's generate_video/generate_still/ugc_batch_generate tools
+  // already cover what it did, so it was dropped from the left rail (root
+  // now redirects to /calendar, checked separately above as a "kept page").
+  for (const kept of ["/creator", "/calendar", "/library", "/settings", "/claw"]) {
     expect(navItems, `nav should include ${kept}`).toContain(kept);
   }
+  expect(navItems, "nav should NOT include / (Create, retired)").not.toContain("/");
   // Must NOT include removed items
   for (const removed of ["/avatars", "/campaigns", "/pipeline", "/sites", "/integrations"]) {
     expect(navItems, `nav should NOT include ${removed}`).not.toContain(removed);
