@@ -57,6 +57,7 @@ import { isImageGenEnabled } from "@/lib/feature-flags";
 import { listInfluencers, updateInfluencerStatus } from "@/lib/influencers";
 import { discoverByInstagramUsername, discoverFromUrl } from "@/lib/influencer-discovery";
 import { sendOutreach } from "@/lib/influencer-outreach";
+import { createCodingSession, isCodingSandboxConfigured, listFiles as codingListFiles, readFile as codingReadFile, runCommand as codingRunCommand, writeFile as codingWriteFile } from "@/lib/coding-agent/client";
 
 export type ClawTool = {
   name: string;
@@ -603,6 +604,39 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Reply to a Reddit post or comment (thingId is the fullname, e.g. t3_xxx or t1_xxx).",
     args: "{\"thingId\":\"...\",\"text\":\"...\"}",
     handler: async (a) => composioRedditReplyComment(str(a.thingId), str(a.text))
+  },
+  {
+    name: "coding_new_session",
+    description: "Coding Agent: open a new workspace on the configured external sandbox. Requires an operator-provisioned sandbox (CODING_SANDBOX_URL) — this app never executes code in its own process.",
+    args: "{\"purpose\":\"optional\"}",
+    handler: async (a) => {
+      if (!isCodingSandboxConfigured()) throw new Error("No coding sandbox is configured. This requires a separate, network-isolated sandbox service the operator provisions and points CODING_SANDBOX_URL at — never this app's own process.");
+      return createCodingSession(str(a.purpose) || undefined);
+    }
+  },
+  {
+    name: "coding_run",
+    description: "Coding Agent: run one shell command in a sandbox workspace. Every call is logged; output is scrubbed of this app's own secrets before it reaches you.",
+    args: "{\"sessionId\":\"...\",\"workspaceRef\":\"...\",\"command\":\"npm test\"}",
+    handler: async (a) => codingRunCommand({ sessionId: str(a.sessionId), workspaceRef: str(a.workspaceRef), command: str(a.command) })
+  },
+  {
+    name: "coding_read_file",
+    description: "Coding Agent: read a file from a sandbox workspace.",
+    args: "{\"workspaceRef\":\"...\",\"path\":\"src/index.ts\"}",
+    handler: async (a) => ({ content: await codingReadFile({ workspaceRef: str(a.workspaceRef), path: str(a.path) }) })
+  },
+  {
+    name: "coding_write_file",
+    description: "Coding Agent: write a file in a sandbox workspace.",
+    args: "{\"workspaceRef\":\"...\",\"path\":\"src/index.ts\",\"content\":\"...\"}",
+    handler: async (a) => codingWriteFile({ workspaceRef: str(a.workspaceRef), path: str(a.path), content: str(a.content) })
+  },
+  {
+    name: "coding_list_files",
+    description: "Coding Agent: list files in a sandbox workspace directory.",
+    args: "{\"workspaceRef\":\"...\",\"path\":\"optional, defaults to .\"}",
+    handler: async (a) => ({ files: await codingListFiles({ workspaceRef: str(a.workspaceRef), path: str(a.path) || undefined }) })
   },
   {
     name: "discover_influencers",
