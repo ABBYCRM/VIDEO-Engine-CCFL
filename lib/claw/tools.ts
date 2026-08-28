@@ -41,6 +41,9 @@ import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
 import { writeStandalonePost } from "@/lib/nvidia/content-writer";
 import type { PlatformKey } from "@/lib/nvidia/schemas";
 import crypto from "node:crypto";
+import { generateFullBlogPost, getBlogPost } from "@/lib/nvidia/blog-writer";
+import { publishWebsite } from "@/lib/site-publish";
+import { getSite } from "@/lib/sites";
 
 export type ClawTool = {
   name: string;
@@ -419,6 +422,60 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Delete a Claw file.",
     args: "{\"id\":\"...\"}",
     handler: async (a) => ({ ok: await deleteClawFile(str(a.id)) })
+  },
+  {
+    name: "list_seo_queue",
+    description: "SEO Agent: list blog_posts drafts/generating/ready/failed for a site (or all sites), with SEO score.",
+    args: "{\"siteId\":\"optional\",\"status\":\"optional pending|generating|ready|failed\",\"limit\":20}",
+    handler: async (a) => {
+      const limit = Math.max(1, Math.min(50, num(a.limit, 20)));
+      const siteId = str(a.siteId);
+      const status = str(a.status);
+      const clauses: string[] = [];
+      const params: unknown[] = [];
+      if (siteId) { clauses.push("site_id=?"); params.push(siteId); }
+      if (status) { clauses.push("generation_status=?"); params.push(status); }
+      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+      params.push(limit);
+      const rows = db.prepare(`SELECT id,site_id,title,slug,status,generation_status,generation_error,seo_score,seo_score_max,geo_score,scheduled_at FROM blog_posts ${where} ORDER BY scheduled_at ASC LIMIT ?`).all(...params);
+      return { posts: rows };
+    }
+  },
+  {
+    name: "generate_blog_post",
+    description: "SEO Agent: generate the full article body/meta/SEO-score for one queued blog_posts draft.",
+    args: "{\"postId\":\"...\"}",
+    handler: async (a) => {
+      const postId = str(a.postId || a.id);
+      if (!postId) throw new Error("postId is required");
+      const post = await generateFullBlogPost(postId);
+      return { id: post.id, title: post.title, generationStatus: post.generationStatus, seoScore: post.seoScore, seoScoreMax: post.seoScoreMax };
+    }
+  },
+  {
+    name: "publish_blog_post",
+    description: "SEO Agent: publish one ready blog_posts article to its site's configured CMS (WordPress/Shopify/Webflow/webhook).",
+    args: "{\"postId\":\"...\"}",
+    handler: async (a) => {
+      const postId = str(a.postId || a.id);
+      const post = getBlogPost(postId);
+      if (!post) throw new Error("Blog post not found");
+      if (post.generationStatus !== "ready" || !post.bodyMarkdown) throw new Error(`Post is ${post.generationStatus}; generate it first`);
+      const site = getSite(post.siteId);
+      if (!site) throw new Error("Site not found");
+      const result = await publishWebsite({
+        siteId: post.siteId,
+        title: post.title,
+        content: post.bodyMarkdown,
+        slug: post.slug,
+        excerpt: post.excerpt,
+        metaTitle: post.metaTitle,
+        metaDescription: post.metaDescription,
+        focusKeyword: post.focusKeyword,
+        featuredImageUrl: post.imageUrl
+      });
+      return { id: postId, site: site.name, result };
+    }
   },
   {
     name: "write_post",
