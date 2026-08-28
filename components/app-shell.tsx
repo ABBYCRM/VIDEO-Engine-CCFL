@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LogOut, Calendar, Library, X, Cog, Bird, Menu, Film } from "lucide-react";
+import { LogOut, Calendar, Library, X, Cog, Bird, Menu } from "lucide-react";
 import { DuckMark } from "@/components/duck-mark";
 import { MobileFrame } from "@/components/mobile-frame";
 
@@ -18,9 +18,16 @@ type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW"|"OPS";ex
 // Create called, so the page was a redundant front end regardless of the
 // image-gen flag. Root "/" now redirects to Calendar; app/page.tsx and
 // unified-create-console.tsx are left on disk, unlinked.
+// 2026-08-28 (later): Creator dropped from the nav too, by explicit
+// operator request — code-level only, for Claw to run. Claw's
+// creator_upload_video tool (lib/claw/tools.ts) now covers what the page
+// did: attach a video via Upload files, then Claw persists it and writes
+// the same scheduled_posts rows via lib/creator-upload.ts's
+// uploadAndScheduleCreatorVideo(), the exact function /api/creator/upload
+// still calls. "/creator" now redirects to Calendar; app/creator/page.tsx
+// and components/creator-console.tsx are left on disk, unlinked.
 const NAV:NavItem[]=[
   {href:"/claw",label:"Claw",icon:Bird,group:"CREATE"},
-  {href:"/creator",label:"Creator",icon:Film,group:"CREATE"},
   {href:"/calendar",label:"Calendar",icon:Calendar,group:"REVIEW"},
   {href:"/library",label:"Library",icon:Library,group:"REVIEW"},
   {href:"/settings",label:"Settings",icon:Cog,group:"OPS"}

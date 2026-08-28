@@ -19,10 +19,18 @@ const nextConfig: NextConfig = {
   // call the same server functions Create's own POST route called, so the
   // page was a redundant front end rather than a distinct capability.
   // app/page.tsx and unified-create-console.tsx are left on disk, unlinked.
+  //
+  // 2026-08-28 (later): "/creator" joined too, by explicit operator request
+  // (code-level only, for Claw to run). Claw's creator_upload_video tool
+  // calls the same lib/creator-upload.ts function /api/creator/upload does
+  // — that API route itself is untouched by this redirect (only the page
+  // is), so Claw's tool keeps working. app/creator/page.tsx and
+  // components/creator-console.tsx are left on disk, unlinked.
   async redirects() {
     const back = "/calendar?feature_disabled=image_generation";
     return [
       { source: "/", destination: back, permanent: false },
+      { source: "/creator", destination: back, permanent: false },
       { source: "/avatars", destination: back, permanent: false },
       { source: "/campaigns", destination: back, permanent: false },
       { source: "/pipeline", destination: back, permanent: false },

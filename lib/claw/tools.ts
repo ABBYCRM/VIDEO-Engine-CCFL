@@ -35,7 +35,10 @@ import {
   isComposioInstagramConnected
 } from "@/lib/instagram-composio";
 import { withInstagramFallback } from "@/lib/claw/fallback";
-import { deleteClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
+import { deleteClawFile, getFile as getClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
+import fsp from "node:fs/promises";
+import { parseCreatorFormats, uploadAndScheduleCreatorVideo } from "@/lib/creator-upload";
+import { generateCreatorCaption } from "@/lib/creator-caption";
 import { isComposioConfigured } from "@/lib/composio/client";
 import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
 import { writeStandalonePost } from "@/lib/nvidia/content-writer";
@@ -488,6 +491,51 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Delete a Claw file.",
     args: "{\"id\":\"...\"}",
     handler: async (a) => ({ ok: await deleteClawFile(str(a.id)) })
+  },
+  {
+    name: "creator_upload_video",
+    description: "Take one or more already-made videos attached to this chat (use Upload files first, then pass their file ids) and schedule them exactly like the Creator tab did: persist to the library, write one Calendar row per format. If caption is omitted, generates the same PI-compliant Case Closed FL branded caption Creator used to auto-generate.",
+    args: "{\"fileIds\":[\"claw-file-id\"],\"subject\":\"optional, used to auto-generate caption\",\"caption\":\"optional, skips auto-generation if given\",\"formats\":\"reel,story,post\",\"scheduledAt\":\"optional ISO time, defaults to +1h\",\"network\":\"instagram\",\"autoPost\":true,\"category\":\"ugc\",\"title\":\"optional\"}",
+    handler: async (a) => {
+      const fileIds = Array.isArray(a.fileIds) ? a.fileIds.map((v) => String(v)) : a.fileId ? [str(a.fileId)] : [];
+      if (!fileIds.length) throw new Error("fileIds is required — attach a video via Upload files first");
+      const formats = parseCreatorFormats(str(a.formats));
+      if (!formats.length) throw new Error("formats must include at least one of reel, story, post");
+      const subject = str(a.subject);
+      const category = str(a.category, "ugc");
+      let caption = str(a.caption);
+      if (!caption && subject) {
+        const generated = await generateCreatorCaption({ subject, category, format: formats[0] });
+        caption = generated.caption;
+      }
+
+      const uploaded: unknown[] = [];
+      const failed: { name: string; error: string }[] = [];
+      for (const fileId of fileIds) {
+        const file = getClawFile(fileId);
+        if (!file) { failed.push({ name: fileId, error: "No such Claw file — attach it with Upload files first" }); continue; }
+        try {
+          const bytes = await fsp.readFile(file.path);
+          const result = await uploadAndScheduleCreatorVideo({
+            bytes,
+            fileName: file.name,
+            mimeType: file.mime,
+            title: str(a.title) || file.name,
+            formats,
+            scheduledAt: str(a.scheduledAt) || undefined,
+            network: str(a.network, "instagram"),
+            autoPost: a.autoPost !== false,
+            caption,
+            category
+          });
+          uploaded.push(result);
+        } catch (e) {
+          failed.push({ name: file.name, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      if (!uploaded.length) throw new Error(failed[0]?.error || "Upload failed");
+      return { uploaded, failed, caption };
+    }
   },
   {
     name: "list_seo_queue",

@@ -330,7 +330,7 @@ function CalendarInner() {
       />
 
       {showFeatureDisabled && <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
-        <strong>That page has moved.</strong> Calendar, Creator, Library, Claw and Settings cover it now.
+        <strong>That page has moved.</strong> Calendar, Library, Claw and Settings cover it now.
       </div>}
 
       {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { saveUploadedVideo } from "@/lib/upper-videos";
-import { db } from "@/lib/db";
-import crypto from "node:crypto";
 import { filesFromForm, BULK_UPLOAD_MAX_FILE_BYTES, BULK_UPLOAD_MAX_FILES, BULK_UPLOAD_MAX_TOTAL_BYTES } from "@/lib/bulk-upload";
+import { parseCreatorFormats, uploadAndScheduleCreatorVideo } from "@/lib/creator-upload";
 
 export const runtime = "nodejs";
 
@@ -27,13 +25,11 @@ export const runtime = "nodejs";
  * files are uploaded in one request, every file gets the same formats/
  * scheduledAt/network/autoPost/caption options — "upload these 10 clips,
  * schedule all of them as Reel+Story at 9am tomorrow" in one call.
+ *
+ * Same server function (lib/creator-upload.ts's uploadAndScheduleCreatorVideo)
+ * backs Claw's creator_upload_video tool for files attached in chat instead
+ * of picked from this form.
  */
-const CONTENT_TYPE_BY_FORMAT: Record<string, string> = {
-  reel: "creator-reel",
-  story: "creator-story",
-  post: "creator-post"
-};
-
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
@@ -46,8 +42,7 @@ export async function POST(req: Request) {
 
     const labelBase = String(form.get("label") || "Creator upload").slice(0, 180);
     const titleBase = form.get("title") ? String(form.get("title")).slice(0, 180) : null;
-    const formatsRaw = String(form.get("formats") || "reel,story,post");
-    const formats = formatsRaw.split(",").map(s => s.trim().toLowerCase()).filter(s => ["reel", "story", "post"].includes(s));
+    const formats = parseCreatorFormats(String(form.get("formats") || ""));
     if (formats.length === 0) {
       return NextResponse.json({ error: "Pick at least one format (reel, story, or post)" }, { status: 400 });
     }
@@ -65,62 +60,21 @@ export async function POST(req: Request) {
     // bytes at a time, same rationale as lib/bulk-upload.ts.
     for (const file of files) {
       try {
-        if (!file.type.startsWith("video/")) throw new Error(`${file.name} is not a video`);
-        if (file.size < 1 || file.size > BULK_UPLOAD_MAX_FILE_BYTES) throw new Error(`${file.name} must be between 1 byte and ${(BULK_UPLOAD_MAX_FILE_BYTES / (1024 * 1024)).toFixed(0)}MB`);
-
-        const title = (titleBase || file.name).slice(0, 180);
-        const uploadId = `creator:${crypto.randomUUID()}`;
-        const saved = await saveUploadedVideo({
+        if (file.size > BULK_UPLOAD_MAX_FILE_BYTES) throw new Error(`${file.name} must be ${(BULK_UPLOAD_MAX_FILE_BYTES / (1024 * 1024)).toFixed(0)}MB or smaller`);
+        const result = await uploadAndScheduleCreatorVideo({
           bytes: Buffer.from(await file.arrayBuffer()),
-          title,
+          fileName: file.name,
           mimeType: file.type,
+          title: titleBase,
           label: labelBase,
-          id: uploadId
+          formats,
+          scheduledAt,
+          network,
+          autoPost,
+          caption,
+          category
         });
-
-        const ids: string[] = [];
-        const inserted: any[] = [];
-        for (const fmt of formats) {
-          const id = crypto.randomUUID();
-          db.prepare(
-            `INSERT INTO scheduled_posts(
-              id, title, network, scheduled_at, status, auto_post, caption,
-              content_type, media_url, media_type, source_asset_key,
-              site_id, campaign_id, planning_horizon_days, generation_status,
-              category
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-          ).run(
-            id,
-            `${title}${formats.length > 1 ? ` · ${fmt}` : ""}`.slice(0, 180),
-            network,
-            scheduledAt,
-            autoPost ? "approved" : "pending",
-            autoPost ? 1 : 0,
-            caption,
-            CONTENT_TYPE_BY_FORMAT[fmt],
-            saved.url,
-            file.type,
-            uploadId,
-            null,
-            null,
-            null,
-            "ready",
-            category
-          );
-          ids.push(id);
-          inserted.push({ id, contentType: CONTENT_TYPE_BY_FORMAT[fmt], network, scheduledAt, autoPost, caption });
-        }
-
-        results.push({
-          name: file.name,
-          uploadId,
-          url: saved.url,
-          mimeType: file.type,
-          bytes: file.size,
-          title,
-          scheduledPostIds: ids,
-          scheduled: inserted
-        });
+        results.push(result);
       } catch (e) {
         failed.push({ name: file.name, error: (e instanceof Error ? e.message : String(e)).slice(0, 300) });
       }
