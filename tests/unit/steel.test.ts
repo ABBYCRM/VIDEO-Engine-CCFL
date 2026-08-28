@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateSteelUrl } from "../../lib/steel.ts";
+import { validateSteelUrl } from "../../lib/steel-url.ts";
 
 test("validateSteelUrl accepts public HTTP(S) URLs", () => {
   assert.equal(validateSteelUrl("https://example.com/path?q=1"), "https://example.com/path?q=1");
