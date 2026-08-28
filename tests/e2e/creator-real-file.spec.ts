@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Operator-reported bug reproduction. The operator's flow:
+ * Operator-reported bug reproduction, kept alive at the API level after the
+ * Creator page was retired from the UI (2026-08-28, code-level only — see
+ * app-shell.tsx/next.config.ts). The original flow was:
  *   1. Open /creator on the phone
  *   2. Tap "Tap to pick a video", choose a 2.6MB .mp4
  *   3. Write a subject
@@ -9,98 +11,66 @@ import { test, expect } from "@playwright/test";
  *   5. Tap "Upload + schedule"
  *   6. See "Error: Failed to fetch" or the retry message
  *
- * This test uses a real-ish 2.6MB file to confirm the fix works for
- * the exact file size the operator was uploading.
+ * The page is gone, but /api/creator/upload (now backed by
+ * lib/creator-upload.ts's uploadAndScheduleCreatorVideo(), the same
+ * function Claw's creator_upload_video tool calls) is still exactly the
+ * code that broke. This test drives it directly with a real-ish 2.6MB file
+ * to confirm the fix still holds for the exact file size the operator was
+ * uploading.
+ *
+ * Uses a real browser login + page.evaluate(fetch(...)) rather than the
+ * bare `request` fixture — same pattern as integration.spec.ts's real
+ * composition-endpoint test. A real admin_session cookie is `secure` on
+ * this standalone production build, which the bare API-only request
+ * context won't reliably carry across an unrelated multipart POST; a real
+ * browser session does.
  */
-test.use({ ignoreHTTPSErrors: true, viewport: { width: 412, height: 915 } });
+test("creator upload API: 2.6MB real file schedules successfully", async ({ page }) => {
+  test.setTimeout(60000);
+  await page.goto("/login");
+  await page.getByPlaceholder("Admin password").fill(process.env.ADMIN_PASSWORD || "e2e-local-only");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Content Calendar" })).toBeVisible({ timeout: 15000 });
 
-test("creator upload: 2.6MB real file posts successfully", async ({ page, request }) => {
-  test.setTimeout(120000);
-  const readiness = await request.get("/api/ready");
-  expect(readiness.status(), `readiness HTTP ${readiness.status()}`).toBe(200);
-  const readinessBody = await readiness.json();
-  expect(readinessBody).toMatchObject({
-    ok: true,
-    service: "VIDEO-Engine",
-    check: "readiness"
+  const response = await page.evaluate(async () => {
+    // 2.6MB file (matches the operator's clip) — built in-browser so the
+    // bytes never cross the Node <-> browser evaluate() boundary. Only the
+    // size and mime type matter to this pipeline, not real MP4 validity, so
+    // a minimal ftyp-box-shaped prefix is enough.
+    const ftyp = new Uint8Array([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]); // size, "ftyp", "isom"
+    const bytes = new Uint8Array(ftyp.length + 2_600_000);
+    bytes.set(ftyp, 0);
+    const form = new FormData();
+    form.append("file", new File([bytes], "car-crash.mp4", { type: "video/mp4" }));
+    form.append("title", "E2E car-crash real file");
+    form.append("formats", "reel,story");
+    form.append("subject", "Got in a car crash");
+    form.append("caption", "Test caption — not published (autoPost left off)");
+    form.append("autoPost", "false");
+    const r = await fetch("/api/creator/upload", { method: "POST", body: form });
+    return { status: r.status, body: await r.json() };
   });
 
-  const login = await request.post("/api/admin/login", {
-    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
-    ignoreHTTPSErrors: true
-  });
-  expect(login.ok(), `login HTTP ${login.status()}`).toBeTruthy();
-  const storage = await request.storageState();
-  await page.context().addCookies(storage.cookies);
-
-  const probeRequests: string[] = [];
-  page.on("request", (req) => {
-    const pathname = new URL(req.url()).pathname;
-    if (pathname === "/api/ready" || pathname === "/api/health") {
-      probeRequests.push(pathname);
-    }
-  });
-
-  await page.goto("/creator", { waitUntil: "networkidle" });
-  await expect(page.getByRole("heading", { name: "Creator", exact: true })).toBeVisible();
-  // Opening the form must not start readiness or deep-health keepalive traffic.
-  expect(probeRequests).toHaveLength(0);
-
-  // 2.6MB file (matches the operator's clip)
-  const ftyp = Buffer.from(
-    "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAetbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAg==",
-    "base64"
-  );
-  const tiny = Buffer.concat([ftyp, Buffer.alloc(2_600_000, 0)]);
-
-  const fileInput = page.locator("input[type='file']");
-  await expect(fileInput).toHaveCount(1);
-  await fileInput.setInputFiles({ name: "car-crash.mp4", mimeType: "video/mp4", buffer: tiny });
-  await expect(page.locator("video")).toBeVisible();
-
-  // Fill subject (unique placeholder)
-  const subjectInput = page.locator("input[placeholder*='Biscayne' i]").first();
-  await subjectInput.fill("Got in a car crash");
-  await expect(subjectInput).toHaveValue("Got in a car crash");
-
-  // Listen for the upload response
-  const responsePromise = page.waitForResponse(
-    (r) => r.url().includes("/api/creator/upload") && r.request().method() === "POST",
-    { timeout: 90000 }
-  );
-  const readinessPromise = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === "/api/ready" && r.request().method() === "GET",
-    { timeout: 15000 }
-  );
-
-  const uploadBtn = page.getByRole("button", { name: "Upload + schedule" });
-  await expect(uploadBtn).toBeEnabled();
-  await uploadBtn.click();
-
-  const preflightResponse = await readinessPromise;
-  expect(preflightResponse.status(), `preflight HTTP ${preflightResponse.status()}`).toBe(200);
-  const response = await responsePromise;
-  expect(response.status(), `upload HTTP ${response.status()}`).toBe(200);
-
-  const body = await response.json();
+  expect(response.status, `upload HTTP ${response.status}`).toBe(200);
+  const body = response.body;
   expect(body.ok, "body.ok should be true").toBe(true);
   expect(body.scheduledPostIds?.length, "should have 2 scheduled post ids (reel + story)").toBe(2);
   // Confirm the file was actually uploaded (not empty body)
   expect(body.bytes, "file bytes should be ~2.6MB").toBeGreaterThan(2_500_000);
-  expect(probeRequests, "only one lightweight readiness preflight should run per upload").toEqual(["/api/ready"]);
 
-  // The regression contract: the busy spinner clears and the real scheduled
-  // upload appears in the UI, not merely in the API response.
-  await expect(uploadBtn).toBeEnabled();
-  await expect(uploadBtn.locator("svg.animate-spin")).toHaveCount(0);
-  await expect(page.getByText(/scheduled 2 post\(s\) for reel, story/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /car-crash · (reel|story)/ })).toBeVisible();
-  await expect(page.getByText(/reel \+ story|story \+ reel/)).toBeVisible();
+  const postsResponse = await page.evaluate(async () => {
+    const r = await fetch("/api/creator/posts");
+    return { status: r.status, body: await r.json() };
+  });
+  expect(postsResponse.status).toBe(200);
+  const ours = (postsResponse.body.posts || []).filter((p: any) => body.scheduledPostIds.includes(p.id));
+  expect(ours.length, "both scheduled rows should be listed").toBe(2);
 
-  // Screenshot of the success state
-  await page.screenshot({ path: "tests/e2e/screenshots/creator-real-file-success-412.png", fullPage: false });
-
-  // Clean up via API
+  // Clean up
   const ids = body.scheduledPostIds.join(",");
-  await request.delete(`/api/creator/posts?ids=${ids}`);
+  const del = await page.evaluate(async (ids: string) => {
+    const r = await fetch(`/api/creator/posts?ids=${ids}`, { method: "DELETE" });
+    return r.status;
+  }, ids);
+  expect(del).toBe(200);
 });
