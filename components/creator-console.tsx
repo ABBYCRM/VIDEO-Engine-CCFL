@@ -122,24 +122,6 @@ export function CreatorConsole() {
     if (t) setCategory(t.category);
   }, [topicId]);
 
-  // 2026-08-27 cold-start fix: ping /api/health on mount to wake the DO
-  // basic-tier instance before the operator taps Upload. If we don't do
-  // this, the first request to /api/creator/upload often hits a half-
-  // booted instance and Cloudflare's edge RSTs the connection — leaving
-  // the operator staring at a frozen button. The fetch below is fire-
-  // and-forget; we don't surface any state to the user.
-  //
-  // Plus a keepalive ping every 25s while the page is open so the DO
-  // basic-tier instance doesn't idle-evict (it goes cold after ~5 min
-  // of no traffic and takes 15-20s to wake).
-  useEffect(() => {
-    fetch("/api/health", { cache: "no-store" }).catch(() => {});
-    const t = setInterval(() => {
-      fetch("/api/health", { cache: "no-store" }).catch(() => {});
-    }, 25_000);
-    return () => clearInterval(t);
-  }, []);
-
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
@@ -222,22 +204,25 @@ export function CreatorConsole() {
   // publisher loop will pick up at the scheduled time. There is no AI
   // generation in this path.
   //
-  // Cold-start strategy: ping /api/health right before the upload. The
-  // DO basic-tier instance goes idle after ~5 min of no traffic and
-  // takes 15-20s to wake. The previous "retry" wrapper that lived here
-  // before was broken because FormData is a ReadableStream and gets
-  // consumed on first read — the second attempt sent an empty body. The
-  // video is on the operator's device, so the only safe thing to do on a
-  // network failure is surface a clean message and let them tap again.
+  // Send one bounded, lightweight readiness request immediately before the
+  // upload. Do not poll while the page is open: /api/health is an intentional
+  // deep diagnostic that contacts external providers, and page-level
+  // keepalives create unnecessary traffic. The previous "retry" wrapper that
+  // lived here was also unsafe because the FormData body is consumed by the
+  // first request. A network failure is surfaced so the operator can retry.
   async function postUploadToServer(): Promise<any> {
-    // Preflight: warm the server. Failures here are silently swallowed —
-    // we never block the upload on a preflight glitch.
+    // A failed readiness preflight must not prevent the real upload attempt.
+    const preflightController = new AbortController();
+    const preflightTimer = setTimeout(() => preflightController.abort(), 8_000);
     try {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), 8_000);
-      await fetch("/api/health", { cache: "no-store", signal: ac.signal });
-      clearTimeout(t);
+      await fetch("/api/ready", {
+        cache: "no-store",
+        signal: preflightController.signal
+      });
     } catch { /* ignore */ }
+    finally {
+      clearTimeout(preflightTimer);
+    }
 
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 120_000);

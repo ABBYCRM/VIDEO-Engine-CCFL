@@ -1,4 +1,5 @@
-// /api/health — comprehensive liveness check
+// /api/health — comprehensive operator-triggered diagnostic.
+// Infrastructure liveness/readiness checks must use /api/ready instead.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pingPg } from "@/lib/db-pg-bootstrap";

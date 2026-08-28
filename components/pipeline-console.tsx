@@ -148,7 +148,7 @@ const YOUTUBE_CALLS: ApiCall[] = [
 ];
 
 const SYSTEM_CALLS: ApiCall[] = [
-  { method: "GET", path: "/api/health", label: "Read /api/health", description: "Fast health probe — DBs, provider statuses, latency.", tone: "secondary" },
+  { method: "GET", path: "/api/health", label: "Read /api/health", description: "Deep diagnostic — databases, live provider statuses, and latency.", tone: "secondary" },
   { method: "GET", path: "/api/admin/system", label: "Read /api/admin/system", description: "Full operator dashboard: providers, jobs, avatars, calendar, env flags.", tone: "secondary" },
   { method: "GET", path: "/api/admin/system/a2e-debug", label: "A2E debug dump", description: "Inspect A2E provider health, rate limits, last error body, and account remaining time.", tone: "secondary" },
   { method: "POST", path: "/api/admin/system/migrate-pg", body: {}, label: "Run PG migrations", description: "Apply schema migrations to the Postgres mirror if DATABASE_URL is set.", tone: "secondary" },
