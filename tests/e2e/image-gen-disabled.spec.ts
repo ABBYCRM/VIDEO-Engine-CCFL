@@ -12,7 +12,10 @@ test.use({ ignoreHTTPSErrors: true, viewport: { width: 412, height: 915 } });
 
 test("image-gen disabled state is correct on the live build", async ({ page, request }) => {
   test.setTimeout(120000);
-  const login = await request.post("/api/admin/login", { data: { password: "1234" }, ignoreHTTPSErrors: true });
+  const login = await request.post("/api/admin/login", {
+    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
+    ignoreHTTPSErrors: true
+  });
   expect(login.ok()).toBeTruthy();
   const storage = await request.storageState();
   await page.context().addCookies(storage.cookies);

@@ -13,7 +13,10 @@ test.use({
 test("creator page renders all the controls", async ({ page, request }) => {
   test.setTimeout(60000);
   // Login (this is a single API call to /api/admin/login, no token burn)
-  const login = await request.post("/api/admin/login", { data: { password: "1234" }, ignoreHTTPSErrors: true });
+  const login = await request.post("/api/admin/login", {
+    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
+    ignoreHTTPSErrors: true
+  });
   expect(login.ok(), `login HTTP ${login.status()}`).toBeTruthy();
   const storage = await request.storageState();
   await page.context().addCookies(storage.cookies);

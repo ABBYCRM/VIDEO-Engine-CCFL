@@ -10,7 +10,7 @@ test("inspect mobile create page", async ({ page, request }) => {
 
   // Login
   const loginRes = await request.post("/api/admin/login", {
-    data: { password: "1234" },
+    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
     ignoreHTTPSErrors: true
   });
   expect(loginRes.ok()).toBeTruthy();

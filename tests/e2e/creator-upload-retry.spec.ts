@@ -3,16 +3,19 @@ import { test, expect } from "@playwright/test";
 /**
  * Validates the Creator upload flow with a real (small) video file.
  * Does NOT call any AI provider. Confirms:
- *  - the network retry wrapper compiles and runs
+ *  - the upload request completes without leaving the UI busy
  *  - the upload succeeds end-to-end and the scheduled-posts list is populated
  *  - the multi-format (reel + story) inserts both rows
  */
 test.use({ ignoreHTTPSErrors: true, viewport: { width: 412, height: 915 } });
 
-test("creator upload: multi-format with retry wrapper", async ({ page, request }) => {
+test("creator upload: multi-format request clears busy state", async ({ page, request }) => {
   test.setTimeout(120000);
-  const login = await request.post("/api/admin/login", { data: { password: "1234" }, ignoreHTTPSErrors: true });
-  expect(login.ok()).toBeTruthy();
+  const login = await request.post("/api/admin/login", {
+    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
+    ignoreHTTPSErrors: true
+  });
+  expect(login.ok(), `login HTTP ${login.status()}`).toBeTruthy();
   const storage = await request.storageState();
   await page.context().addCookies(storage.cookies);
 
