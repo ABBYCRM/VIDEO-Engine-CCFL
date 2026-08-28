@@ -54,6 +54,9 @@ import { composioCommentOnPost, composioGetMyInfo, composioPostUpdate, isLinkedI
 import { composioListComments as composioRedditListComments, composioReplyComment as composioRedditReplyComment, composioSearchSubreddits, composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
 import { redditPreSubmitReminder } from "@/lib/reddit/rules-check";
 import { isImageGenEnabled } from "@/lib/feature-flags";
+import { listInfluencers, updateInfluencerStatus } from "@/lib/influencers";
+import { discoverByInstagramUsername, discoverFromUrl } from "@/lib/influencer-discovery";
+import { sendOutreach } from "@/lib/influencer-outreach";
 
 export type ClawTool = {
   name: string;
@@ -600,6 +603,54 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Reply to a Reddit post or comment (thingId is the fullname, e.g. t3_xxx or t1_xxx).",
     args: "{\"thingId\":\"...\",\"text\":\"...\"}",
     handler: async (a) => composioRedditReplyComment(str(a.thingId), str(a.text))
+  },
+  {
+    name: "discover_influencers",
+    description: "Influencer Agent: discover creators either by public Instagram username (first-party Graph business_discovery, no scraping) or from one operator-supplied public URL (Steel + AI extraction of that single page's listed creators).",
+    args: "{\"mode\":\"instagram\",\"username\":\"...\"} OR {\"mode\":\"url\",\"sourceUrl\":\"https://...\",\"nicheHint\":\"optional\"}",
+    handler: async (a) => {
+      const mode = str(a.mode, "instagram");
+      if (mode === "instagram") {
+        const username = str(a.username);
+        if (!username) throw new Error("username is required");
+        return { influencer: await discoverByInstagramUsername(username) };
+      }
+      if (mode === "url") {
+        const sourceUrl = str(a.sourceUrl);
+        if (!sourceUrl) throw new Error("sourceUrl is required");
+        return discoverFromUrl({ sourceUrl, nicheHint: str(a.nicheHint) || null });
+      }
+      throw new Error("mode must be instagram or url");
+    }
+  },
+  {
+    name: "list_influencers",
+    description: "List tracked influencers, optionally by status.",
+    args: "{\"status\":\"optional prospect|contacted|negotiating|active|declined\"}",
+    handler: async (a) => ({ influencers: listInfluencers(str(a.status) || undefined) })
+  },
+  {
+    name: "update_influencer_status",
+    description: "Update an influencer's pipeline status and/or notes.",
+    args: "{\"id\":\"...\",\"status\":\"contacted\",\"notes\":\"optional\"}",
+    handler: async (a) => {
+      const influencer = updateInfluencerStatus(str(a.id), str(a.status), a.notes !== undefined ? str(a.notes) : undefined);
+      if (!influencer) throw new Error("Influencer not found");
+      return { influencer };
+    }
+  },
+  {
+    name: "send_influencer_outreach",
+    description: "Draft (and send, for email) an outreach message to a tracked influencer. Instagram DM is draft-only unless an active-conversation IGSID is supplied — Instagram's API cannot cold-message a stranger.",
+    args: "{\"id\":\"...\",\"channel\":\"email|instagram_dm\",\"brandContext\":\"optional\",\"proposal\":\"optional\",\"emailFrom\":\"optional verified sender\",\"instagramIgsid\":\"optional\"}",
+    handler: async (a) => sendOutreach({
+      influencerId: str(a.id),
+      channel: str(a.channel) === "email" ? "email" : "instagram_dm",
+      brandContext: str(a.brandContext) || null,
+      proposal: str(a.proposal) || null,
+      emailFrom: str(a.emailFrom) || undefined,
+      instagramIgsid: str(a.instagramIgsid) || null
+    })
   },
   {
     name: "audit_website",

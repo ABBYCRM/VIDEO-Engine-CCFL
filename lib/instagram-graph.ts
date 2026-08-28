@@ -180,6 +180,35 @@ async function graphRequest(method: "GET" | "POST" | "DELETE", path: string, fie
   return json as Record<string, any>;
 }
 
+/**
+ * Business Discovery: look up a PUBLIC Instagram Business/Creator account's
+ * profile stats by username, using this app's own connected account as the
+ * query anchor. This is the one first-party (non-scraping) discovery path
+ * available to the Influencer Agent — no login/token needed for the target
+ * account, only for the querying (this app's) account.
+ * https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/business-discovery
+ */
+export async function businessDiscovery(username: string) {
+  const clean = username.replace(/^@/, "").trim();
+  if (!clean) throw new Error("username is required");
+  const igUserId = getInstagramUserId();
+  const json = await graphRequest("GET", igUserId, {
+    fields: `business_discovery.username(${clean}){username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website}`
+  });
+  const discovery = json.business_discovery;
+  if (!discovery) throw new InstagramGraphError(`No public business/creator account found for @${clean}`, "not_found");
+  return discovery as {
+    username: string;
+    name?: string;
+    biography?: string;
+    followers_count?: number;
+    follows_count?: number;
+    media_count?: number;
+    profile_picture_url?: string;
+    website?: string;
+  };
+}
+
 export async function instagramHealthcheck() {
   if (!isInstagramConfigured()) {
     return { configured: false, live: false, username: null as string | null, igUserId: null as string | null, error: "not configured", dmEnabled: isInstagramDmEnabled() };
