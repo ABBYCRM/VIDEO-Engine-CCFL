@@ -2,19 +2,22 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Clapperboard, LogOut, Calendar, Library, X, Cog, Bird, Menu, Film } from "lucide-react";
+import { LogOut, Calendar, Library, X, Cog, Bird, Menu, Film } from "lucide-react";
 import { DuckMark } from "@/components/duck-mark";
 import { MobileFrame } from "@/components/mobile-frame";
 
 type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW"|"OPS";exact?:boolean};
 // 2026-08-27 operator directive: image generation is disabled. Show only the
-// surfaces that work without it — Create (no longer generates, surfaces a
-// banner), Creator (manual upload), Calendar, Library, Claw, Settings.
-// The other pages still exist on disk (commented / 410-gated) so we can
-// re-enable later by reverting the IMAGE_GEN_ENABLED flag.
+// surfaces that work without it — Creator (manual upload), Calendar, Library,
+// Claw, Settings. The other pages still exist on disk (commented / 410-gated)
+// so we can re-enable later by reverting the IMAGE_GEN_ENABLED flag.
+// 2026-08-28: Create dropped from the nav too — Claw's generate_video /
+// generate_still / ugc_batch_generate tools are the same server functions
+// Create called, so the page was a redundant (and, with generation disabled,
+// fully inert) front end. Root "/" now redirects to Calendar; app/page.tsx
+// and unified-create-console.tsx are left on disk, unlinked.
 const NAV:NavItem[]=[
   {href:"/claw",label:"Claw",icon:Bird,group:"CREATE"},
-  {href:"/",label:"Create",icon:Clapperboard,group:"CREATE",exact:true},
   {href:"/creator",label:"Creator",icon:Film,group:"CREATE"},
   {href:"/calendar",label:"Calendar",icon:Calendar,group:"REVIEW"},
   {href:"/library",label:"Library",icon:Library,group:"REVIEW"},

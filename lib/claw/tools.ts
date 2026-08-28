@@ -159,6 +159,7 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Start one Hedra/Veo/Grok/A2E video. Same as Create.",
     args: "{\"mission\":\"...\",\"category\":\"car_accident|rideshare|trucking|slip_fall|ugc\",\"provider\":\"hedra\",\"model\":\"fal/grok-video-i2v\"}",
     handler: async (a) => {
+      if (!isImageGenEnabled()) throw new Error("Image/video generation is disabled (manual-calendar mode). Set IMAGE_GEN_ENABLED=true to re-enable.");
       const category = str(a.category, "ugc") as CampaignCategory;
       if (!CATEGORIES.has(category)) throw new Error("category must be car_accident, rideshare, trucking, slip_fall, or ugc");
       const provider = (isProviderId(str(a.provider)) ? str(a.provider) : undefined) as ProviderId | undefined;
@@ -206,6 +207,7 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Generate a campaign still into Library + Calendar.",
     args: "{\"prompt\":\"...\",\"avatarId\":\"optional\"}",
     handler: async (a) => {
+      if (!isImageGenEnabled()) throw new Error("Image/video generation is disabled (manual-calendar mode). Set IMAGE_GEN_ENABLED=true to re-enable.");
       const prompt = str(a.prompt || a.mission);
       if (!prompt) throw new Error("prompt is required");
       const still = await generateCampaignStill({ prompt, avatarId: str(a.avatarId) || null });
