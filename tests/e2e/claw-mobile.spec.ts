@@ -12,7 +12,10 @@ test.use({
 
 test("claw page renders at mobile size with correct layout", async ({ page, request }) => {
   test.setTimeout(60000);
-  const login = await request.post("/api/admin/login", { data: { password: "1234" }, ignoreHTTPSErrors: true });
+  const login = await request.post("/api/admin/login", {
+    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
+    ignoreHTTPSErrors: true
+  });
   expect(login.ok()).toBeTruthy();
   const storage = await request.storageState();
   await page.context().addCookies(storage.cookies);
