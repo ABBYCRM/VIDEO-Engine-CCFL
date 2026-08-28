@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { saveUploadedVideo } from "@/lib/upper-videos";
 import { db } from "@/lib/db";
 import crypto from "node:crypto";
-import { filesFromForm, BULK_UPLOAD_MAX_FILE_BYTES } from "@/lib/bulk-upload";
+import { filesFromForm, BULK_UPLOAD_MAX_FILE_BYTES, BULK_UPLOAD_MAX_FILES, BULK_UPLOAD_MAX_TOTAL_BYTES } from "@/lib/bulk-upload";
 
 export const runtime = "nodejs";
 
@@ -40,6 +40,9 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const files = filesFromForm(form);
     if (!files.length) return NextResponse.json({ error: "A video file is required" }, { status: 400 });
+    if (files.length > BULK_UPLOAD_MAX_FILES) return NextResponse.json({ error: `A batch is limited to ${BULK_UPLOAD_MAX_FILES} files` }, { status: 400 });
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+    if (totalBytes > BULK_UPLOAD_MAX_TOTAL_BYTES) return NextResponse.json({ error: `Batch total size ${(totalBytes / (1024 * 1024)).toFixed(0)}MB exceeds the ${(BULK_UPLOAD_MAX_TOTAL_BYTES / (1024 * 1024)).toFixed(0)}MB batch limit` }, { status: 400 });
 
     const labelBase = String(form.get("label") || "Creator upload").slice(0, 180);
     const titleBase = form.get("title") ? String(form.get("title")).slice(0, 180) : null;

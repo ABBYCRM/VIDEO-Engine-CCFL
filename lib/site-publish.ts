@@ -55,7 +55,22 @@ export async function publishWebsite(input:{siteId:string;title:string;content:s
     const auth={"x-shopify-access-token":secret};
     const r=await fetch(site.publishEndpoint,{method:"POST",headers:{"content-type":"application/json",...auth},body:JSON.stringify({article:{title:input.metaTitle||input.title,body_html:markdownToHtml(input.content),summary_html:input.metaDescription||input.excerpt||undefined,handle:input.slug||undefined,published:true,tags:input.focusKeyword||undefined,image:absoluteMediaUrl(input.featuredImageUrl)?{src:absoluteMediaUrl(input.featuredImageUrl)}:undefined}}),cache:"no-store"});
     const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(`Shopify publish HTTP ${r.status}: ${String(d?.errors?JSON.stringify(d.errors):JSON.stringify(d)).slice(0,400)}`);
-    return {provider:"shopify",id:d?.article?.id||null,url:d?.article?.handle?`${new URL(site.publishEndpoint).origin.replace(/\.myshopify\.com$/,".myshopify.com")}/blogs/news/${d.article.handle}`:null,result:d};
+    // The storefront URL needs the blog's own handle (e.g. "news", "press"),
+    // which is NOT the same as blog_id and isn't returned by the article
+    // create call — look it up rather than guessing "news" for every store.
+    let url:string|null=null;
+    if(d?.article?.handle){
+      try{
+        const blogIdMatch=site.publishEndpoint.match(/\/blogs\/(\d+)\/articles\.json$/);
+        if(blogIdMatch){
+          const blogUrl=site.publishEndpoint.replace(/\/blogs\/\d+\/articles\.json$/,`/blogs/${blogIdMatch[1]}.json`);
+          const blogRes=await fetch(blogUrl,{headers:auth,cache:"no-store"});
+          const blogData=await blogRes.json().catch(()=>({}));
+          if(blogRes.ok&&blogData?.blog?.handle) url=`${new URL(site.publishEndpoint).origin}/blogs/${blogData.blog.handle}/${d.article.handle}`;
+        }
+      }catch{ /* best-effort; publish already succeeded, a missing preview URL isn't fatal */ }
+    }
+    return {provider:"shopify",id:d?.article?.id||null,url,result:d};
   }
   if(site.publishMode==="webflow"){
     // publishEndpoint is the full collection items URL, e.g.

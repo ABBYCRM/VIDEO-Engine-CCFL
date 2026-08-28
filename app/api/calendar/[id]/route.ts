@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ensureBrandContactInCaption } from "@/lib/brand-contact";
+import { forceManualApprovalForReddit } from "@/lib/reddit/rules-check";
 import "@/lib/calendar-assets";
 const NETWORKS=new Set(["instagram","facebook","youtube","tiktok","linkedin","website","x","reddit"]),STATUSES=new Set(["draft","pending","approved","published","failed"]),FORMATS=new Set(["podcast","ugc","newsroom","direct","cinematic","image","blog"]);
 function rowToPost(row:any){return{id:row.id,title:row.title,network:row.network,scheduledAt:row.scheduled_at,status:row.status,autoPost:Boolean(row.auto_post),caption:row.caption,contentType:row.content_type||"ugc",videoJobId:row.video_job_id,upperJobId:row.upper_job_id,lowerJobId:row.lower_job_id,mediaUrl:row.media_url,mediaType:row.media_type,sourceAssetKey:row.source_asset_key,siteId:row.site_id,campaignId:row.campaign_id,planningHorizonDays:row.planning_horizon_days,contentBody:row.content_body,seoTitle:row.seo_title,metaDescription:row.meta_description,slug:row.slug,focusKeyword:row.focus_keyword,generationStatus:row.generation_status||"ready",connectedAccountId:row.connected_account_id,publishedAt:row.published_at,verifiedAt:row.verified_at,instagramPermalink:row.instagram_permalink,verificationError:row.verification_error,youtubeVideoId:row.youtube_video_id,youtubeError:row.youtube_error,error:row.error,redditSubreddit:row.reddit_subreddit,xTweetId:row.x_tweet_id,linkedinPostUrn:row.linkedin_post_urn,redditPostId:row.reddit_post_id,createdAt:row.created_at,updatedAt:row.updated_at};}
@@ -16,9 +17,8 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
   const mediaType=body.mediaType===undefined?current.media_type:(body.mediaType?String(body.mediaType):null);
   const generationStatus=body.generationStatus===undefined?current.generation_status:String(body.generationStatus);
   const error=body.error===undefined?current.error:(body.error?String(body.error).slice(0,2000):null);
-  // Reddit self-promotion rules are per-community and can't be verified by
-  // any API — Reddit items are always forced back to manual approval.
-  const autoPost=network==="reddit"?0:(body.autoPost===undefined?current.auto_post:body.autoPost?1:0);
+  const requestedAutoPost=Boolean(body.autoPost===undefined?current.auto_post:body.autoPost);
+  const autoPost=forceManualApprovalForReddit(network,requestedAutoPost)?1:0;
   const redditSubreddit=body.redditSubreddit===undefined?current.reddit_subreddit:(body.redditSubreddit?String(body.redditSubreddit).replace(/^r\//,"").slice(0,80):null);
   db.prepare(`UPDATE scheduled_posts SET title=?,network=?,scheduled_at=?,status=?,auto_post=?,caption=?,content_type=?,connected_account_id=?,media_url=?,media_type=?,site_id=?,campaign_id=?,planning_horizon_days=?,content_body=?,seo_title=?,meta_description=?,slug=?,focus_keyword=?,generation_status=?,video_job_id=?,error=?,reddit_subreddit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
     title,network,scheduledAt,status,autoPost,body.caption===undefined?current.caption:ensureBrandContactInCaption(String(body.caption)).slice(0,5000),contentType,

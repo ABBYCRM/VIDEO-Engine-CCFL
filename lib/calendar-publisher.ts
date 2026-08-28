@@ -8,6 +8,7 @@ import { isYouTubeConnected, uploadYouTubeShort } from "@/lib/youtube";
 import { composioPostTweet, isXComposioConnected } from "@/lib/x-composio";
 import { composioPostUpdate, isLinkedInComposioConnected } from "@/lib/linkedin-composio";
 import { composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
+import { forceManualApprovalForReddit } from "@/lib/reddit/rules-check";
 import { getPersistentLibraryAsset, savePersistentLibraryAsset } from "@/lib/persistent-library";
 import { spawn } from "node:child_process";
 import { promises as fsp } from "node:fs";
@@ -222,8 +223,12 @@ export async function runCalendarPublisherOnce(){
     // Reddit never auto-publishes, regardless of auto_post — subreddit
     // self-promotion rules are enforced by human moderators per-community,
     // not reliably by any API (lib/reddit/rules-check.ts). A Reddit item
-    // always needs a manual Publish click.
-    const rows=db.prepare("SELECT * FROM scheduled_posts WHERE auto_post=1 AND status='approved' AND network<>'reddit' AND scheduled_at<=? AND (generation_status IS NULL OR generation_status='ready') ORDER BY scheduled_at ASC LIMIT 10").all(new Date().toISOString()) as any[];
+    // always needs a manual Publish click. The SQL exclusion below is an
+    // efficient first pass; the forceManualApprovalForReddit() filter after
+    // it is the actual single source of truth for this rule, so the two
+    // can't silently drift apart if that rule ever changes.
+    const rows=(db.prepare("SELECT * FROM scheduled_posts WHERE auto_post=1 AND status='approved' AND network<>'reddit' AND scheduled_at<=? AND (generation_status IS NULL OR generation_status='ready') ORDER BY scheduled_at ASC LIMIT 10").all(new Date().toISOString()) as any[])
+      .filter(post=>forceManualApprovalForReddit(post.network,true));
     for(const post of rows){
       if(post.network==="instagram"&&!claimInstagramPublish(post.id))continue;
       try{await publishRow(post);db.prepare("UPDATE scheduled_posts SET status='published',published_at=?,error=NULL,publishing_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(new Date().toISOString(),post.id);}

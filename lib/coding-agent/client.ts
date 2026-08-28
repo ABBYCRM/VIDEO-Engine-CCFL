@@ -117,8 +117,12 @@ async function sandboxRequest(path: string, body: Record<string, unknown>): Prom
 }
 
 function logCommand(sessionId: string, command: string, exitCode: number | null, outputExcerpt: string) {
+  // Scrub the command text too, not just its output: a command that embeds
+  // a secret directly (e.g. a curl with an Authorization header) must not
+  // leave that secret sitting at rest in coding_commands, since
+  // listCodingCommands() returns this table verbatim.
   db.prepare("INSERT INTO coding_commands(id,session_id,command,exit_code,output_excerpt) VALUES(?,?,?,?,?)").run(
-    crypto.randomUUID(), sessionId, command.slice(0, 2000), exitCode, scrubSecrets(outputExcerpt).slice(0, MAX_OUTPUT_CHARS)
+    crypto.randomUUID(), sessionId, scrubSecrets(command).slice(0, 2000), exitCode, scrubSecrets(outputExcerpt).slice(0, MAX_OUTPUT_CHARS)
   );
 }
 
