@@ -48,11 +48,33 @@ export async function publishWebsite(input:{siteId:string;title:string;content:s
     const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(`WordPress publish HTTP ${r.status}: ${String(d?.message||JSON.stringify(d)).slice(0,400)}`);
     return {provider:"wordpress",id:d?.id||null,url:d?.link||null,featuredMedia,result:d};
   }
+  if(site.publishMode==="shopify"){
+    // publishEndpoint is the full articles.json URL for one blog, e.g.
+    // https://{shop}.myshopify.com/admin/api/2024-10/blogs/{blog_id}/articles.json
+    // publishSecret is the Shopify Admin API access token (shpat_...).
+    const auth={"x-shopify-access-token":secret};
+    const r=await fetch(site.publishEndpoint,{method:"POST",headers:{"content-type":"application/json",...auth},body:JSON.stringify({article:{title:input.metaTitle||input.title,body_html:markdownToHtml(input.content),summary_html:input.metaDescription||input.excerpt||undefined,handle:input.slug||undefined,published:true,tags:input.focusKeyword||undefined,image:absoluteMediaUrl(input.featuredImageUrl)?{src:absoluteMediaUrl(input.featuredImageUrl)}:undefined}}),cache:"no-store"});
+    const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(`Shopify publish HTTP ${r.status}: ${String(d?.errors?JSON.stringify(d.errors):JSON.stringify(d)).slice(0,400)}`);
+    return {provider:"shopify",id:d?.article?.id||null,url:d?.article?.handle?`${new URL(site.publishEndpoint).origin.replace(/\.myshopify\.com$/,".myshopify.com")}/blogs/news/${d.article.handle}`:null,result:d};
+  }
+  if(site.publishMode==="webflow"){
+    // publishEndpoint is the full collection items URL, e.g.
+    // https://api.webflow.com/v2/collections/{collection_id}/items
+    // publishSecret is a Webflow site/API token. Field slugs below match the
+    // default Webflow blog-template collection ("name","slug","post-body",
+    // "post-summary","main-image"); a site using custom field slugs needs
+    // its own mapping, same as any CMS integration.
+    const auth={"authorization":`Bearer ${secret}`};
+    const image=absoluteMediaUrl(input.featuredImageUrl);
+    const r=await fetch(site.publishEndpoint,{method:"POST",headers:{"content-type":"application/json",...auth},body:JSON.stringify({isArchived:false,isDraft:false,fieldData:{name:input.metaTitle||input.title,slug:input.slug||undefined,"post-body":markdownToHtml(input.content),"post-summary":input.metaDescription||input.excerpt||undefined,...(image?{"main-image":{url:image}}:{})}}),cache:"no-store"});
+    const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(`Webflow publish HTTP ${r.status}: ${String(d?.message||JSON.stringify(d)).slice(0,400)}`);
+    return {provider:"webflow",id:d?.id||null,url:null,result:d};
+  }
   if(site.publishMode==="webhook"){
     const r=await fetch(site.publishEndpoint,{method:"POST",headers:{"content-type":"application/json","authorization":`Bearer ${secret}`},body:JSON.stringify({siteId:site.id,siteUrl:site.url,title:input.title,contentMarkdown:input.content,contentHtml:markdownToHtml(input.content),slug:input.slug||null,excerpt:input.excerpt||null,seo:{title:input.metaTitle||null,description:input.metaDescription||null,focusKeyword:input.focusKeyword||null},featuredImageUrl:absoluteMediaUrl(input.featuredImageUrl)||input.featuredImageUrl||null,publish:true}),cache:"no-store"});
     const text=await r.text(); if(!r.ok) throw new Error(`Website webhook HTTP ${r.status}: ${text.slice(0,400)}`);
     let result:any=text; try{result=JSON.parse(text)}catch{}
     return {provider:"webhook",result};
   }
-  throw new Error("Choose WordPress REST or Custom webhook as the publishing mode in Sites.");
+  throw new Error("Choose WordPress REST, Shopify, Webflow, or Custom webhook as the publishing mode in Sites.");
 }

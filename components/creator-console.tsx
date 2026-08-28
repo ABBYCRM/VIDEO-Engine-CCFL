@@ -93,8 +93,8 @@ type CreatorPost = {
 };
 
 export function CreatorConsole() {
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [label, setLabel] = useState("Creator upload");
   const [formats, setFormats] = useState<Format[]>(["reel", "story"]);
@@ -138,37 +138,39 @@ export function CreatorConsole() {
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
   function pickFile() { fileInputRef.current?.click(); }
+  function revokeAllPreviews() { for (const url of previews) URL.revokeObjectURL(url); }
   function replaceFile() {
     // Clear input so picking the same filename re-triggers onChange on mobile
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-    setFile(null);
-    if (filePreview) {
-      URL.revokeObjectURL(filePreview);
-      setFilePreview(null);
-    }
+    revokeAllPreviews();
+    setFiles([]);
+    setPreviews([]);
     pickFile();
   }
   function clearFile() {
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setFile(null);
-    if (filePreview) {
-      URL.revokeObjectURL(filePreview);
-      setFilePreview(null);
-    }
+    revokeAllPreviews();
+    setFiles([]);
+    setPreviews([]);
   }
-  function onFileChosen(f: File | null) {
-    setFile(f);
-    if (f) {
-      if (filePreview) URL.revokeObjectURL(filePreview);
-      const url = URL.createObjectURL(f);
-      setFilePreview(url);
-      if (!title) setTitle(f.name.replace(/\.[a-z0-9]+$/i, ""));
-    } else {
-      if (filePreview) URL.revokeObjectURL(filePreview);
-      setFilePreview(null);
-    }
+  function removeFileAt(index: number) {
+    const url = previews[index];
+    if (url) URL.revokeObjectURL(url);
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    setPreviews(prev => prev.filter((_, i) => i !== index));
+  }
+  /** Accepts one or many files. Picking more than one switches the picker
+   *  into bulk mode: a compact file list instead of a single video preview,
+   *  sharing the same title/label/formats/schedule/caption across the batch. */
+  function onFileChosen(list: FileList | null) {
+    const picked = list ? Array.from(list) : [];
+    if (!picked.length) return;
+    revokeAllPreviews();
+    setFiles(picked);
+    setPreviews(picked.map(f => URL.createObjectURL(f)));
+    if (!title && picked.length === 1) setTitle(picked[0].name.replace(/\.[a-z0-9]+$/i, ""));
   }
   function toggleFormat(f: Format) {
     setFormats(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
@@ -243,10 +245,8 @@ export function CreatorConsole() {
 
   function buildFormData(): FormData {
     const fd = new FormData();
-    if (file) {
-      fd.append("file", file, file.name);
-    }
-    fd.append("title", title || (file ? file.name : ""));
+    for (const f of files) fd.append("files", f, f.name);
+    fd.append("title", title || (files.length === 1 ? files[0].name : ""));
     fd.append("label", label);
     fd.append("formats", formats.join(","));
     fd.append("scheduledAt", combineDateAndTime(date, time));
@@ -260,8 +260,8 @@ export function CreatorConsole() {
 
   async function upload() {
     setResult(null);
-    if (!file) {
-      setResult({ ok: false, error: "Pick a video first" });
+    if (!files.length) {
+      setResult({ ok: false, error: "Pick one or more videos first" });
       return;
     }
     if (formats.length === 0) {
@@ -279,10 +279,18 @@ export function CreatorConsole() {
     setBusy("upload");
     try {
       const d = await postUploadToServer();
-      setResult({ ok: true, ids: d.scheduledPostIds, message: `Scheduled ${d.scheduledPostIds?.length || 0} post(s) for ${d.formats?.join(", ")}` });
+      const uploadedCount = Array.isArray(d.uploaded) ? d.uploaded.length : 1;
+      const failedCount = Array.isArray(d.failed) ? d.failed.length : 0;
+      const totalScheduled = Array.isArray(d.uploaded) ? d.uploaded.reduce((n: number, u: any) => n + (u.scheduledPostIds?.length || 0), 0) : (d.scheduledPostIds?.length || 0);
+      setResult({
+        ok: true,
+        ids: d.scheduledPostIds,
+        message: `Uploaded ${uploadedCount} video(s), scheduled ${totalScheduled} post(s) for ${d.formats?.join(", ")}${failedCount ? ` — ${failedCount} file(s) failed: ${d.failed.map((f: any) => `${f.name} (${f.error})`).join("; ")}` : ""}`
+      });
       // Reset only the per-upload bits; keep topic + date+time
-      setFile(null);
-      setFilePreview(null);
+      revokeAllPreviews();
+      setFiles([]);
+      setPreviews([]);
       setTitle("");
       loadPosts();
     } catch (e) {
@@ -332,10 +340,10 @@ export function CreatorConsole() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Video</label>
-              <span className="text-[11px] text-slate-500">MP4 / WebM / MOV — up to 250MB</span>
+              <span className="text-[11px] text-slate-500">MP4 / WebM / MOV — up to 250MB each, up to 25 at once</span>
             </div>
-            <input ref={fileInputRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/*" className="hidden" onChange={e => onFileChosen(e.target.files?.[0] || null)} />
-            {filePreview ? (
+            <input ref={fileInputRef} type="file" multiple accept="video/mp4,video/webm,video/quicktime,video/*" className="hidden" onChange={e => onFileChosen(e.target.files)} />
+            {files.length === 1 && previews[0] ? (
               <>
                 <button
                   type="button"
@@ -343,11 +351,11 @@ export function CreatorConsole() {
                   className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-200 bg-black text-slate-500 hover:border-violet-300"
                   aria-label="Replace video"
                 >
-                  <video src={filePreview} controls className="h-full w-full object-cover" />
+                  <video src={previews[0]} controls className="h-full w-full object-cover" />
                 </button>
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[11px] text-slate-500 truncate min-w-0">
-                    {file?.name} · {file ? (file.size / 1024 / 1024).toFixed(1) : "0"} MB
+                    {files[0].name} · {(files[0].size / 1024 / 1024).toFixed(1)} MB
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
@@ -370,6 +378,23 @@ export function CreatorConsole() {
                   </div>
                 </div>
               </>
+            ) : files.length > 1 ? (
+              <div className="rounded-2xl border-2 border-slate-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between text-[11px] font-medium text-slate-600">
+                  <span>{files.length} videos selected · {(files.reduce((n, f) => n + f.size, 0) / 1024 / 1024).toFixed(1)} MB total</span>
+                  <button type="button" onClick={clearFile} className="text-red-600 hover:underline">Clear all</button>
+                </div>
+                <ul className="max-h-48 space-y-1 overflow-y-auto">
+                  {files.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+                      <span className="truncate">{f.name} · {(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                      <button type="button" onClick={() => removeFileAt(i)} aria-label={`Remove ${f.name}`} className="shrink-0 text-slate-400 hover:text-red-600"><Trash2 size={12} /></button>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={pickFile} className="mt-2 text-[11px] font-medium text-violet-700 hover:underline">Add more videos</button>
+                <p className="mt-2 text-[11px] text-slate-500">Every video in this batch is published with the same title/label/formats/schedule/caption below.</p>
+              </div>
             ) : (
               <>
                 <button
@@ -379,7 +404,7 @@ export function CreatorConsole() {
                 >
                   <div className="flex flex-col items-center gap-2 text-xs">
                     <FileVideo2 size={32} className="text-slate-400" />
-                    <span className="font-medium">Tap to pick a video</span>
+                    <span className="font-medium">Tap to pick one or more videos</span>
                   </div>
                 </button>
                 <div className="text-[11px] text-slate-500 truncate">No video selected yet</div>

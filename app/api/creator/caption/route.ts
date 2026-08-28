@@ -3,18 +3,28 @@ import { requireAdmin } from "@/lib/auth";
 import { chatCompletion, getNvidiaModel } from "@/lib/nvidia/client";
 import { db } from "@/lib/db";
 import { applyBrandFooter, BRAND_FOOTER } from "@/lib/brand-footer";
+import { writeStandalonePost } from "@/lib/nvidia/content-writer";
+import type { PlatformKey } from "@/lib/nvidia/schemas";
 
 export const runtime = "nodejs";
 
+const NON_INSTAGRAM_PLATFORMS = ["facebook", "youtube", "tiktok", "x", "linkedin", "reddit"] as const;
+function isNonInstagramPlatform(v: unknown): v is PlatformKey {
+  return typeof v === "string" && (NON_INSTAGRAM_PLATFORMS as readonly string[]).includes(v);
+}
+
 /**
  * POST /api/creator/caption
- * Body: { subject: string, category: string, format: "reel" | "story" | "post", topic?: string }
+ * Body: { subject: string, category: string, format: "reel" | "story" | "post", topic?: string, platform?: string }
  *
- * Generates an Instagram caption via the NVIDIA LLM:
- *  - emoji opener + subject hook
- *  - 2-3 short paragraphs of body copy
- *  - 3-5 relevant hashtags
- *  - CTA: "caseclosedfl.com | (561) 566-1360" with a "Free case review" signoff
+ * Default (no platform, or platform="instagram") behavior is unchanged:
+ * generates a Case Closed FL branded Instagram caption via the NVIDIA LLM
+ * with the operator-locked closer/hashtag rules.
+ *
+ * When `platform` is one of facebook/youtube/tiktok/x/linkedin/reddit, this
+ * instead calls the generic AI Content Writer (lib/nvidia/content-writer.ts)
+ * for that platform's tone/length norms — those platforms don't share
+ * Instagram's locked Case Closed FL closer text.
  *
  * Returns: { caption, hashtags, cta }
  */
@@ -46,6 +56,24 @@ export async function POST(req: Request) {
   const topic = String(body.topic || "").trim().slice(0, 200);
 
   if (!subject) return NextResponse.json({ error: "subject is required" }, { status: 400 });
+
+  if (isNonInstagramPlatform(body.platform)) {
+    try {
+      const tone = typeof body.tone === "string" ? body.tone.trim().slice(0, 200) : null;
+      const copy = await writeStandalonePost({ topic: topic ? `${subject} (${topic})` : subject, platform: body.platform, tone });
+      return NextResponse.json({
+        caption: copy.title ? `${copy.title}\n\n${copy.primaryText}` : copy.primaryText,
+        hashtags: copy.hashtags || [],
+        cta: copy.cta || "",
+        title: copy.title || null,
+        model: getNvidiaModel(),
+        source: "nvidia",
+        platform: body.platform
+      });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e), platform: body.platform }, { status: 400 });
+    }
+  }
 
   const fallback = fallbackCaption(subject, format);
   try {

@@ -30,6 +30,10 @@ ensureColumn("verification_error","verification_error TEXT");
 ensureColumn("instagram_permalink","instagram_permalink TEXT");
 ensureColumn("still_template_id","still_template_id TEXT");
 ensureColumn("split_template","split_template TEXT");
+ensureColumn("reddit_subreddit","reddit_subreddit TEXT");
+ensureColumn("x_tweet_id","x_tweet_id TEXT");
+ensureColumn("linkedin_post_urn","linkedin_post_urn TEXT");
+ensureColumn("reddit_post_id","reddit_post_id TEXT");
 // source_asset_key is intentionally NOT unique: a single Creator-tab upload
 // creates one row per format (reel, story, post) that all share the same
 // uploadId. The autopilot path that uses this column already does a

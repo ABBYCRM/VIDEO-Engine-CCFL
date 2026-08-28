@@ -1,0 +1,23 @@
+# Run on the DigitalOcean droplet: docker compose up -d
+#
+# The server container needs the host's Docker socket to spawn sibling
+# "worker" containers for each command (Docker-out-of-Docker). That means
+# this server effectively has root-equivalent control of the droplet's
+# Docker daemon — treat this droplet as dedicated/single-purpose, firewalled
+# so only your VIDEO-Engine app server's IP can reach port 8080, and keep
+# SANDBOX_TOKEN secret. Do not run anything else of value on this droplet.
+services:
+  sandbox:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SANDBOX_TOKEN=${SANDBOX_TOKEN}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-node:20-alpine}
+      - SANDBOX_ALLOW_NETWORK=${SANDBOX_ALLOW_NETWORK:-false}
+      - SANDBOX_MEMORY_MB=${SANDBOX_MEMORY_MB:-512}
+      - SANDBOX_CPUS=${SANDBOX_CPUS:-1}
+      - SANDBOX_COMMAND_TIMEOUT_MS=${SANDBOX_COMMAND_TIMEOUT_MS:-60000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -5,6 +5,7 @@ import { generateImage } from "@/lib/nvidia/image";
 import { saveGeneratedImage } from "@/lib/media-library";
 import { ensureAssetCalendarPost } from "@/lib/calendar-assets";
 import { getSite } from "@/lib/sites";
+import { scoreSeoPost } from "@/lib/seo/score";
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS blog_posts (
@@ -35,17 +36,25 @@ ensureBlogColumn("generation_status","generation_status TEXT NOT NULL DEFAULT 'p
 ensureBlogColumn("generation_error","generation_error TEXT");
 ensureBlogColumn("generation_started_at","generation_started_at TEXT");
 ensureBlogColumn("generation_finished_at","generation_finished_at TEXT");
+ensureBlogColumn("seo_score","seo_score INTEGER");
+ensureBlogColumn("seo_score_max","seo_score_max INTEGER");
+ensureBlogColumn("seo_checks_json","seo_checks_json TEXT");
+ensureBlogColumn("geo_schema_json","geo_schema_json TEXT");
+ensureBlogColumn("geo_faq_json","geo_faq_json TEXT");
+ensureBlogColumn("geo_score","geo_score INTEGER");
 
 type BlogDraft={title:string;slug:string;excerpt:string;outline:string[];imagePrompt:string};
 export type BlogPostRecord={
   id:string;siteId:string;title:string;slug:string;excerpt:string;outline:string[];imagePrompt:string;status:string;scheduledAt:string|null;model:string|null;
   bodyMarkdown:string|null;metaTitle:string|null;metaDescription:string|null;focusKeyword:string|null;imageUrl:string|null;imageModel:string|null;
   generationStatus:string;generationError:string|null;
+  seoScore:number|null;seoScoreMax:number|null;seoChecks:{id:string;label:string;pass:boolean;detail:string}[];
+  geoSchema:Record<string,unknown>|null;geoFaq:{q:string;a:string}[];geoScore:number|null;
 };
 
 function plannedDays(horizon:number,cadence:string){const days:number[]=[];for(let i=1;i<=horizon;i++){const dow=new Date(Date.now()+i*86400000).getDay();if(cadence==="daily"||(cadence==="3-week"&&[1,3,5].includes(dow))||(cadence==="weekly"&&days.length===0))days.push(i);}return days;}
 function cleanDraft(x:any,index:number):BlogDraft{return{title:String(x?.title||`Planned article ${index+1}`).slice(0,180),slug:String(x?.slug||`planned-article-${index+1}`).toLowerCase().replace(/[^a-z0-9-]+/g,"-").replace(/^-|-$/g,"").slice(0,160),excerpt:String(x?.excerpt||"").slice(0,500),outline:Array.isArray(x?.outline)?x.outline.slice(0,12).map((v:any)=>String(v).slice(0,240)):[],imagePrompt:String(x?.imagePrompt||"").slice(0,1200)};}
-function mapPost(row:any):BlogPostRecord{return{id:row.id,siteId:row.site_id,title:row.title,slug:row.slug,excerpt:row.excerpt,outline:JSON.parse(row.outline_json||"[]"),imagePrompt:row.image_prompt,status:row.status,scheduledAt:row.scheduled_at,model:row.model,bodyMarkdown:row.body_markdown,metaTitle:row.meta_title,metaDescription:row.meta_description,focusKeyword:row.focus_keyword,imageUrl:row.image_url,imageModel:row.image_model,generationStatus:row.generation_status||"pending",generationError:row.generation_error};}
+function mapPost(row:any):BlogPostRecord{return{id:row.id,siteId:row.site_id,title:row.title,slug:row.slug,excerpt:row.excerpt,outline:JSON.parse(row.outline_json||"[]"),imagePrompt:row.image_prompt,status:row.status,scheduledAt:row.scheduled_at,model:row.model,bodyMarkdown:row.body_markdown,metaTitle:row.meta_title,metaDescription:row.meta_description,focusKeyword:row.focus_keyword,imageUrl:row.image_url,imageModel:row.image_model,generationStatus:row.generation_status||"pending",generationError:row.generation_error,seoScore:row.seo_score??null,seoScoreMax:row.seo_score_max??null,seoChecks:row.seo_checks_json?JSON.parse(row.seo_checks_json):[],geoSchema:row.geo_schema_json?JSON.parse(row.geo_schema_json):null,geoFaq:row.geo_faq_json?JSON.parse(row.geo_faq_json):[],geoScore:row.geo_score??null};}
 export function getBlogPost(id:string){const row=db.prepare("SELECT * FROM blog_posts WHERE id=?").get(id) as any;return row?mapPost(row):null;}
 
 async function siteSnapshot(url:string){
@@ -109,7 +118,8 @@ export async function generateFullBlogPost(postId:string){
       const image=await generateImage({prompt:`${current.imagePrompt}\nVisual style: ${site.imageStyle}. Professional editorial feature image for an SEO article. Photographically coherent when realism is requested. No text, captions, logos, watermarks, UI, or typography.`,aspectRatio:site.imageAspectRatio});
       const saved=await saveGeneratedImage({base64:image.base64,source:`seo-blog:${postId}`,model:image.model,prompt:current.imagePrompt,mimeType:image.mimeType});imageUrl=saved.url;imageModel=image.model;
     }
-    db.prepare(`UPDATE blog_posts SET body_markdown=?,meta_title=?,meta_description=?,focus_keyword=?,image_url=?,image_model=?,generation_status='ready',generation_error=NULL,generation_finished_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(bodyMarkdown,metaTitle,metaDescription,focusKeyword,imageUrl,imageModel,new Date().toISOString(),postId);
+    const seo=scoreSeoPost({title:current.title,metaTitle,metaDescription,focusKeyword,bodyMarkdown,slug:current.slug});
+    db.prepare(`UPDATE blog_posts SET body_markdown=?,meta_title=?,meta_description=?,focus_keyword=?,image_url=?,image_model=?,seo_score=?,seo_score_max=?,seo_checks_json=?,generation_status='ready',generation_error=NULL,generation_finished_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(bodyMarkdown,metaTitle,metaDescription,focusKeyword,imageUrl,imageModel,seo.score,seo.maxScore,JSON.stringify(seo.checks),new Date().toISOString(),postId);
     ensureAssetCalendarPost({sourceKey:`blog:${postId}`,title:current.title,contentType:"blog",network:"website",caption:current.excerpt,siteId:current.siteId,scheduledAt:current.scheduledAt?new Date(current.scheduledAt):undefined,mediaUrl:imageUrl,mediaType:imageUrl?"image/png":null,contentBody:bodyMarkdown,seoTitle:metaTitle,metaDescription,slug:current.slug,focusKeyword,generationStatus:"ready"});
     return getBlogPost(postId)!;
   }catch(e){const message=e instanceof Error?e.message:String(e);db.prepare("UPDATE blog_posts SET generation_status='failed',generation_error=?,generation_finished_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(message,new Date().toISOString(),postId);db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE source_asset_key=?").run(message,`blog:${postId}`);throw e;}

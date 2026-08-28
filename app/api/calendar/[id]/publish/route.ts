@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { claimInstagramPublish, publishInstagramPair, releaseInstagramPublish, publishYouTubeShort } from "@/lib/calendar-publisher";
+import { claimInstagramPublish, publishInstagramPair, releaseInstagramPublish, publishYouTubeShort, publishXTweet, publishLinkedInPost, publishRedditPost } from "@/lib/calendar-publisher";
+import { isXComposioConnected } from "@/lib/x-composio";
+import { isLinkedInComposioConnected } from "@/lib/linkedin-composio";
+import { isRedditComposioConnected } from "@/lib/reddit-composio";
 import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
 import { publishWebsite } from "@/lib/site-publish";
 import { isYouTubeConnected } from "@/lib/youtube";
@@ -24,6 +27,18 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}){
       if(!post.media_url)return NextResponse.json({error:"YouTube publishing needs a media_url pointing to a library video asset"},{status:409});
       if(!/^video\//.test(String(post.media_type||"")))return NextResponse.json({error:"YouTube Shorts publishing needs a video asset (not an image)"},{status:409});
       result=await publishYouTubeShort(post);
+    }else if(post.network==="x"){
+      if(!isXComposioConnected())return NextResponse.json({error:"X / Twitter is not connected. Connect it in Integrations."},{status:409});
+      if(!String(post.caption||"").trim())return NextResponse.json({error:"This X item has no text to post"},{status:409});
+      result=await publishXTweet(post);
+    }else if(post.network==="linkedin"){
+      if(!isLinkedInComposioConnected())return NextResponse.json({error:"LinkedIn is not connected. Connect it in Integrations."},{status:409});
+      if(!String(post.caption||"").trim())return NextResponse.json({error:"This LinkedIn item has no text to post"},{status:409});
+      result=await publishLinkedInPost(post);
+    }else if(post.network==="reddit"){
+      if(!isRedditComposioConnected())return NextResponse.json({error:"Reddit is not connected. Connect it in Integrations."},{status:409});
+      if(!post.reddit_subreddit)return NextResponse.json({error:"This Reddit item has no target subreddit set"},{status:409});
+      result=await publishRedditPost(post);
     }else if(post.network==="website"){
       if(!post.site_id)return NextResponse.json({error:"Website Calendar items must be linked to a Site before publishing"},{status:409});
       if(post.generation_status&&post.generation_status!=="ready")return NextResponse.json({error:`Blog draft is ${post.generation_status}; wait for generation to finish before publishing`},{status:409});

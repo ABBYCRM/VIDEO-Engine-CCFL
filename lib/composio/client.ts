@@ -123,6 +123,7 @@ export const COMPOSIO_TOOLKITS = [
   { id: "metaads",        label: "Meta Ads",                        requiresBusiness: true,  publishable: false },
   { id: "linkedin",       label: "LinkedIn Pages",                  requiresBusiness: true,  publishable: true },
   { id: "twitter",        label: "X / Twitter",                     requiresBusiness: false, publishable: true },
+  { id: "reddit",         label: "Reddit",                          requiresBusiness: false, publishable: true },
   { id: "tiktok",         label: "TikTok Ads",                      requiresBusiness: true,  publishable: true },
   { id: "gmb",            label: "Google Business Profile",         requiresBusiness: true,  publishable: true },
   { id: "slack",          label: "Slack",                           requiresBusiness: false, publishable: false },
@@ -142,4 +143,26 @@ export type ComposioToolkitId = (typeof COMPOSIO_TOOLKITS)[number]["id"];
 
 export function getToolkitMeta(id: string) {
   return COMPOSIO_TOOLKITS.find(t => t.id === id) ?? { id, label: id, requiresBusiness: false, publishable: false };
+}
+
+/** Generic Composio tool execution against one toolkit's active connected
+ *  account, shared by every per-network adapter (x-composio.ts,
+ *  linkedin-composio.ts, reddit-composio.ts, instagram-composio.ts). */
+export async function executeComposioTool(toolkit: string, slug: string, args: Record<string, unknown>, userId = "admin") {
+  if (!isComposioConfigured()) throw new Error(`Composio is not configured (${toolkit} unavailable)`);
+  const connectedAccountId = getActiveConnectedAccountId(toolkit, userId) || undefined;
+  if (!connectedAccountId) throw new Error(`${getToolkitMeta(toolkit).label} is not connected. Connect it in Integrations first.`);
+  const composio: any = getComposio();
+  const result = await composio.tools.execute(slug, {
+    userId,
+    connectedAccountId,
+    arguments: args,
+    dangerouslySkipVersionCheck: true
+  });
+  if (result && typeof result === "object" && (result as any).successful === false) {
+    const obj = result as Record<string, any>;
+    const msg = obj.error || obj.data?.error || obj.message || JSON.stringify(result).slice(0, 400);
+    throw new Error(`${slug}: ${msg}`);
+  }
+  return result;
 }

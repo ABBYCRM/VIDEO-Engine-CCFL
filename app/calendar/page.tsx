@@ -20,7 +20,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 
-const NETWORKS = ["instagram", "facebook", "youtube", "tiktok", "linkedin", "website"] as const;
+const NETWORKS = ["instagram", "facebook", "youtube", "tiktok", "linkedin", "website", "x", "reddit"] as const;
 const STATUSES = ["draft", "pending", "approved", "published", "failed"] as const;
 const FORMATS = ["blog", "image", "podcast", "ugc", "newsroom", "direct", "cinematic"] as const;
 type Status = (typeof STATUSES)[number];
@@ -48,6 +48,7 @@ type Post = {
   youtubeError?: string | null;
   verificationError?: string | null;
   error?: string | null;
+  redditSubreddit?: string | null;
   contentBody?: string | null;
   seoTitle?: string | null;
   metaDescription?: string | null;
@@ -94,6 +95,12 @@ function canPublish(post: Post) {
       post.mediaUrl &&
       /^video\//.test(String(post.mediaType || ""))
     );
+  }
+  if (post.network === "x" || post.network === "linkedin") {
+    return Boolean(post.caption?.trim());
+  }
+  if (post.network === "reddit") {
+    return Boolean(post.caption?.trim() && post.redditSubreddit?.trim());
   }
   return false;
 }
@@ -366,7 +373,7 @@ function CalendarInner() {
         <div className="grid gap-3">
           {posts.filter(p => p.status !== "published").map(post => {
             const publishable = canPublish(post);
-            const autoCapable = post.network === "instagram" || post.network === "website" || post.network === "youtube";
+            const autoCapable = post.network === "instagram" || post.network === "website" || post.network === "youtube" || post.network === "x" || post.network === "linkedin";
             const generating = post.generationStatus === "pending" || post.generationStatus === "generating";
             const retryable = Boolean(post.campaignId) && (post.generationStatus === "failed" || post.generationStatus === "pending_manual");
             return (
@@ -441,9 +448,10 @@ function PostModal({ post, onClose, onSave }: { post: Post | null; onClose: () =
   const [metaDescription, setMetaDescription] = useState(post?.metaDescription || "");
   const [slug, setSlug] = useState(post?.slug || "");
   const [focusKeyword, setFocusKeyword] = useState(post?.focusKeyword || "");
+  const [redditSubreddit, setRedditSubreddit] = useState(post?.redditSubreddit || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const autoCapable = network === "instagram" || network === "website" || network === "youtube";
+  const autoCapable = network === "instagram" || network === "website" || network === "youtube" || network === "x" || network === "linkedin";
   const isBlog = contentType === "blog" || Boolean(contentBody);
 
   async function submit(e: React.FormEvent) {
@@ -466,7 +474,8 @@ function PostModal({ post, onClose, onSave }: { post: Post | null; onClose: () =
         contentType,
         mediaUrl: post?.mediaUrl,
         mediaType: post?.mediaType,
-        siteId: post?.siteId
+        siteId: post?.siteId,
+        redditSubreddit: network === "reddit" ? redditSubreddit : undefined
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -488,7 +497,12 @@ function PostModal({ post, onClose, onSave }: { post: Post | null; onClose: () =
             </div>
             <label>Status<select value={status} onChange={e => setStatus(e.target.value as Status)} className="mt-1 h-11 w-full rounded-xl border px-3">{STATUSES.map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Date & time<input type="datetime-local" required value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="mt-1 h-11 w-full rounded-xl border px-3"/></label>
-            <label>Caption / excerpt / review notes<textarea rows={3} value={caption} onChange={e => setCaption(e.target.value)} className="mt-1 w-full rounded-xl border p-3"/></label>
+            <label>Caption / excerpt / review notes{network === "x" && <span className={`ml-2 text-xs ${caption.length > 280 ? "text-rose-600" : "text-slate-400"}`}>{caption.length}/280</span>}<textarea rows={3} value={caption} onChange={e => setCaption(e.target.value)} className="mt-1 w-full rounded-xl border p-3"/></label>
+
+            {network === "reddit" && <>
+              <label>Target subreddit<input value={redditSubreddit} onChange={e => setRedditSubreddit(e.target.value.replace(/^r\//, ""))} placeholder="e.g. smallbusiness (without r/)" className="mt-1 h-11 w-full rounded-xl border px-3"/></label>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Reddit always requires a manual Publish click — subreddit self-promotion rules are enforced by human moderators per-community and can't be verified automatically. Check the target subreddit's rules before publishing.</div>
+            </>}
 
             {isBlog && <>
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">Full SEO article review. Edits saved here are the exact content used by the Website publisher.</div>

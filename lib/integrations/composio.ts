@@ -11,6 +11,7 @@ export const composioConnectors: string[] = [
   "Google Business Profile",
   "LinkedIn Pages",
   "X / Twitter",
+  "Reddit",
   "TikTok Ads",
   "Slack",
   "Notion",

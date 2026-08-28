@@ -1,0 +1,15 @@
+{
+  "name": "coding-sandbox-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "External, network-isolated sandbox for VIDEO-Engine's Coding Agent. Runs each command in its own throwaway Docker container. Holds none of the main app's secrets.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dockerode": "^4.0.2",
+    "express": "^4.21.1"
+  }
+}

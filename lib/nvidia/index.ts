@@ -5,5 +5,5 @@
 export * from "./models";
 export * from "./schemas";
 export * from "./client";
-export { writeSocialPackage, NvidiaContentError, type ContentWriterInput, type ContentWriterResult } from "./content-writer";
+export { writeSocialPackage, writeStandalonePost, NvidiaContentError, type ContentWriterInput, type ContentWriterResult, type StandalonePostInput } from "./content-writer";
 export { runMonitor, NvidiaMonitorError, type AdMetric, type MonitorInput } from "./monitor";

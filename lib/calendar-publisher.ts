@@ -5,6 +5,9 @@ import { publicCaptionForSlot, isOperatorCopy } from "@/lib/public-copy";
 import "@/lib/calendar-assets";
 import { verifyPublishedInstagramOnce } from "@/lib/publish-verify";
 import { isYouTubeConnected, uploadYouTubeShort } from "@/lib/youtube";
+import { composioPostTweet, isXComposioConnected } from "@/lib/x-composio";
+import { composioPostUpdate, isLinkedInComposioConnected } from "@/lib/linkedin-composio";
+import { composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
 import { getPersistentLibraryAsset, savePersistentLibraryAsset } from "@/lib/persistent-library";
 import { spawn } from "node:child_process";
 import { promises as fsp } from "node:fs";
@@ -175,9 +178,35 @@ export async function publishYouTubeShort(post:any){
   return{videoId,resumed:false};
 }
 
+export async function publishXTweet(post:any){
+  if(post.x_tweet_id)return{tweetId:post.x_tweet_id,resumed:true};
+  if(!isXComposioConnected())throw new Error("X / Twitter is not connected. Connect it in Integrations.");
+  const result=await composioPostTweet({text:post.caption});
+  if(result.tweetId)db.prepare("UPDATE scheduled_posts SET x_tweet_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(result.tweetId,post.id);
+  return result;
+}
+export async function publishLinkedInPost(post:any){
+  if(post.linkedin_post_urn)return{postUrn:post.linkedin_post_urn,resumed:true};
+  if(!isLinkedInComposioConnected())throw new Error("LinkedIn is not connected. Connect it in Integrations.");
+  const result=await composioPostUpdate({text:post.caption});
+  if(result.postUrn)db.prepare("UPDATE scheduled_posts SET linkedin_post_urn=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(result.postUrn,post.id);
+  return result;
+}
+export async function publishRedditPost(post:any){
+  if(post.reddit_post_id)return{postId:post.reddit_post_id,resumed:true};
+  if(!isRedditComposioConnected())throw new Error("Reddit is not connected. Connect it in Integrations.");
+  if(!post.reddit_subreddit)throw new Error("This Reddit item has no target subreddit set");
+  const result=await composioSubmitPost({subreddit:post.reddit_subreddit,title:post.title,text:post.caption});
+  if(result.postId)db.prepare("UPDATE scheduled_posts SET reddit_post_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(result.postId,post.id);
+  return result;
+}
+
 async function publishRow(post:any){
   if(post.network==="instagram"){const pair=await publishInstagramPair(post);await maybePublishYouTubeShort(post);return pair;}
   if(post.network==="youtube"){return publishYouTubeShort(post);}
+  if(post.network==="x"){return publishXTweet(post);}
+  if(post.network==="linkedin"){return publishLinkedInPost(post);}
+  if(post.network==="reddit"){return publishRedditPost(post);}
   if(post.network==="website"){
     if(!post.site_id)throw new Error("Website auto-post item has no Site");
     if(post.generation_status&&post.generation_status!=="ready")throw new Error("Website draft is "+post.generation_status+"; it is not ready to publish");
@@ -190,7 +219,11 @@ async function publishRow(post:any){
 export async function runCalendarPublisherOnce(){
   if(running)return{processed:0};running=true;let processed=0;
   try{
-    const rows=db.prepare("SELECT * FROM scheduled_posts WHERE auto_post=1 AND status='approved' AND scheduled_at<=? AND (generation_status IS NULL OR generation_status='ready') ORDER BY scheduled_at ASC LIMIT 10").all(new Date().toISOString()) as any[];
+    // Reddit never auto-publishes, regardless of auto_post — subreddit
+    // self-promotion rules are enforced by human moderators per-community,
+    // not reliably by any API (lib/reddit/rules-check.ts). A Reddit item
+    // always needs a manual Publish click.
+    const rows=db.prepare("SELECT * FROM scheduled_posts WHERE auto_post=1 AND status='approved' AND network<>'reddit' AND scheduled_at<=? AND (generation_status IS NULL OR generation_status='ready') ORDER BY scheduled_at ASC LIMIT 10").all(new Date().toISOString()) as any[];
     for(const post of rows){
       if(post.network==="instagram"&&!claimInstagramPublish(post.id))continue;
       try{await publishRow(post);db.prepare("UPDATE scheduled_posts SET status='published',published_at=?,error=NULL,publishing_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(new Date().toISOString(),post.id);}
