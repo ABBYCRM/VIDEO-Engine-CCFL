@@ -49,16 +49,23 @@ function optionalObject(v: unknown, field: string): Record<string, unknown> | un
   return v;
 }
 
-const PLATFORM_KEYS = ["instagram", "facebook", "youtube", "tiktok"] as const;
+const PLATFORM_KEYS = ["instagram", "facebook", "youtube", "tiktok", "x", "linkedin", "reddit"] as const;
 export type PlatformKey = (typeof PLATFORM_KEYS)[number];
 
 export type PlatformCopy = {
+  // For "reddit" this field carries the post body; for "x" it carries the
+  // tweet text (truncated to 280 chars below); every other platform uses it
+  // as its normal primary caption/post text.
   primaryText: string;
+  // For "reddit" this is the submission title. For every other platform,
+  // an optional headline/on-screen title.
   title?: string;
   description?: string;
   cta?: string;
   hashtags?: string[];
 };
+
+const X_MAX_CHARS = 280;
 
 export type SocialContentPackage = {
   hook: string;
@@ -77,10 +84,15 @@ export type SocialContentPackage = {
   };
 };
 
-export function parsePlatformCopy(v: unknown, field: string): PlatformCopy {
+export function parsePlatformCopy(v: unknown, field: string, key?: PlatformKey): PlatformCopy {
   if (!isObject(v)) throw new SchemaError(`${field} must be an object`);
+  let primaryText = nonEmptyString(v.primaryText, `${field}.primaryText`);
+  // X has a hard platform character cap. Truncate rather than reject — the
+  // model is instructed to stay under it, but a slightly-over response
+  // shouldn't fail the whole content package.
+  if (key === "x" && primaryText.length > X_MAX_CHARS) primaryText = primaryText.slice(0, X_MAX_CHARS);
   return {
-    primaryText: nonEmptyString(v.primaryText, `${field}.primaryText`),
+    primaryText,
     title: optionalString(v.title, `${field}.title`),
     description: optionalString(v.description, `${field}.description`),
     cta: optionalString(v.cta, `${field}.cta`),
@@ -108,7 +120,7 @@ export function parseSocialContentPackage(raw: unknown, fallbackModel: NvidiaMod
   const platformVariants: Partial<Record<PlatformKey, PlatformCopy>> = {};
   for (const key of PLATFORM_KEYS) {
     if (variantsRaw[key] !== undefined) {
-      platformVariants[key] = parsePlatformCopy(variantsRaw[key], `platformVariants.${key}`);
+      platformVariants[key] = parsePlatformCopy(variantsRaw[key], `platformVariants.${key}`, key);
     }
   }
 

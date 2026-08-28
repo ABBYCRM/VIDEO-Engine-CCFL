@@ -13,7 +13,7 @@
 
 import crypto from "node:crypto";
 import { chatCompletion, isNvidiaEnabled, getNvidiaModel, NvidiaAuthError, NvidiaDisabledError, NvidiaUpstreamError } from "./client";
-import { parseSocialContentPackage, SchemaError, type SocialContentPackage } from "./schemas";
+import { parseSocialContentPackage, parsePlatformCopy, SchemaError, type SocialContentPackage, type PlatformCopy, type PlatformKey } from "./schemas";
 
 export type ContentWriterInput = {
   campaign: {
@@ -64,6 +64,9 @@ Constraints:
 - cta <= 120 chars.
 - Hashtags: 3-15 short tags, no # symbol (caller strips it), no spaces.
 - For each platform variant, write copy that fits that platform's tone and length norms.
+- x.primaryText (the tweet text) MUST be 280 characters or fewer, no hashtags stuffed at the end — write it like a real tweet.
+- linkedin.primaryText is longer-form and professional: no emoji spam, framed for a business/decision-maker audience, 2-4 short paragraphs.
+- reddit.title is the submission title (no clickbait, no ALL CAPS); reddit.primaryText is the self-post body — conversational, no marketing tone, discloses it's from the business when relevant (Reddit communities penalize undisclosed self-promotion).
 
 JSON contract:
 {
@@ -78,7 +81,10 @@ JSON contract:
     "instagram": { "primaryText": "...", "title": "...", "description": "...", "cta": "...", "hashtags": ["..."] },
     "facebook":  { "primaryText": "..." },
     "youtube":   { "primaryText": "...", "title": "...", "description": "..." },
-    "tiktok":    { "primaryText": "...", "cta": "..." }
+    "tiktok":    { "primaryText": "...", "cta": "..." },
+    "x":         { "primaryText": "<=280 chars" },
+    "linkedin":  { "primaryText": "..." },
+    "reddit":    { "title": "...", "primaryText": "self-post body" }
   },
   "provenance": { "model": "...", "rationale": "1-2 sentences explaining choices" }
 }`;
@@ -187,4 +193,82 @@ export async function writeSocialPackage(input: ContentWriterInput): Promise<Con
   };
   pkg.provenance.rationale = safeStr(pkg.provenance.rationale, "").slice(0, 800) || "AI copy generated from campaign context.";
   return { package: pkg, inputHash };
+}
+
+// Standalone one-off post writer: "write me a LinkedIn post about X" with no
+// underlying campaign/video. Reuses the same NVIDIA client and the same
+// per-platform validation as writeSocialPackage's platformVariants, but
+// skips the full SocialContentPackage shape since there's nothing to
+// generate variants of other than the one requested platform.
+export type StandalonePostInput = {
+  topic: string;
+  platform: PlatformKey;
+  tone?: string | null;
+  siteContext?: string | null;
+};
+
+const STANDALONE_SYSTEM_PROMPT = `You are an AI content writer for a marketing engine. Given a topic, a target platform, and an optional tone, write one ready-to-post piece of copy for that platform.
+
+Output ONLY valid JSON. No prose, no markdown fences, no commentary.
+
+Constraints:
+- Keep copy truthful. NEVER invent testimonials, statistics, awards, results, or facts not supplied in the topic/context.
+- Never promise guaranteed outcomes or fabricate case/client results.
+- x: primaryText <= 280 characters, no stuffed hashtags.
+- linkedin: primaryText is longer-form and professional, 2-4 short paragraphs, no emoji spam.
+- reddit: title is the submission title (no clickbait), primaryText is a conversational self-post body that discloses it is from the business when relevant.
+- instagram/facebook/tiktok: primaryText is a normal caption; hashtags are 3-15 short tags with no # symbol.
+- youtube: primaryText is the video description; title is the video title.
+
+JSON contract: { "primaryText": "string", "title": "string (optional)", "description": "string (optional)", "cta": "string (optional)", "hashtags": ["string", ...] (optional) }`;
+
+export async function writeStandalonePost(input: StandalonePostInput): Promise<PlatformCopy> {
+  if (!isNvidiaEnabled()) throw new NvidiaDisabledError();
+  const model = getNvidiaModel();
+  if (model === "disabled") throw new NvidiaDisabledError();
+
+  const userPrompt = [
+    `Platform: ${input.platform}`,
+    `Topic: ${input.topic}`,
+    input.tone ? `Tone: ${input.tone}` : `Tone: (default for the platform)`,
+    input.siteContext ? `Site/brand context: ${input.siteContext}` : `Site/brand context: (none provided)`,
+    `Return the JSON object now.`
+  ].join("\n");
+
+  let response;
+  try {
+    response = await chatCompletion({
+      model,
+      temperature: 0.7,
+      topP: 0.9,
+      maxTokens: 900,
+      jsonMode: true,
+      messages: [
+        { role: "system", content: STANDALONE_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt }
+      ]
+    });
+  } catch (e) {
+    if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) throw e;
+    throw new NvidiaContentError("NVIDIA call failed", e);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(response.text);
+  } catch {
+    const stripped = response.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    try {
+      parsed = JSON.parse(stripped);
+    } catch (e) {
+      throw new NvidiaContentError(`NVIDIA returned non-JSON (finish=${response.finishReason})`, e);
+    }
+  }
+
+  try {
+    return parsePlatformCopy(parsed, "post", input.platform);
+  } catch (e) {
+    if (e instanceof SchemaError) throw new NvidiaContentError(`NVIDIA output failed validation: ${e.message}`, e);
+    throw e;
+  }
 }

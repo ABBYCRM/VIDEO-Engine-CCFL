@@ -38,6 +38,9 @@ import { withInstagramFallback } from "@/lib/claw/fallback";
 import { deleteClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
 import { isComposioConfigured } from "@/lib/composio/client";
 import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
+import { writeStandalonePost } from "@/lib/nvidia/content-writer";
+import type { PlatformKey } from "@/lib/nvidia/schemas";
+import crypto from "node:crypto";
 
 export type ClawTool = {
   name: string;
@@ -49,6 +52,10 @@ export type ClawTool = {
 const CATEGORIES = new Set(["car_accident", "rideshare", "trucking", "slip_fall", "ugc"]);
 function isProviderId(v: string): v is ProviderId {
   return v === "veo" || v === "grok" || v === "a2e" || v === "hedra";
+}
+const PLATFORM_KEYS = ["instagram", "facebook", "youtube", "tiktok", "x", "linkedin", "reddit"] as const;
+function isPlatformKey(v: string): v is PlatformKey {
+  return (PLATFORM_KEYS as readonly string[]).includes(v);
 }
 
 function str(v: unknown, fallback = "") { return v == null ? fallback : String(v); }
@@ -412,6 +419,41 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Delete a Claw file.",
     args: "{\"id\":\"...\"}",
     handler: async (a) => ({ ok: await deleteClawFile(str(a.id)) })
+  },
+  {
+    name: "write_post",
+    description: "AI Content Writer: draft ready-to-post copy for one platform (instagram, facebook, youtube, tiktok, x, linkedin, reddit). Does not post or save anything.",
+    args: "{\"topic\":\"...\",\"platform\":\"linkedin\",\"tone\":\"optional\"}",
+    handler: async (a) => {
+      const platform = str(a.platform, "instagram");
+      if (!isPlatformKey(platform)) throw new Error(`platform must be one of ${PLATFORM_KEYS.join(", ")}`);
+      const topic = str(a.topic || a.subject);
+      if (!topic) throw new Error("topic is required");
+      const copy = await writeStandalonePost({ topic, platform, tone: str(a.tone) || null, siteContext: str(a.siteContext) || null });
+      return { platform, copy };
+    }
+  },
+  {
+    name: "save_post",
+    description: "Save AI-written or operator-written copy as a draft Calendar item (no auto-post). Use after write_post if the operator wants to keep it.",
+    args: "{\"platform\":\"linkedin\",\"title\":\"...\",\"body\":\"...\",\"scheduledAt\":\"optional ISO time\"}",
+    handler: async (a) => {
+      const platform = str(a.platform, "instagram");
+      if (!isPlatformKey(platform)) throw new Error(`platform must be one of ${PLATFORM_KEYS.join(", ")}`);
+      const body = str(a.body || a.primaryText || a.caption);
+      if (!body) throw new Error("body is required");
+      const title = str(a.title, body.slice(0, 80));
+      const scheduledAt = str(a.scheduledAt) || new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const id = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO scheduled_posts(
+          id, title, network, scheduled_at, status, auto_post, caption,
+          content_type, media_url, media_type, source_asset_key,
+          site_id, campaign_id, planning_horizon_days, generation_status, category
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(id, title.slice(0, 180), platform, scheduledAt, "draft", 0, body.slice(0, 5000), "text-post", null, null, null, null, null, null, "ready", str(a.category, "ugc"));
+      return { id, platform, title, scheduledAt, status: "draft" };
+    }
   },
   {
     name: "draft_caption",
