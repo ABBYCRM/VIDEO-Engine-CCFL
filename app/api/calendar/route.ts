@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ensureBrandContactInCaption } from "@/lib/brand-contact";
+import { forceManualApprovalForReddit } from "@/lib/reddit/rules-check";
 import "@/lib/calendar-assets";
 import { startCalendarPublisherLoop } from "@/lib/calendar-publisher";
 startCalendarPublisherLoop();
@@ -14,9 +15,7 @@ export async function POST(req:Request){
   const body=await req.json().catch(()=>({})),title=String(body.title||"").trim().slice(0,180),network=String(body.network||"instagram").toLowerCase(),status=String(body.status||"pending"),contentType=String(body.contentType||"ugc").toLowerCase(),scheduledAt=String(body.scheduledAt||"");
   if(!title)return NextResponse.json({error:"Title is required"},{status:400});if(!NETWORKS.has(network)||!STATUSES.has(status)||!FORMATS.has(contentType))return NextResponse.json({error:"Invalid calendar fields"},{status:400});const when=new Date(scheduledAt);if(!scheduledAt||Number.isNaN(when.getTime()))return NextResponse.json({error:"Valid scheduledAt is required"},{status:400});
   const id=crypto.randomUUID();
-  // Reddit self-promotion rules are per-community and can't be verified by
-  // any API — Reddit items always start manual, regardless of the request.
-  const autoPost=network==="reddit"?0:(body.autoPost?1:0);
+  const autoPost=forceManualApprovalForReddit(network,Boolean(body.autoPost))?1:0;
   const redditSubreddit=network==="reddit"&&body.redditSubreddit?String(body.redditSubreddit).replace(/^r\//,"").slice(0,80):null;
   db.prepare(`INSERT INTO scheduled_posts(id,title,network,scheduled_at,status,auto_post,caption,content_type,video_job_id,connected_account_id,media_url,media_type,source_asset_key,site_id,campaign_id,planning_horizon_days,content_body,seo_title,meta_description,slug,focus_keyword,generation_status,reddit_subreddit) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     id,title,network,when.toISOString(),status,autoPost,ensureBrandContactInCaption(String(body.caption||"")).slice(0,5000),contentType,body.videoJobId?String(body.videoJobId):null,body.connectedAccountId?String(body.connectedAccountId):null,body.mediaUrl?String(body.mediaUrl):null,body.mediaType?String(body.mediaType):null,body.sourceAssetKey?String(body.sourceAssetKey):null,body.siteId?String(body.siteId):null,body.campaignId?String(body.campaignId):null,body.planningHorizonDays?Number(body.planningHorizonDays):null,body.contentBody?String(body.contentBody):null,body.seoTitle?String(body.seoTitle).slice(0,180):null,body.metaDescription?String(body.metaDescription).slice(0,300):null,body.slug?String(body.slug).slice(0,180):null,body.focusKeyword?String(body.focusKeyword).slice(0,180):null,String(body.generationStatus||"ready"),redditSubreddit

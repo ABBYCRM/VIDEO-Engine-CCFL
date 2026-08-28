@@ -31,8 +31,15 @@ export async function executeXComposioTool(slug: string, args: Record<string, un
  */
 export async function composioPostTweet(input: { text: string; mediaUrl?: string | null; replyToTweetId?: string | null }) {
   if (input.mediaUrl) throw new Error("X media attachments are not wired yet (requires verifying Composio's media upload action contract). Post text-only for now.");
-  const text = String(input.text || "").trim().slice(0, 280);
+  const text = String(input.text || "").trim();
   if (!text) throw new Error("text is required");
+  // Reject rather than silently slice: every Calendar caption (any network,
+  // including X) has the operator-locked legal disclaimer force-appended by
+  // ensureBrandContactInCaption() before it ever reaches here. Truncating to
+  // 280 chars would routinely cut that disclaimer off the end with no
+  // signal to the operator — surfacing the error lets them shorten the body
+  // instead of posting a legally incomplete tweet.
+  if (text.length > 280) throw new Error(`Tweet text is ${text.length} chars, over X's 280-char limit. Shorten the caption (the required disclaimer footer counts toward this) and try again.`);
   const args: Record<string, unknown> = { text };
   if (input.replyToTweetId) args.reply = { in_reply_to_tweet_id: input.replyToTweetId };
   const result = await executeXComposioTool("TWITTER_CREATION_OF_A_POST", args);
