@@ -44,6 +44,7 @@ import crypto from "node:crypto";
 import { generateFullBlogPost, getBlogPost } from "@/lib/nvidia/blog-writer";
 import { publishWebsite } from "@/lib/site-publish";
 import { getSite } from "@/lib/sites";
+import { generateGeoForPost, buildLlmsTxt } from "@/lib/geo/generate";
 
 export type ClawTool = {
   name: string;
@@ -475,6 +476,27 @@ export const CLAW_TOOLS: ClawTool[] = [
         featuredImageUrl: post.imageUrl
       });
       return { id: postId, site: site.name, result };
+    }
+  },
+  {
+    name: "generate_geo_schema",
+    description: "GEO Agent: extract FAQ pairs + key citable facts from a ready blog post, build JSON-LD, and score it for AI-answer-engine citability.",
+    args: "{\"postId\":\"...\"}",
+    handler: async (a) => {
+      const postId = str(a.postId || a.id);
+      if (!postId) throw new Error("postId is required");
+      const result = await generateGeoForPost(postId);
+      return { id: postId, faqCount: result.post.geoFaq.length, geoScore: result.score, geoMaxScore: result.maxScore, schema: result.schema };
+    }
+  },
+  {
+    name: "get_llms_txt",
+    description: "GEO Agent: build the llms.txt manifest (site summary + published article URLs + key facts) for a site.",
+    args: "{\"siteId\":\"...\"}",
+    handler: async (a) => {
+      const siteId = str(a.siteId);
+      if (!siteId) throw new Error("siteId is required");
+      return { llmsTxt: buildLlmsTxt(siteId) };
     }
   },
   {
