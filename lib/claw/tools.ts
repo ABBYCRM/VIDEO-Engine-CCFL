@@ -48,6 +48,7 @@ import { generateGeoForPost, buildLlmsTxt } from "@/lib/geo/generate";
 import { createStrategy, getStrategy, listStrategies, updateStrategy } from "@/lib/strategies";
 import { planStrategy } from "@/lib/nvidia/strategy-planner";
 import { isYouTubeConnected } from "@/lib/youtube";
+import { auditWebsite } from "@/lib/site-audit";
 
 export type ClawTool = {
   name: string;
@@ -479,6 +480,16 @@ export const CLAW_TOOLS: ClawTool[] = [
         featuredImageUrl: post.imageUrl
       });
       return { id: postId, site: site.name, result };
+    }
+  },
+  {
+    name: "audit_website",
+    description: "Website Analysis Agent: crawl a connected site (or any public URL) and score technical SEO + GEO readiness + content gaps + conversion notes.",
+    args: "{\"siteId\":\"site id, or a raw https:// URL\"}",
+    handler: async (a) => {
+      const target = str(a.siteId || a.url);
+      if (!target) throw new Error("siteId or url is required");
+      return auditWebsite(target);
     }
   },
   {
