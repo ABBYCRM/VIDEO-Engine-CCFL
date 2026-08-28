@@ -38,7 +38,7 @@ produce this document.
 | Content writer | Structured, multi-platform copy generation with human-edit provenance and revision history | `lib/nvidia/content-writer.ts`, `lib/nvidia/schemas.ts`, `social_content_packages` / `social_content_revisions` tables |
 | Distribution — Instagram | Fully wired: Graph API primary, Composio fallback, DMs, comments, publish | `lib/instagram-graph.ts`, `lib/instagram-composio.ts`, `lib/claw/fallback.ts` |
 | Distribution — YouTube | OAuth connect + upload | `lib/youtube.ts`, `app/api/oauth/youtube` |
-| Distribution — everything else | **Catalog-only.** LinkedIn Pages, X/Twitter, TikTok Ads, Google Ads, Meta Ads, Google Business Profile, Slack, Notion, Discord, HubSpot, Mailchimp, Resend, S3 are *listed* on the Integrations page but have **no functional adapter and no Claw tools** | `lib/integrations/composio.ts` |
+| Distribution — everything else | **Catalog-only for posting.** LinkedIn Pages, X/Twitter, TikTok Ads, Google Ads, Meta Ads, Google Business Profile, Slack, Notion, Discord, HubSpot, Mailchimp, Resend, S3 are *listed* on the Integrations page and, for LinkedIn/X specifically, already registered as real Composio toolkits with working OAuth auth-config tracking and connected-account sync (`lib/composio/client.ts:118-126,92-111`) — but none has a posting adapter or Claw tools yet | `lib/integrations/composio.ts`, `lib/composio/client.ts` |
 | Generic connected-account store | Already toolkit-agnostic (`toolkit`, `connected_account_id`, `user_id`, `status`) — ready to hold X/LinkedIn/Reddit connections without a schema change | `connected_accounts` table, `lib/db.ts` |
 | Calendar | `scheduled_posts.network` is a free-text column — new networks (`x`, `linkedin`, `reddit`) are valid today with **zero migration** | `lib/db.ts` (scheduled_posts) |
 | UGC video | Already a first-class campaign category across prompt compiler, dedicated script writer, avatars, split-screen/reaction formats, and all 4 providers | `lib/prompts.ts`, `lib/nvidia/ugc-writer.ts`, `lib/avatars.ts`, `lib/split-compose.ts` |
@@ -366,21 +366,31 @@ be preferred wherever one exists).
 
 ### 3.6 X / Twitter Agent
 
-**Exists today**: "X / Twitter" is a catalog entry only
-(`lib/integrations/composio.ts:13`) — no adapter file, no Claw tools, no
-compose UI. `scheduled_posts.network` is free-text, so `'x'` is already a
-valid value with zero migration.
+**Exists today**: more of the plumbing is already wired than "catalog
+entry only" suggests. `lib/integrations/composio.ts:13` lists "X /
+Twitter" for the Integrations page, and `lib/composio/client.ts:125`
+already registers it as a real toolkit —
+`{ id: "twitter", label: "X / Twitter", requiresBusiness: false, publishable: true }`
+— which means the OAuth auth-config tracking (`getAuthConfigId`/
+`setAuthConfigId`) and the connected-account sync that mirrors a
+connected X account into the `connected_accounts` table
+(`lib/composio/client.ts:92-111`) already work for X today, with zero new
+code, the moment an operator connects it in the Composio dashboard. What's
+missing is the *posting* side: no `lib/x-composio.ts` adapter, no Claw
+tools, no compose UI. `scheduled_posts.network` is free-text, so `'x'` is
+already a valid value there too, with zero migration.
 
 **Steps**:
 1. `lib/x-composio.ts` modeled 1:1 on `lib/instagram-composio.ts`:
    `composioPostTweet(text, mediaUrl?)`, `composioGetMentions()`,
-   `composioReplyTweet(tweetId, text)`, calling Composio's X toolkit
-   through `lib/composio/client.ts`.
-2. Confirm/record Composio's canonical toolkit slug for X (their API
-   typically calls it `twitter`) in `COMPOSIO_TOOLKITS`
-   (`lib/composio/client.ts`) — `lib/settings.ts`'s
-   `composio.toolkits[].authConfigConfigured` reporting then works
-   automatically, no other settings-layer change needed.
+   `composioReplyTweet(tweetId, text)`, calling Composio's `twitter`
+   toolkit (already registered, see above) through
+   `lib/composio/client.ts`.
+2. Add an `isXComposioConnected()` guard reading the `connected_accounts`
+   row for `toolkit='twitter'` — the same shape as
+   `isComposioInstagramConnected()` — since the sync job already
+   populates that row once connected; no settings-layer change needed
+   beyond this one read helper.
 3. Publishing: add a small, network-keyed dispatch in the calendar
    publish route (`app/api/calendar/[id]/publish/route.ts`) rather than
    overloading the Instagram-specific `lib/calendar-publisher.ts` —
@@ -521,21 +531,28 @@ copy with no underlying video.
 
 ### 3.10 LinkedIn Agent
 
-**Exists today**: "LinkedIn Pages" is catalog-only
-(`lib/integrations/composio.ts:12`) — identical gap shape to X/Twitter.
+**Exists today**: same shape as X/Twitter (§3.6) — more wired than
+"catalog-only" implies. `lib/integrations/composio.ts:12` lists "LinkedIn
+Pages", and `lib/composio/client.ts:124` already registers it as a real
+toolkit — `{ id: "linkedin", label: "LinkedIn Pages", requiresBusiness: true, publishable: true }`
+— so auth-config tracking and connected-account sync already work for
+LinkedIn today. The gap is identical to X's: no posting adapter, no Claw
+tools, no compose UI.
 
 **Steps**: mirror §3.6 exactly —
 1. `lib/linkedin-composio.ts` (`composioPostUpdate`, and org analytics if
    Composio's LinkedIn toolkit exposes it).
-2. Claw tools: `linkedin_post`, `linkedin_health`.
-3. Calendar network gains `"linkedin"`.
-4. Long-form copy sourced from the AI Content Writer's new `linkedin`
+2. Add an `isLinkedInComposioConnected()` guard, same shape as §3.6 step 2.
+3. Claw tools: `linkedin_post`, `linkedin_health`.
+4. Calendar network gains `"linkedin"`.
+5. Long-form copy sourced from the AI Content Writer's new `linkedin`
    variant (§3.9, step 1).
-5. **Setup decision, not a code gap**: Composio's LinkedIn OAuth product
+6. **Setup decision, not a code gap**: Composio's LinkedIn OAuth product
    is typically scoped to either a company Page or a personal profile,
-   not both under one auth config — the operator needs to decide which
-   is being connected before the auth config is created.
-6. Tests: same pattern as §3.6.
+   not both under one auth config (note `requiresBusiness: true` on the
+   toolkit entry above) — the operator needs to decide which is being
+   connected before the auth config is created.
+7. Tests: same pattern as §3.6.
 
 ### 3.11 UGC Videos Agent
 
@@ -578,45 +595,54 @@ from one-off Create.
 
 ### 3.12 Bulk Upload (cross-cutting — not one of the 11 screenshot agents, added on request)
 
-**Exists today**: every upload path in this app takes exactly **one file
-per request**. Verified by grep across `app/api/**`: `app/api/library/upload`,
+**Correction (post-publish review)**: the first version of this section
+claimed *no* route in the repo reads `form.getAll(...)`. That was wrong —
+verified by re-grepping after the fact.
+`app/api/campaigns/[id]/upper-videos/route.ts:16-32` **already** does
+exactly this: it reads `form.getAll("files")` (plus a `form.get("file")`
+fallback for one-file callers), validates each file's type/size
+individually with a per-file error message, and saves them in a plain
+sequential `for` loop via `saveUploadedVideo()` — i.e. a complete, working
+bulk-upload implementation already exists in this codebase, in one place.
+The corrected scope below is written against that fact.
+
+**Exists today**: bulk upload is proven in exactly one route
+(`app/api/campaigns/[id]/upper-videos/route.ts`). Every *other* upload
+path still takes one file per request: `app/api/library/upload`,
 `app/api/creator/upload`, `app/api/claw/files`,
-`app/api/campaigns/[id]/upper-videos`, `app/api/admin/avatars/[id]/upload`,
-`app/api/split-templates`, and `app/api/internal/podcast/source` all read a
-single `form.get("file")`. There is one partial exception:
-`app/api/admin/stock-uppers` (`POST`) already accepts a JSON `items[]`
-array — but that's bulk *import of already-stored asset ids*, not bulk
-*file* upload; it never touches `multipart/form-data`.
+`app/api/admin/avatars/[id]/upload`, `app/api/split-templates`,
+`app/api/internal/podcast/source`, and `app/api/internal/compositions`
+all read a single `form.get("file")` with no `getAll` fallback.
+Separately, `app/api/admin/stock-uppers` (`POST`) accepts a JSON `items[]`
+array — bulk *import of already-stored asset ids*, not bulk *file* upload,
+and unrelated to the multipart pattern above.
 
-All of these ultimately persist through one shared primitive,
-`savePersistentLibraryAsset()` (`lib/persistent-library.ts`), which already
-takes an arbitrary `id`/`kind`/`mediaType`/`label`/`title`/`mimeType`/`bytes`
-per call — so bulk upload is an orchestration problem, not a storage-layer
-problem. No new storage code is needed, only a loop and a UI that can pick
-more than one file.
+All of these — including the one that already does bulk — persist through
+one shared primitive, `savePersistentLibraryAsset()`
+(`lib/persistent-library.ts`), so extending the other routes is an
+orchestration change, not a storage-layer change.
 
-**Gap**: no endpoint reads `form.getAll(...)` (plural) anywhere in the
-repo — an operator wanting to add 20 UGC source clips, 30 stock-upper
-videos, or a batch of Library images today must submit 20–30 separate
-requests through the UI, one file at a time.
+**Gap**: the working multi-file pattern lives inline in one
+campaign-scoped route and isn't shared. An operator adding 20 Library
+images or 10 Creator clips still submits them one at a time, even though
+the exact loop needed to fix that already exists and works elsewhere in
+this app.
 
 **Steps**:
-1. Add one shared helper, `lib/bulk-upload.ts`, exporting
+1. Extract the existing loop from
+   `app/api/campaigns/[id]/upper-videos/route.ts:16-32` into a shared
+   `lib/bulk-upload.ts`, exporting
    `async function saveBulkUploads(files: File[], opts: {kind, mediaType, label, titlePrefix?}): Promise<{ok:{id,url,title}[], failed:{name,error}[]}>` —
-   validates each file's size/MIME the same way the existing single-file
-   routes do (`file.type.startsWith("video/")`, the 250MB cap already used
-   in `app/api/creator/upload/route.ts` and `app/api/library/upload/route.ts`),
-   then calls `savePersistentLibraryAsset()`/`saveUploadedVideo()` per
-   file, continuing past individual failures so one bad file in a batch of
-   30 doesn't fail the other 29 — return a per-file `ok`/`failed` result
-   list rather than an all-or-nothing response.
-2. Extend the two highest-value existing routes to accept multiple files
-   in the same request shape they already use, rather than inventing a
-   new bulk-only endpoint per surface:
+   keep its two proven properties: per-file validation with a per-file
+   error message (rather than failing the whole batch on one bad file),
+   and a plain sequential loop (not `Promise.all`) so peak memory stays
+   bounded to roughly one file's size. Return a per-file `ok`/`failed`
+   list; refactor `upper-videos/route.ts` itself to call the new helper
+   so the logic has one home.
+2. Apply the now-shared helper to the routes that don't have it yet:
    - `app/api/library/upload/route.ts`: read `form.getAll("files")`
      (falling back to the existing single `form.get("file")` for
-     backward compatibility with any existing caller), loop through
-     `saveBulkUploads`.
+     backward compatibility), loop through `saveBulkUploads`.
    - `app/api/creator/upload/route.ts`: same `getAll("files")` extension,
      applying the *same* `formats`/`scheduledAt`/`network`/`autoPost`
      options (already parsed once per request in that route) to every
@@ -634,21 +660,24 @@ requests through the UI, one file at a time.
    `form.set("file", ...)` to appending every selected file under
    `files`, with a simple per-file progress/result list (reusing the
    `ok`/`failed` array shape from step 1) rather than a single
-   success/error toast.
+   success/error toast — this is the same UI change the Campaigns
+   upper-videos screen would need if it doesn't already have a
+   multi-select input; check that screen first since the backend there
+   is already done.
 4. Claw tool: `bulk_upload_status` is not meaningful for Claw (file bytes
    can't travel through the chat tool-call JSON contract) — skip a Claw
    tool for the upload itself, but add `list_recent_uploads` if the
    operator wants to ask Claw "did the last batch make it in."
 5. Size/throughput guardrails: keep the existing per-file 250MB cap
    unchanged; add a batch-level cap (e.g. 25 files or 1GB total per
-   request, whichever is smaller) so one request can't exhaust the
-   Node process's memory buffering every file's `arrayBuffer()` at once
-   — process files sequentially inside `saveBulkUploads`, not with
-   `Promise.all`, to bound peak memory to roughly one file's size.
+   request, whichever is smaller), consistent with the sequential
+   (non-`Promise.all`) processing the extracted helper preserves.
 6. Tests: unit test `saveBulkUploads`'s partial-failure behavior (mix of
    one oversized file + valid files → valid ones still saved, oversized
    one reported in `failed`); extend
-   `tests/e2e/creator-upload-retry.spec.ts` for a multi-file selection.
+   `tests/e2e/creator-upload-retry.spec.ts` for a multi-file selection,
+   and add a regression test that `upper-videos/route.ts` still behaves
+   identically after being refactored onto the shared helper.
 
 ---
 
