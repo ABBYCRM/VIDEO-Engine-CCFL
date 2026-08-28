@@ -25,7 +25,7 @@ test("creator upload: 2.6MB real file posts successfully", async ({ page, reques
   await page.context().addCookies(storage.cookies);
 
   await page.goto("/creator", { waitUntil: "networkidle" });
-  await expect(page.getByRole("heading", { name: "Creator" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Creator", exact: true })).toBeVisible();
 
   // 2.6MB file (matches the operator's clip)
   const ftyp = Buffer.from(
