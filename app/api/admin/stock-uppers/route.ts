@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ensureJobOutputPath } from "@/lib/jobs";
 import { getPersistentLibraryAsset } from "@/lib/persistent-library";
 import { getStockUppersByCategory, saveStockUppersByCategory, saveUploadedVideo } from "@/lib/upper-videos";
+import { filesFromForm, saveBulkUploads } from "@/lib/bulk-upload";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -15,10 +16,37 @@ export async function GET() {
   return NextResponse.json({ stockUppers: getStockUppersByCategory() });
 }
 
+/** Bulk-import raw stock-upper video files for one category in a single
+ *  request: multipart/form-data with files=<video> (repeatable) + category=<...>.
+ *  Complements the JSON items[] mode below, which imports assets that are
+ *  already in the Library — this mode is for uploading new raw files. */
+async function postMultipart(req: Request) {
+  const form = await req.formData();
+  const category = String(form.get("category") || "");
+  if (!CATEGORIES.has(category)) return NextResponse.json({ error: `category must be one of ${[...CATEGORIES].join(", ")}` }, { status: 400 });
+  const files = filesFromForm(form);
+  if (!files.length) return NextResponse.json({ error: "Upload one or more video files" }, { status: 400 });
+  const replace = form.get("replace") === "1" || form.get("replace") === "true";
+  const { ok, failed } = await saveBulkUploads(files, { mediaType: "video", label: `stock-upper · ${category}` });
+  const map = replace ? {} : getStockUppersByCategory();
+  map[category] = [...(map[category] || []), ...ok.map((x) => x.id)];
+  saveStockUppersByCategory(map);
+  return NextResponse.json({
+    ok: true,
+    results: [
+      ...ok.map((x) => ({ assetId: x.name, category, ok: true, id: x.id })),
+      ...failed.map((x) => ({ assetId: x.name, category, ok: false, error: x.error }))
+    ],
+    stockUppers: getStockUppersByCategory()
+  });
+}
+
 /** Import existing Library video assets into the persistent, category-keyed
  *  stock-upper library. Body: { items: [{ assetId, category, title? }], replace? } */
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const contentType = req.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) return postMultipart(req);
   const body = await req.json().catch(() => ({}));
   const items = Array.isArray(body?.items) ? body.items : [];
   if (!items.length) return NextResponse.json({ error: "items[] is required" }, { status: 400 });
