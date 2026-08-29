@@ -45,6 +45,11 @@ import { parseCreatorFormats, uploadAndScheduleCreatorVideo } from "@/lib/creato
 import { generateCreatorCaption } from "@/lib/creator-caption";
 import { isComposioConfigured } from "@/lib/composio/client";
 import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
+import { scrapeWithFirecrawl } from "@/lib/firecrawl";
+import { scrapeWithScrapingBee } from "@/lib/scrapingbee";
+import { scrapeWithScrapfly } from "@/lib/scrapfly";
+import { takeScreenshot } from "@/lib/screenshotone";
+import { webSearch } from "@/lib/web-search";
 import { writeStandalonePost } from "@/lib/nvidia/content-writer";
 import type { PlatformKey } from "@/lib/nvidia/schemas";
 import crypto from "node:crypto";
@@ -487,14 +492,39 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "steel_scrape",
-    description: "Browse a public web page with Steel.dev and return clean Markdown, metadata, links, and an optional screenshot. Never use it for local/private URLs.",
+    description: "Browse a public web page and return clean Markdown, metadata, and links. Tries Steel.dev first (supports an inline screenshot + a proxy), then falls back to Firecrawl, ScrapingBee, and Scrapfly in order if a provider fails or isn't configured — always reports which one actually served the page via `via`. Never use it for local/private URLs.",
     args: "{\"url\":\"https://example.com\",\"delayMs\":0,\"useProxy\":false,\"screenshot\":false}",
-    handler: async (a) => scrapeWithSteel({
-      url: a.url,
-      delayMs: a.delayMs,
-      useProxy: a.useProxy,
-      screenshot: a.screenshot
-    })
+    handler: async (a) => {
+      const attempts: { name: string; run: () => Promise<any> }[] = [
+        { name: "steel.dev", run: () => scrapeWithSteel({ url: a.url, delayMs: a.delayMs, useProxy: a.useProxy, screenshot: a.screenshot }) },
+        { name: "firecrawl", run: () => scrapeWithFirecrawl({ url: a.url }) },
+        { name: "scrapingbee", run: () => scrapeWithScrapingBee({ url: a.url }) },
+        { name: "scrapfly", run: () => scrapeWithScrapfly({ url: a.url }) }
+      ];
+      const errors: string[] = [];
+      for (const attempt of attempts) {
+        try {
+          const result = await attempt.run();
+          if (errors.length) result.fallbackNote = `Tried ${errors.length} provider(s) first: ${errors.join("; ")}`;
+          return result;
+        } catch (e) {
+          errors.push(`${attempt.name}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      throw new Error(`steel_scrape failed on every provider. ${errors.join(" | ")}`);
+    }
+  },
+  {
+    name: "web_screenshot",
+    description: "Take a real screenshot of a public URL (ScreenshotOne) and save it to the Library. Different from steel_scrape — this returns an image, not page content. Never use it for local/private URLs.",
+    args: "{\"url\":\"https://example.com\",\"fullPage\":false}",
+    handler: async (a) => takeScreenshot({ url: a.url, fullPage: a.fullPage })
+  },
+  {
+    name: "web_search",
+    description: "General web search (not a single-URL fetch) — ranked results with title/url/snippet across the whole web. Tries Exa first, falls back to Tavily. Use steel_scrape afterward on a specific result URL if you need the full page content.",
+    args: "{\"query\":\"...\",\"numResults\":8}",
+    handler: async (a) => webSearch({ query: str(a.query), numResults: num(a.numResults, 8) })
   },
   {
     name: "list_files",
@@ -709,10 +739,10 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "coding_new_session",
-    description: "Coding Agent: open a new workspace on the configured external sandbox. Requires an operator-provisioned sandbox (CODING_SANDBOX_URL) — this app never executes code in its own process.",
+    description: "Coding Agent: open a new workspace on the configured external sandbox — either an operator-provisioned HTTP sandbox (CODING_SANDBOX_URL) or a hosted E2B sandbox (CODING_SANDBOX_PROVIDER=e2b + E2B_API_KEY). This app never executes code in its own process.",
     args: "{\"purpose\":\"optional\"}",
     handler: async (a) => {
-      if (!isCodingSandboxConfigured()) throw new Error("No coding sandbox is configured. This requires a separate, network-isolated sandbox service the operator provisions and points CODING_SANDBOX_URL at — never this app's own process.");
+      if (!isCodingSandboxConfigured()) throw new Error("No coding sandbox is configured. Point CODING_SANDBOX_URL at an operator-provisioned sandbox, or set CODING_SANDBOX_PROVIDER=e2b with E2B_API_KEY — this app never executes code in its own process.");
       return createCodingSession(str(a.purpose) || undefined);
     }
   },

@@ -11,6 +11,13 @@ import {
 } from "@/lib/settings";
 import { saveComposioApiKey } from "@/lib/composio/client";
 import { saveSteelApiKey } from "@/lib/steel";
+import { saveFirecrawlApiKey } from "@/lib/firecrawl";
+import { saveScrapingBeeApiKey } from "@/lib/scrapingbee";
+import { saveScrapflyApiKey } from "@/lib/scrapfly";
+import { saveScreenshotOneCredentials } from "@/lib/screenshotone";
+import { saveExaApiKey, saveTavilyApiKey } from "@/lib/web-search";
+import { saveHeliconeApiKey, setHeliconeEnabled } from "@/lib/nvidia/helicone";
+import { saveE2bApiKey } from "@/lib/coding-agent/e2b-backend";
 import { PROVIDERS, type ProviderId } from "@/lib/providers";
 import { isNvidiaModelId } from "@/lib/nvidia";
 
@@ -30,6 +37,20 @@ export async function PUT(req: Request) {
   if (body.nvidiaApiKey) saveNvidiaApiKey(String(body.nvidiaApiKey));
   if (body.composioApiKey) saveComposioApiKey(String(body.composioApiKey));
   if (body.steelApiKey) saveSteelApiKey(String(body.steelApiKey));
+  if (body.firecrawlApiKey) saveFirecrawlApiKey(String(body.firecrawlApiKey));
+  if (body.scrapingbeeApiKey) saveScrapingBeeApiKey(String(body.scrapingbeeApiKey));
+  if (body.scrapflyApiKey) saveScrapflyApiKey(String(body.scrapflyApiKey));
+  if (body.screenshotoneAccessKey || body.screenshotoneSecretKey) {
+    saveScreenshotOneCredentials({
+      accessKey: body.screenshotoneAccessKey ? String(body.screenshotoneAccessKey) : undefined,
+      secretKey: body.screenshotoneSecretKey ? String(body.screenshotoneSecretKey) : undefined
+    });
+  }
+  if (body.exaApiKey) saveExaApiKey(String(body.exaApiKey));
+  if (body.tavilyApiKey) saveTavilyApiKey(String(body.tavilyApiKey));
+  if (body.heliconeApiKey) saveHeliconeApiKey(String(body.heliconeApiKey));
+  if (typeof body.heliconeEnabled === "boolean") setHeliconeEnabled(body.heliconeEnabled);
+  if (body.e2bApiKey) saveE2bApiKey(String(body.e2bApiKey));
 
   if (body.resolution && !["720p","1080p","4k"].includes(body.resolution)) return NextResponse.json({ error: "Invalid resolution" }, { status: 400 });
   if (body.aspectRatio && !["9:16","16:9"].includes(body.aspectRatio)) return NextResponse.json({ error: "Invalid aspect ratio" }, { status: 400 });

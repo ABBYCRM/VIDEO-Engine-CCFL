@@ -6,6 +6,13 @@ import { COMPOSIO_TOOLKITS, isComposioConfigured, getAuthConfigId } from "@/lib/
 import { isImageProviderConfigured, getImageProvider, getImageModel, type ImageProvider } from "@/lib/avatar-generation/client";
 import { isInstagramConfigured } from "@/lib/instagram-graph";
 import { isSteelConfigured } from "@/lib/steel";
+import { isFirecrawlConfigured } from "@/lib/firecrawl";
+import { isScrapingBeeConfigured } from "@/lib/scrapingbee";
+import { isScrapflyConfigured } from "@/lib/scrapfly";
+import { isScreenshotOneConfigured } from "@/lib/screenshotone";
+import { isExaConfigured, isTavilyConfigured } from "@/lib/web-search";
+import { isHeliconeEnabled } from "@/lib/nvidia/helicone";
+import { isE2bConfigured } from "@/lib/coding-agent/e2b-backend";
 
 export type EngineSettings = {
   defaultProvider: ProviderId;
@@ -19,6 +26,16 @@ export type EngineSettings = {
   composio: { keyConfigured: boolean; toolkits: Array<{ id: string; authConfigConfigured: boolean }> };
   instagram: { configured: boolean };
   steel: { configured: boolean };
+  research: {
+    firecrawl: boolean;
+    scrapingbee: boolean;
+    scrapfly: boolean;
+    screenshotone: boolean;
+    exa: boolean;
+    tavily: boolean;
+    heliconeEnabled: boolean;
+    e2b: boolean;
+  };
   image: { configured: boolean; provider: ImageProvider; model: string };
   resolution: "720p" | "1080p" | "4k";
   aspectRatio: "9:16" | "16:9";
@@ -74,6 +91,16 @@ export function getEngineSettings(): EngineSettings {
     },
     instagram: { configured: isInstagramConfigured() },
     steel: { configured: isSteelConfigured() },
+    research: {
+      firecrawl: isFirecrawlConfigured(),
+      scrapingbee: isScrapingBeeConfigured(),
+      scrapfly: isScrapflyConfigured(),
+      screenshotone: isScreenshotOneConfigured(),
+      exa: isExaConfigured(),
+      tavily: isTavilyConfigured(),
+      heliconeEnabled: isHeliconeEnabled(),
+      e2b: isE2bConfigured()
+    },
     image: getImageSettings(),
     resolution: ((getRaw("resolution") as EngineSettings["resolution"]) || "1080p"),
     aspectRatio: ((getRaw("aspect_ratio") as EngineSettings["aspectRatio"]) || "9:16")
