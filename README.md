@@ -43,9 +43,9 @@ Browser / external software
 
 ## Instagram publishing
 
-Calendar auto-post, Library **Post to Instagram**, split-screen publish, and **Claw** use the official Instagram Graph API connector ported from [adelaidasofia/instagram-mcp](https://github.com/adelaidasofia/instagram-mcp). If Graph fails, the same call retries on Composio Instagram and Claw reports the fallback.
+Calendar auto-post, Library **Post to Instagram**, split-screen publish, and **Claw** use Composio Instagram first. If Composio is disconnected or an action fails, the same call retries through the direct Instagram Graph connector ported from [adelaidasofia/instagram-mcp](https://github.com/adelaidasofia/instagram-mcp), and Claw reports the fallback.
 
-On **Integrations**, save a long-lived Graph token (scopes `instagram_basic` + `instagram_content_publish` + `instagram_manage_comments`; DMs also need `instagram_manage_messages`) and the numeric Instagram Business Account id. Same env names as the MCP: `INSTAGRAM_MCP_ACCESS_TOKEN`, `INSTAGRAM_MCP_IG_USER_ID`. Set `INSTAGRAM_MCP_DM_ENABLED=1` after App Review. Instagram fetches the media itself, so `PUBLIC_BASE_URL` must be public https.
+On **Integrations**, connect Composio Instagram for the primary path. Its OAuth auth config must include the Meta scopes required by the actions you use. For the direct Graph fallback, save a long-lived token (scopes `instagram_basic` + `instagram_content_publish` + `instagram_manage_comments`; DMs also need `instagram_manage_messages`) and the numeric Instagram Business Account id. Same env names as the MCP: `INSTAGRAM_MCP_ACCESS_TOKEN`, `INSTAGRAM_MCP_IG_USER_ID`. `INSTAGRAM_MCP_DM_ENABLED=1` enables DMs only on the direct Graph path after App Review; it does not gate Composio. Both providers can send only within Meta's allowed window for an existing conversation. Instagram fetches published media itself, so `PUBLIC_BASE_URL` must be public https.
 
 **Claw** is the left-nav operator chat, using NVIDIA Nemotron 3.5 Lightning 30B A3B on DigitalOcean for low-latency agent and tool work. Override it with `CLAW_NVIDIA_MODEL`. It can generate, approve, post, read/reply comments, and DMs, with a Grok-style thread/file tray.
 

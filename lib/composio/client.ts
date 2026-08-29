@@ -116,7 +116,7 @@ export async function syncConnectedAccounts() {
 // post content. requiresBusiness=true means the user's account on that
 // platform must be a Business/Creator account (Meta's rule, not ours).
 export const COMPOSIO_TOOLKITS = [
-  { id: "instagram",      label: "Instagram (Composio fallback)",   requiresBusiness: true,  publishable: true },
+  { id: "instagram",      label: "Instagram (Composio primary)",    requiresBusiness: true,  publishable: true },
   { id: "facebook",       label: "Facebook Pages",                  requiresBusiness: true,  publishable: true },
   { id: "youtube",        label: "YouTube",                         requiresBusiness: false, publishable: true },
   { id: "googleads",      label: "Google Ads",                      requiresBusiness: false, publishable: false },

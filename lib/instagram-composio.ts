@@ -16,6 +16,7 @@
 // waitUntilFinished()/GET_POST_STATUS loop is gone.
 
 import { getActiveConnectedAccountId, getComposio, isComposioConfigured } from "@/lib/composio/client";
+import { getComposioMediaInsightsArgs } from "@/lib/instagram-composio-args";
 
 const USER_ID = "admin";
 
@@ -36,7 +37,7 @@ export function isComposioInstagramConnected(): boolean {
 }
 
 export async function executeInstagramComposioTool(slug: string, args: Record<string, unknown>) {
-  if (!isComposioConfigured()) throw new Error("Composio is not configured (Instagram fallback unavailable)");
+  if (!isComposioConfigured()) throw new Error("Composio is not configured (Instagram unavailable)");
   const composio: any = getComposio();
   const connectedAccountId = getActiveConnectedAccountId("instagram") || undefined;
   const result = await composio.tools.execute(slug, {
@@ -100,10 +101,7 @@ export async function composioGetMediaInsights(mediaId: string) {
   // Unlike Graph's own comma-separated metric query string, Composio's
   // "metric" param is a real array, not a string - verified against
   // Composio's own docs after guessing wrong on other slugs earlier today.
-  return executeInstagramComposioTool("INSTAGRAM_GET_IG_MEDIA_INSIGHTS", {
-    ig_media_id: mediaId,
-    metric: ["views", "reach", "likes", "comments", "saved", "shares"]
-  });
+  return executeInstagramComposioTool("INSTAGRAM_GET_IG_MEDIA_INSIGHTS", getComposioMediaInsightsArgs(mediaId));
 }
 
 export async function composioGetComments(mediaId: string) {

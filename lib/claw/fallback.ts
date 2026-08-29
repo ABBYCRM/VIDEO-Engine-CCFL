@@ -6,6 +6,11 @@ export type FallbackResult<T> = {
   fallbackNote?: string;
 };
 
+export type InstagramConnectorPaths<T> = {
+  composio?: () => Promise<T>;
+  graph?: () => Promise<T>;
+};
+
 function errMsg(e: unknown) {
   return e instanceof Error ? e.message : String(e);
 }
@@ -16,18 +21,17 @@ function errMsg(e: unknown) {
  * Only fall back to official Graph (instagram-mcp) if Composio is not connected
  * or the Composio call errors.
  *
- * Both paths can coexist; the operator may add Graph credentials later
- * (e.g. for `instagram_manage_messages` DMs inside Meta's 24h window) and
- * Composio stays primary for everything else.
+ * Both paths can coexist. They are named here so a call site cannot silently
+ * reverse the primary and fallback providers by swapping positional arguments.
  *
  * If neither path is provided, throws a clear "not configured" error.
  */
 export async function withInstagramFallback<T>(
   op: string,
-  composio?: () => Promise<T>,
-  mcp?: () => Promise<T>
+  paths: InstagramConnectorPaths<T>
 ): Promise<FallbackResult<T>> {
-  if (!composio && !mcp) {
+  const { composio, graph } = paths;
+  if (!composio && !graph) {
     throw new Error(`${op} is not configured: neither Composio Instagram nor official Graph (instagram-mcp) is connected.`);
   }
   if (composio) {
@@ -36,20 +40,20 @@ export async function withInstagramFallback<T>(
       return { via: "composio", data };
     } catch (composioErr) {
       const composioMsg = errMsg(composioErr);
-      if (!mcp) throw composioErr;
+      if (!graph) throw composioErr;
       try {
-        const data = await mcp();
+        const data = await graph();
         return {
           via: "instagram-mcp",
           data,
           fallbackNote: `${op}: Composio failed (${composioMsg}). Used official Graph (instagram-mcp).`
         };
-      } catch (mcpErr) {
-        throw new Error(`${op} failed on both paths. Composio: ${composioMsg}. Graph (instagram-mcp): ${errMsg(mcpErr)}`);
+      } catch (graphErr) {
+        throw new Error(`${op} failed on both paths. Composio: ${composioMsg}. Graph (instagram-mcp): ${errMsg(graphErr)}`);
       }
     }
   }
   // Only Graph is wired
-  const data = await mcp!();
+  const data = await graph!();
   return { via: "instagram-mcp", data, fallbackNote: `${op}: Composio Instagram is not connected. Used official Graph (instagram-mcp).` };
 }

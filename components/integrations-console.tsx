@@ -233,9 +233,9 @@ export function IntegrationsConsole() {
               Connections
             </h2>
             <p className="max-w-3xl text-slate-600">
-              Instagram publishing uses the official Graph API connector from{" "}
+              Instagram actions use Composio first. The direct Graph connector from{" "}
               <a className="text-cyan-700 underline-offset-2 hover:underline" href="https://github.com/adelaidasofia/instagram-mcp" target="_blank" rel="noreferrer">adelaidasofia/instagram-mcp</a>
-              . Other networks still go through Composio OAuth. Composio Instagram stays connected as Claw's fallback if Graph fails.
+              {" "}runs as fallback when Composio is disconnected or an action fails, and Claw reports which path ran.
             </p>
           </div>
 
@@ -262,7 +262,7 @@ export function IntegrationsConsole() {
               />
             </div>
             <p className="mb-4 text-sm text-slate-600">
-              Official Instagram Graph API — Reels, Stories, feed stills, comments, and DMs (DMs need App Review). If Graph fails, Claw and publish fall back to Composio Instagram and say so. Needs a Professional account, scopes
+              Direct Instagram Graph fallback for Reels, Stories, feed stills, comments, and DMs. Claw uses it when Composio is disconnected or errors and says so. This fallback needs a Professional account, scopes
               <code className="mx-1 rounded bg-slate-100 px-1">instagram_content_publish</code>
               <code className="mx-1 rounded bg-slate-100 px-1">instagram_manage_comments</code>
               (and <code className="rounded bg-slate-100 px-1">instagram_manage_messages</code> for DMs), plus the numeric Business Account id.
@@ -304,7 +304,7 @@ export function IntegrationsConsole() {
                   await reload();
                 }}
               />
-              Enable DMs (only after Meta grants <code className="rounded bg-slate-100 px-1">instagram_manage_messages</code>)
+              Enable DMs on the direct Graph fallback (only after Meta grants <code className="rounded bg-slate-100 px-1">instagram_manage_messages</code>)
             </label>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={saveInstagram} disabled={busy._ig || (!igToken && !igUserId && !igSecret)}>
@@ -325,7 +325,7 @@ export function IntegrationsConsole() {
               Composio project API key
             </div>
             <p className="mb-3 text-sm text-slate-600">
-              Used for YouTube, Facebook, LinkedIn, and Instagram fallback if Graph (instagram-mcp) fails. Key from{" "}
+              Primary path for Instagram plus YouTube, Facebook, LinkedIn, and other connected apps. Instagram DM replies require an existing conversation inside Meta's 24-hour window. Key from{" "}
               <a className="text-cyan-700 underline-offset-2 hover:underline" href="https://app.composio.dev" target="_blank" rel="noreferrer">app.composio.dev</a>
               . Stored encrypted (AES-256-GCM).
             </p>
@@ -347,7 +347,7 @@ export function IntegrationsConsole() {
           ) : (
             <Card className="p-5">
               <div className="mb-4 flex items-center justify-between">
-                <div className="font-medium">Other networks (Composio)</div>
+                <div className="font-medium">Connected apps (Composio)</div>
                 <div className="flex items-center gap-2">
                   {overview.configured && (
                     <Button variant="secondary" size="sm" onClick={syncFromComposio} disabled={busy._sync}>
@@ -362,7 +362,7 @@ export function IntegrationsConsole() {
 
               {!overview.configured && (
                 <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-sm text-amber-800">
-                  Set your Composio API key above to enable non-Instagram connections.
+                  Set your Composio API key above to enable connected apps.
                 </div>
               )}
 

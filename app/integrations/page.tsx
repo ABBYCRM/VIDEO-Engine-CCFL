@@ -12,7 +12,7 @@ export default function IntegrationsPage() {
           eyebrow="Connectors"
           eyebrowIcon={<Plug size={16} />}
           title="Integrations"
-          description="Connect Instagram, Facebook, YouTube, TikTok, and other channels. Composio is the OAuth layer; the publisher uses the official Instagram Graph API."
+          description="Connect Instagram, Facebook, YouTube, TikTok, and other channels. Instagram uses Composio first with direct Graph as fallback."
         />
         <IntegrationsConsole />
       </AppShell>

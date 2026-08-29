@@ -3,8 +3,8 @@ import { stubAuthenticatedSession } from "./helpers";
 
 /**
  * Verifies Claw's ig_publish tool is wired correctly end to end in the chat
- * UI: a successful publish reports which path was used (Graph vs Composio
- * fallback), and a clean failure (e.g. nothing configured) surfaces as text,
+ * UI: a successful publish reports which path was used (Composio primary vs
+ * direct Graph fallback), and a clean failure (e.g. nothing configured) surfaces as text,
  * never a crash. No real Instagram call is made anywhere in this suite -
  * see the code-level verification of lib/instagram-publish.ts's own
  * "neither Graph nor Composio configured" branch, exercised directly
@@ -64,7 +64,7 @@ test("Claw surfaces an ig_publish failure as text, not a crash, when nothing is 
   const convo = await stubConvo(page, "c-ig-fail", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
     convo.markSent();
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-fail", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: false, preview: "Instagram is not configured. Save Graph credentials on Integrations, or connect Composio Instagram as fallback." })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-fail", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: false, preview: "Instagram is not configured. Connect Composio Instagram, or save Graph credentials in Settings." })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 

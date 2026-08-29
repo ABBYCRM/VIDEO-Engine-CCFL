@@ -114,7 +114,7 @@ export function InstagramGraphCard() {
         />
       </div>
       <p className="mb-4 text-sm text-slate-600">
-        Official Instagram Graph API — Reels, Stories, feed stills, comments, and DMs (DMs need App Review). If Graph fails, Claw and publish fall back to Composio Instagram and say so. Needs a Professional account, scopes
+        Direct Instagram Graph fallback for Reels, Stories, feed stills, comments, and DMs. Claw uses it when Composio is disconnected or errors and says so. This fallback needs a Professional account, scopes
         <code className="mx-1 rounded bg-slate-100 px-1">instagram_content_publish</code>
         <code className="mx-1 rounded bg-slate-100 px-1">instagram_manage_comments</code>
         (and <code className="rounded bg-slate-100 px-1">instagram_manage_messages</code> for DMs), plus the numeric Business Account id.
@@ -164,7 +164,7 @@ export function InstagramGraphCard() {
             await reload();
           }}
         />
-        Enable DMs (only after Meta grants <code className="rounded bg-slate-100 px-1">instagram_manage_messages</code>)
+        Enable DMs on the direct Graph fallback (only after Meta grants <code className="rounded bg-slate-100 px-1">instagram_manage_messages</code>)
       </label>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button onClick={saveInstagram} disabled={busy || (!igToken && !igUserId && !igSecret)}>
