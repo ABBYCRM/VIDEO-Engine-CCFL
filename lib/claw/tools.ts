@@ -38,6 +38,7 @@ import {
   isComposioInstagramConnected
 } from "@/lib/instagram-composio";
 import { withInstagramFallback } from "@/lib/claw/fallback";
+import { getInstagramDmCapability } from "@/lib/claw/instagram-dm-capability";
 import { digArray, summarizeMedia } from "@/lib/claw/instagram-media-shape";
 import { deleteClawFile, getFile as getClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
 import fsp from "node:fs/promises";
@@ -114,12 +115,24 @@ export const CLAW_TOOLS: ClawTool[] = [
       const settings = getEngineSettings();
       const jobs = db.prepare("SELECT status, COUNT(*) as n FROM video_jobs GROUP BY status").all() as { status: string; n: number }[];
       const ig = await instagramHealthcheck();
+      const composioReady = isComposioInstagramConnected();
+      const dm = getInstagramDmCapability({
+        composioReady,
+        graphReady: ig.live,
+        graphDmEnabled: isInstagramDmEnabled()
+      });
       return {
         defaultProvider: settings.defaultProvider,
         video: settings.providers,
         nvidia: settings.nvidia,
         image: settings.image,
-        instagram: { ...ig, composioFallback: isComposioInstagramConnected(), dmEnabled: isInstagramDmEnabled() },
+        instagram: {
+          ...ig,
+          primary: "composio",
+          composioPrimary: composioReady,
+          graphDmEnabled: isInstagramDmEnabled(),
+          dm
+        },
         composio: { configured: isComposioConfigured() },
         steel: { configured: isSteelConfigured() },
         jobs
@@ -128,8 +141,8 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     // Named to match what the model naturally reaches for when a user asks
-    // about "Composio" — the system prompt mentions Composio as a fallback
-    // concept without ever listing a bare tool literally named "composio",
+    // about "Composio" — the system prompt mentions Composio as a provider
+    // without ever listing a bare tool literally named "composio",
     // which was causing "Unknown tool composio" hallucinated calls. This
     // tool exists so that instinct resolves to something real.
     name: "composio_health",
@@ -356,11 +369,17 @@ export const CLAW_TOOLS: ClawTool[] = [
         composio = { connected: false };
       }
       const composioLive = Boolean(composio && (composio as { connected: boolean }).connected && (composio as { error?: string }).error === undefined);
+      const dm = getInstagramDmCapability({
+        composioReady: composioLive,
+        graphReady: graph.live,
+        graphDmEnabled: isInstagramDmEnabled()
+      });
       return {
         primary: "composio",
         graph,
         composio,
-        dmEnabled: isInstagramDmEnabled(),
+        graphDmEnabled: isInstagramDmEnabled(),
+        dm,
         note: composioLive
           ? "Composio Instagram is the primary MCP. Official Graph (instagram-mcp) is fallback only — only used if Composio is disconnected or errors."
           : graph.live
@@ -376,8 +395,10 @@ export const CLAW_TOOLS: ClawTool[] = [
     handler: async (a) => {
       const result = await withInstagramFallback(
         "ig_list_media",
-        isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined,
-        async () => listMedia(num(a.limit, 12))
+        {
+          composio: isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined,
+          graph: async () => listMedia(num(a.limit, 12))
+        }
       );
       const items = digArray(result.data) || [];
       return { via: result.via, fallbackNote: result.fallbackNote, media: summarizeMedia(items) };
@@ -392,8 +413,10 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
       return withInstagramFallback(
         "ig_media_insights",
-        isComposioInstagramConnected() ? async () => composioGetMediaInsights(mediaId) : undefined,
-        async () => getMediaInsights(mediaId)
+        {
+          composio: isComposioInstagramConnected() ? async () => composioGetMediaInsights(mediaId) : undefined,
+          graph: async () => getMediaInsights(mediaId)
+        }
       );
     }
   },
@@ -406,8 +429,10 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
       return withInstagramFallback(
         "ig_get_comments",
-        isComposioInstagramConnected() ? async () => composioGetComments(mediaId) : undefined,
-        async () => getComments(mediaId)
+        {
+          composio: isComposioInstagramConnected() ? async () => composioGetComments(mediaId) : undefined,
+          graph: async () => getComments(mediaId)
+        }
       );
     }
   },
@@ -421,8 +446,10 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!commentId || !message) throw new Error("commentId and message are required");
       return withInstagramFallback(
         "ig_reply_comment",
-        isComposioInstagramConnected() ? async () => composioReplyComment(commentId, message) : undefined,
-        async () => replyToComment(commentId, message)
+        {
+          composio: isComposioInstagramConnected() ? async () => composioReplyComment(commentId, message) : undefined,
+          graph: async () => replyToComment(commentId, message)
+        }
       );
     }
   },
@@ -446,12 +473,14 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "ig_list_conversations",
-    description: "List Instagram DMs. Composio is primary, Graph (instagram-mcp) is fallback.",
+    description: "List Instagram DM conversations. Composio is primary; direct Graph (instagram-mcp) is fallback. Each provider's OAuth connection needs Meta messaging access.",
     args: "{}",
     handler: async () => withInstagramFallback(
       "ig_list_conversations",
-      isComposioInstagramConnected() ? async () => composioListConversations() : undefined,
-      async () => listConversations()
+      {
+        composio: isComposioInstagramConnected() ? async () => composioListConversations() : undefined,
+        graph: async () => listConversations()
+      }
     )
   },
   {
@@ -463,14 +492,16 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!conversationId) throw new Error("conversationId is required");
       return withInstagramFallback(
         "ig_get_messages",
-        isComposioInstagramConnected() ? async () => composioGetMessages(conversationId) : undefined,
-        async () => getConversationMessages(conversationId)
+        {
+          composio: isComposioInstagramConnected() ? async () => composioGetMessages(conversationId) : undefined,
+          graph: async () => getConversationMessages(conversationId)
+        }
       );
     }
   },
   {
     name: "ig_send_dm",
-    description: "Send an Instagram DM. recipientId is the IGSID.",
+    description: "Reply in an existing Instagram DM conversation. Meta requires a qualifying user interaction inside the 24-hour messaging window. Composio is primary; direct Graph is fallback. recipientId is the IGSID.",
     args: "{\"recipientId\":\"...\",\"text\":\"...\"}",
     handler: async (a) => {
       const recipientId = str(a.recipientId);
@@ -478,8 +509,10 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!recipientId || !text) throw new Error("recipientId and text are required");
       return withInstagramFallback(
         "ig_send_dm",
-        isComposioInstagramConnected() ? async () => composioSendMessage(recipientId, text) : undefined,
-        async () => sendDirectMessage(recipientId, text)
+        {
+          composio: isComposioInstagramConnected() ? async () => composioSendMessage(recipientId, text) : undefined,
+          graph: async () => sendDirectMessage(recipientId, text)
+        }
       );
     }
   },

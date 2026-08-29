@@ -217,7 +217,7 @@ export function ClawConsole() {
                 {!visible.length && !streaming && (
                   <div className="mx-auto max-w-xl rounded-2xl border border-violet-100 bg-violet-50/60 p-5">
                     <div className="text-base font-semibold text-violet-900">Talk to Claw</div>
-                    <p className="mt-1 text-sm text-slate-600">Same controls as this Grok thread: new, delete, upload, files. Claw can research the public web with Steel, generate, post, read IG comments, and DMs. Graph first — if MCP fails it uses Composio and tells you.</p>
+                    <p className="mt-1 text-sm text-slate-600">Same controls as this Grok thread: new, delete, upload, files. Claw can research the public web with Steel, generate, post, read IG comments, and DMs. Composio runs first; direct Graph is the reported fallback.</p>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       {["Research a public URL with Steel", "Read today’s Instagram comments", "What’s stuck in Pipeline?", "Approve pending Calendar slots"].map((q) => (
                         <button key={q} type="button" className="rounded-full border border-violet-200 bg-white px-3 py-1 text-violet-800" onClick={() => setText(q)}>{q}</button>

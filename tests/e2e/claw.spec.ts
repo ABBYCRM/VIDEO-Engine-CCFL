@@ -17,7 +17,7 @@ test("Claw is the left-nav operator chat with Grok-style thread and file control
       conversation: { id: "c1", title: "New thread" },
       messages: sent ? [
         { id: "m1", role: "user", content: "Read today’s Instagram comments" },
-        { id: "m2", role: "assistant", content: "Graph is primary. Composio is fallback." }
+        { id: "m2", role: "assistant", content: "Composio is primary. Direct Graph is fallback." }
       ] : []
     })
   }));
@@ -30,7 +30,7 @@ test("Claw is the left-nav operator chat with Grok-style thread and file control
     // Deliberate delay so the busy-but-not-yet-streaming window (the AILoader
     // "Thinking" indicator) is actually observable instead of racing past it.
     await new Promise((r) => setTimeout(r, 300));
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c1", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "steel_scrape", args: { url: "https://example.com" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "steel_scrape", ok: true, via: "steel.dev", preview: "Example Domain" })}\n\ndata: ${JSON.stringify({ type: "token", text: "Graph is primary. Composio is fallback." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "Graph is primary. Composio is fallback." })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c1", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "steel_scrape", args: { url: "https://example.com" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "steel_scrape", ok: true, via: "steel.dev", preview: "Example Domain" })}\n\ndata: ${JSON.stringify({ type: "token", text: "Composio is primary. Direct Graph is fallback." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "Composio is primary. Direct Graph is fallback." })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
@@ -38,6 +38,7 @@ test("Claw is the left-nav operator chat with Grok-style thread and file control
   await expect(page.getByRole("link", { name: "Claw" })).toBeVisible();
   await expect(page.getByText("Talk to Claw")).toBeVisible();
   await expect(page.getByText(/research the public web with Steel/i)).toBeVisible();
+  await expect(page.getByText(/Composio runs first; direct Graph is the reported fallback/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "New" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Upload files" })).toBeVisible();
   await page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…").fill("Read today’s Instagram comments");
@@ -46,6 +47,6 @@ test("Claw is the left-nav operator chat with Grok-style thread and file control
   await expect(page.getByText("Thinking").first()).toBeVisible();
   await expect(page.getByText("Did steel_scrape")).toBeVisible();
   await expect(page.getByText("via steel.dev")).toBeVisible();
-  await expect(page.getByText("Graph is primary. Composio is fallback.")).toBeVisible();
+  await expect(page.getByText("Composio is primary. Direct Graph is fallback.")).toBeVisible();
   await expect(page.getByText("Thinking")).toHaveCount(0);
 });

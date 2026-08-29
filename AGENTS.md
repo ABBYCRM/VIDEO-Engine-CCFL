@@ -45,7 +45,7 @@ VIDEO-Engine is a **single-shot generation service**. A generation request must 
 
 ## Instagram publishing
 
-Calendar auto-post, Library "Post to Instagram", split-screen publish, and Claw use the official Instagram Graph API connector ported from [adelaidasofia/instagram-mcp](https://github.com/adelaidasofia/instagram-mcp) first. If Graph fails, the same operation retries on Composio Instagram and the operator is told which path ran. Configure `INSTAGRAM_MCP_ACCESS_TOKEN` + `INSTAGRAM_MCP_IG_USER_ID` (or save them on Integrations). Comments need `instagram_manage_comments`. DMs need `instagram_manage_messages` plus `INSTAGRAM_MCP_DM_ENABLED=1`.
+Calendar auto-post, Library "Post to Instagram", split-screen publish, and Claw use Composio Instagram first. If Composio is disconnected or an action fails, the same operation retries through the direct Instagram Graph connector ported from [adelaidasofia/instagram-mcp](https://github.com/adelaidasofia/instagram-mcp), and the operator is told which path ran. Configure Composio on Integrations for the primary path. The direct fallback uses `INSTAGRAM_MCP_ACCESS_TOKEN` + `INSTAGRAM_MCP_IG_USER_ID` (or saved Integrations credentials). DM tools are available through a Composio OAuth connection with Meta messaging access; the direct fallback separately needs `instagram_manage_messages` plus `INSTAGRAM_MCP_DM_ENABLED=1`. DM sends are replies in an existing conversation and remain subject to Meta's 24-hour messaging window on both paths.
 
 ## Claw
 
