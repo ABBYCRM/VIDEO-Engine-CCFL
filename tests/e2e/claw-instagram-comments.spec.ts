@@ -71,6 +71,9 @@ test("Claw reads Instagram comments with a real media id through the Composio fa
   await expect(page.getByText("via composio", { exact: true })).toHaveCount(2);
   await expect(page.getByText(MEDIA_ID, { exact: false })).toBeVisible();
   await expect(page.getByText(finalMessage)).toBeVisible();
+  const composer = page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…");
+  await expect(composer).toBeEnabled();
+  await composer.fill("Try again");
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 });
 
@@ -103,5 +106,8 @@ test("Claw keeps working and gives actionable guidance for Meta code 100/subcode
   await expect(page.getByText(/Meta denied access to this media/).first()).toBeVisible();
   await expect(page.getByText(/Reconnect Instagram in Settings/).first()).toBeVisible();
   await expect(page.getByText(finalMessage)).toBeVisible();
+  const composer = page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…");
+  await expect(composer).toBeEnabled();
+  await composer.fill("Try again");
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
 });
