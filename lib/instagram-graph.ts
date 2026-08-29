@@ -52,14 +52,14 @@ export function getInstagramAccessToken(): string {
   const encrypted = getRaw(TOKEN_KEY);
   if (encrypted) return decryptSecret(encrypted);
   if (process.env.INSTAGRAM_MCP_ACCESS_TOKEN) return process.env.INSTAGRAM_MCP_ACCESS_TOKEN;
-  throw new InstagramGraphError("Instagram Graph access token is not configured. Save it on Integrations.", "auth");
+  throw new InstagramGraphError("Instagram Graph access token is not configured. Save it in Settings.", "auth");
 }
 
 export function getInstagramUserId(): string {
   const stored = getRaw(USER_ID_KEY);
   if (stored) return stored;
   if (process.env.INSTAGRAM_MCP_IG_USER_ID) return process.env.INSTAGRAM_MCP_IG_USER_ID;
-  throw new InstagramGraphError("Instagram Business Account id is not configured. Save it on Integrations.", "auth");
+  throw new InstagramGraphError("Instagram Business Account id is not configured. Save it in Settings.", "auth");
 }
 
 export function getInstagramAppSecret(): string | null {
@@ -313,10 +313,34 @@ export async function deleteComment(commentId: string) {
   return graphRequest("DELETE", commentId);
 }
 
+/**
+ * "Comment INSURANCE and I'll DM you the link" — a private reply to a
+ * specific comment. This is Meta's only sanctioned way to send the FIRST
+ * message to someone who never DMed the account: POST {ig-user-id}/messages
+ * with recipient={comment_id}, one reply per comment ever, within 7 days of
+ * the comment. Deliberately NOT gated by isInstagramDmEnabled()/
+ * INSTAGRAM_MCP_DM_ENABLED — per Meta's docs this uses
+ * instagram_manage_comments (the same permission comment reading/replying
+ * already needs here), not instagram_manage_messages. General inbox
+ * access (listConversations/getConversationMessages/sendDirectMessage
+ * below) is the one that needs the App-Review-gated permission and stays
+ * gated.
+ */
+export async function sendPrivateReplyToComment(commentId: string, message: string) {
+  const text = String(message || "").trim().slice(0, 1000);
+  if (!text) throw new InstagramGraphError("Reply text is required", "validation");
+  if (!commentId) throw new InstagramGraphError("commentId is required", "validation");
+  const igUserId = getInstagramUserId();
+  return graphRequest("POST", `${igUserId}/messages`, {
+    recipient: { comment_id: commentId },
+    message: { text }
+  });
+}
+
 export async function listConversations(limit = 25) {
   if (!isInstagramDmEnabled()) {
     throw new InstagramGraphError(
-      "Instagram DMs are gated. After Meta App Review grants instagram_manage_messages, set INSTAGRAM_MCP_DM_ENABLED=1 (or enable DMs on Integrations).",
+      "Instagram DMs are gated. After Meta App Review grants instagram_manage_messages, set INSTAGRAM_MCP_DM_ENABLED=1 (or enable DMs in Settings).",
       "permission"
     );
   }

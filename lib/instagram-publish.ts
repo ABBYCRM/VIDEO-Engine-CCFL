@@ -115,5 +115,5 @@ export async function publishInstagram(input: {
     return { ...result, via: "composio", fallbackNote: "instagram-mcp is not configured. Used Composio Instagram." };
   }
 
-  throw new Error("Instagram is not configured. Save Graph credentials on Integrations, or connect Composio Instagram as fallback.");
+  throw new Error("Instagram is not configured. Save Graph credentials in Settings, or connect Composio Instagram as fallback.");
 }
