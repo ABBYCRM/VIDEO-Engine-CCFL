@@ -156,7 +156,7 @@ export async function GET() {
   if (!a2e.configured) actions.push("Set A2E_API_KEY in DO env");
   if (!hedra.configured) actions.push("Set HEDRA_API_KEY in DO env");
   if (!nvidia.configured) actions.push("Set NVIDIA_API_KEY in DO env");
-  if (!instagram.configured) actions.push("Save Instagram Graph token + Business Account id on Integrations (instagram-mcp)");
+  if (!instagram.configured) actions.push("Save Instagram Graph token + Business Account id in Settings (instagram-mcp)");
   if (instagram.configured && !instagram.live) actions.push(`Instagram Graph live check failed: ${instagram.error || "unknown"}`);
   if (!gemini.configured) actions.push("Set GEMINI_API_KEY in DO env (required for Veo and recommended for AI 4-view turnaround)");
   if (gemini.configured && !gemini.live && gemini.error?.includes("spending cap")) actions.push("Raise Gemini spending cap in AI Studio (aistudio.google.com → Settings → Billing)");

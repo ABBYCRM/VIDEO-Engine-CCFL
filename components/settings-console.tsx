@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ModelSelector, ModelSelectorTrigger, ModelSelectorValue, ModelSelectorContent, type AiModel, type AiModelSelection } from "@/components/ui/ai-model-select";
+import { InstagramGraphCard } from "@/components/instagram-graph-card";
 
 type TokenRow = { id:string; name:string; prefix:string; createdAt:string; lastUsedAt?:string|null; revokedAt?:string|null };
 type ProviderId = "veo" | "grok" | "a2e" | "hedra";
@@ -419,6 +420,8 @@ export function SettingsConsole(){
          </span>
        </label>
      </Card>
+
+     <InstagramGraphCard />
 
      <Card className="p-5">
        <div className="mb-4 font-medium">Default output</div>

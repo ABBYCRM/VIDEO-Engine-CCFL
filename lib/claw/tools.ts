@@ -20,6 +20,7 @@ import {
   replyToComment,
   hideComment,
   deleteComment,
+  sendPrivateReplyToComment,
   listConversations,
   getConversationMessages,
   sendDirectMessage
@@ -405,6 +406,12 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Delete an Instagram comment (Graph).",
     args: "{\"commentId\":\"...\"}",
     handler: async (a) => deleteComment(str(a.commentId))
+  },
+  {
+    name: "ig_send_private_reply",
+    description: "\"Comment INSURANCE and I'll DM you the link\" — sends a DM to whoever left a specific comment, even if they've never messaged the account. Meta's only sanctioned way to send a first DM to a stranger: one reply per comment ever, only within 7 days of the comment. Uses instagram_manage_comments (same permission ig_get_comments already needs), NOT the gated DM permission — call this directly, don't route it through ig_list_conversations or wait on DM approval. Typical flow: ig_get_comments to find the comment matching the trigger word, then this.",
+    args: "{\"commentId\":\"...\",\"message\":\"...\"}",
+    handler: async (a) => sendPrivateReplyToComment(str(a.commentId), str(a.message))
   },
   {
     name: "ig_list_conversations",

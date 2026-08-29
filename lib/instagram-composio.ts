@@ -87,7 +87,12 @@ export async function composioPublishInstagram(input: {
 }
 
 export async function composioListMedia(limit = 20) {
-  return executeInstagramComposioTool("INSTAGRAM_GET_IG_USER_MEDIA", { limit });
+  // Live regression found right after the previous slug fix shipped: unlike
+  // the deprecated INSTAGRAM_GET_USER_MEDIA it replaced, this slug does NOT
+  // auto-resolve the account and rejects the call with "missing ig_user_id"
+  // if it's omitted.
+  const igUserId = await resolveIgUserId();
+  return executeInstagramComposioTool("INSTAGRAM_GET_IG_USER_MEDIA", { ig_user_id: igUserId, limit });
 }
 
 export async function composioGetComments(mediaId: string) {
