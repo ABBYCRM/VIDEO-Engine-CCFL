@@ -23,9 +23,11 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
       - name: Build
         run: npm run build
       - name: Install Playwright Chromium
@@ -33,7 +35,7 @@ jobs:
       - name: Run Playwright
         run: npm run test:e2e -- --project=chromium --grep-invert "deployed"
 
-  creator-upload-regression:
+  claw-e2e:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -50,15 +52,20 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
       - name: Build
         run: npm run build
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run creator upload regression
-        run: npx playwright test tests/e2e/creator-real-file.spec.ts tests/e2e/creator-upload-retry.spec.ts --project=chromium
+      - name: Run Claw regressions
+        run: npx playwright test tests/e2e/claw.spec.ts tests/e2e/claw-mobile.spec.ts tests/e2e/claw-instagram-comments.spec.ts tests/e2e/claw-ig-publish.spec.ts tests/e2e/claw-creator-upload.spec.ts tests/e2e/creator-real-file.spec.ts --project=chromium
 
   live-ui:
+    if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -72,7 +79,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Wait for deployed app and run live UI suite
@@ -86,5 +93,5 @@ jobs:
             fi
             sleep 15
           done
-          echo "Live DigitalOcean UI did not reach the expected main-branch state"
+          echo "Live DigitalOcean UI did not become ready"
           exit 1
