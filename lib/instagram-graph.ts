@@ -299,6 +299,18 @@ export async function getComments(mediaId: string) {
   });
 }
 
+// Media's own fields (listMedia above) never include performance numbers —
+// "how many views does each post have" needs a separate call. views
+// replaced the deprecated plays/impressions metrics in Graph API v22+
+// (2025-04-21); this set matches Composio's own documented default
+// (views, reach, saved, shares) plus likes/comments, which are universal
+// across media types.
+export async function getMediaInsights(mediaId: string) {
+  return graphRequest("GET", `${mediaId}/insights`, {
+    metric: "views,reach,likes,comments,saved,shares"
+  });
+}
+
 export async function replyToComment(commentId: string, message: string) {
   const text = String(message || "").trim().slice(0, 2200);
   if (!text) throw new InstagramGraphError("Reply text is required", "validation");

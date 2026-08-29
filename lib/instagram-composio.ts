@@ -95,6 +95,16 @@ export async function composioListMedia(limit = 20) {
   return executeInstagramComposioTool("INSTAGRAM_GET_IG_USER_MEDIA", { ig_user_id: igUserId, limit });
 }
 
+export async function composioGetMediaInsights(mediaId: string) {
+  // Unlike Graph's own comma-separated metric query string, Composio's
+  // "metric" param is a real array, not a string - verified against
+  // Composio's own docs after guessing wrong on other slugs earlier today.
+  return executeInstagramComposioTool("INSTAGRAM_GET_IG_MEDIA_INSIGHTS", {
+    ig_media_id: mediaId,
+    metric: ["views", "reach", "likes", "comments", "saved", "shares"]
+  });
+}
+
 export async function composioGetComments(mediaId: string) {
   return executeInstagramComposioTool("INSTAGRAM_GET_IG_MEDIA_COMMENTS", { ig_media_id: mediaId });
 }

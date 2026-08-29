@@ -17,6 +17,7 @@ import {
   isInstagramDmEnabled,
   listMedia,
   getComments,
+  getMediaInsights,
   replyToComment,
   hideComment,
   deleteComment,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/instagram-graph";
 import {
   composioGetComments,
+  composioGetMediaInsights,
   composioGetMessages,
   composioListConversations,
   composioListMedia,
@@ -36,6 +38,7 @@ import {
   isComposioInstagramConnected
 } from "@/lib/instagram-composio";
 import { withInstagramFallback } from "@/lib/claw/fallback";
+import { digArray, summarizeMedia } from "@/lib/claw/instagram-media-shape";
 import { deleteClawFile, getFile as getClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
 import fsp from "node:fs/promises";
 import { parseCreatorFormats, uploadAndScheduleCreatorVideo } from "@/lib/creator-upload";
@@ -358,21 +361,39 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "ig_list_media",
-    description: "List recent Instagram media. Graph first, Composio fallback.",
+    description: "List recent Instagram media with real, usable media ids (id is always present and first — never guess or invent one, always read it from this result). No view/play counts here — call ig_media_insights per media id for those.",
     args: "{\"limit\":12}",
-    handler: async (a) => withInstagramFallback(
-      "ig_list_media",
-      async () => listMedia(num(a.limit, 12)),
-      isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined
-    )
+    handler: async (a) => {
+      const result = await withInstagramFallback(
+        "ig_list_media",
+        async () => listMedia(num(a.limit, 12)),
+        isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined
+      );
+      const items = digArray(result.data) || [];
+      return { via: result.via, fallbackNote: result.fallbackNote, media: summarizeMedia(items) };
+    }
   },
   {
-    name: "ig_get_comments",
-    description: "Read comments on an Instagram media id.",
+    name: "ig_media_insights",
+    description: "View/reach/likes/comments/saved/shares for one media id. Get the id from ig_list_media first — never invent one.",
     args: "{\"mediaId\":\"...\"}",
     handler: async (a) => {
       const mediaId = str(a.mediaId || a.id);
-      if (!mediaId) throw new Error("mediaId is required");
+      if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
+      return withInstagramFallback(
+        "ig_media_insights",
+        async () => getMediaInsights(mediaId),
+        isComposioInstagramConnected() ? async () => composioGetMediaInsights(mediaId) : undefined
+      );
+    }
+  },
+  {
+    name: "ig_get_comments",
+    description: "Read comments on an Instagram media id. Get the id from ig_list_media first — never invent one.",
+    args: "{\"mediaId\":\"...\"}",
+    handler: async (a) => {
+      const mediaId = str(a.mediaId || a.id);
+      if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
       return withInstagramFallback(
         "ig_get_comments",
         async () => getComments(mediaId),
