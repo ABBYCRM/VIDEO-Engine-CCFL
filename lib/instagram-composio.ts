@@ -1,5 +1,18 @@
 // Composio Instagram toolkit — fallback when official Graph (instagram-mcp) fails.
-// Same tool slugs the app used before the Graph port.
+//
+// Slugs verified against Composio's published Instagram toolkit docs
+// (docs.composio.dev/toolkits/instagram, 2026-08-29) after a live failure
+// ("Unable to retrieve tool with slug INSTAGRAM_LIST_CONVERSATIONS") showed
+// the slugs this file had inherited from an older integration no longer
+// match Composio's current catalog. Several were flat-out renamed
+// (LIST_CONVERSATIONS -> LIST_ALL_CONVERSATIONS, GET_MESSAGES ->
+// LIST_ALL_MESSAGES, SEND_MESSAGE -> SEND_TEXT_MESSAGE, GET_COMMENTS ->
+// GET_IG_MEDIA_COMMENTS); others (CREATE_MEDIA_CONTAINER, CREATE_POST,
+// GET_POST_STATUS, REPLY_TO_COMMENT, GET_USER_MEDIA) are marked deprecated
+// in favor of the ones used below. The publish flow also got simpler:
+// INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH now polls container-ready status
+// internally (max_wait_seconds/poll_interval_seconds), so the old manual
+// waitUntilFinished()/GET_POST_STATUS loop is gone.
 
 import { getActiveConnectedAccountId, getComposio, isComposioConfigured } from "@/lib/composio/client";
 
@@ -9,12 +22,6 @@ function pickId(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const obj = value as Record<string, any>;
   return obj?.data?.id || obj?.data?.data?.id || obj?.id || obj?.creation_id || obj?.data?.creation_id || null;
-}
-
-function pickStatus(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  const obj = value as Record<string, any>;
-  return String(obj?.data?.status_code || obj?.data?.status || obj?.data?.data?.status_code || obj?.status_code || obj?.status || "").toUpperCase();
 }
 
 function toolError(label: string, result: unknown): never {
@@ -43,19 +50,11 @@ export async function executeInstagramComposioTool(slug: string, args: Record<st
   return result;
 }
 
-async function waitUntilFinished(creationId: string) {
-  const deadline = Date.now() + 90_000;
-  let last = "";
-  while (Date.now() < deadline) {
-    const statusResult = await executeInstagramComposioTool("INSTAGRAM_GET_POST_STATUS", { creation_id: creationId });
-    last = pickStatus(statusResult);
-    if (last === "FINISHED" || last === "PUBLISHED" || last === "READY" || last === "SUCCESS") return last;
-    if (last === "ERROR" || last === "EXPIRED" || last === "FAILED") {
-      throw new Error(`Composio Instagram container ${creationId} failed with status ${last}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-  }
-  throw new Error(`Composio Instagram container ${creationId} was not ready in time (last status: ${last || "unknown"})`);
+async function resolveIgUserId(): Promise<string> {
+  const info = await executeInstagramComposioTool("INSTAGRAM_GET_USER_INFO", {});
+  const igUserId = pickId(info);
+  if (!igUserId) throw new Error("Composio could not resolve the connected Instagram Business/Creator account id. Reconnect Instagram in Integrations.");
+  return igUserId;
 }
 
 export async function composioPublishInstagram(input: {
@@ -65,59 +64,51 @@ export async function composioPublishInstagram(input: {
   postType?: "feed" | "story";
 }) {
   const caption = String(input.caption || "").trim().slice(0, 2200);
-  const info = await executeInstagramComposioTool("INSTAGRAM_GET_USER_INFO", {});
-  const igUserId = pickId(info);
-  if (!igUserId) throw new Error("Composio could not resolve the connected Instagram Business/Creator account id. Reconnect Instagram in Integrations.");
+  const igUserId = await resolveIgUserId();
 
   const isVideo = String(input.mediaType || "").startsWith("video/");
   const isStory = input.postType === "story";
-  const containerArgs: Record<string, unknown> = {
-    ig_user_id: igUserId,
-    caption,
-    content_type: isStory ? (isVideo ? "video" : "photo") : isVideo ? "reel" : "photo"
-  };
+  const containerArgs: Record<string, unknown> = { ig_user_id: igUserId, caption };
   if (isVideo) {
     containerArgs.video_url = input.mediaUrl;
     containerArgs.media_type = isStory ? "STORIES" : "REELS";
+    if (!isStory) containerArgs.share_to_feed = true;
   } else {
     containerArgs.image_url = input.mediaUrl;
     if (isStory) containerArgs.media_type = "STORIES";
   }
 
-  const created = await executeInstagramComposioTool("INSTAGRAM_CREATE_MEDIA_CONTAINER", containerArgs);
+  const created = await executeInstagramComposioTool("INSTAGRAM_POST_IG_USER_MEDIA", containerArgs);
   const creationId = pickId(created);
   if (!creationId) throw new Error(`Composio media container had no creation id: ${JSON.stringify(created).slice(0, 400)}`);
-  await waitUntilFinished(creationId);
-  const published = await executeInstagramComposioTool("INSTAGRAM_CREATE_POST", { ig_user_id: igUserId, creation_id: creationId });
+  // Publish polls container-ready status internally — no separate wait step.
+  const published = await executeInstagramComposioTool("INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH", { ig_user_id: igUserId, creation_id: creationId, max_wait_seconds: 90 });
   return { creationId, mediaId: pickId(published), result: published };
 }
 
 export async function composioListMedia(limit = 20) {
-  return executeInstagramComposioTool("INSTAGRAM_GET_USER_MEDIA", { limit });
+  return executeInstagramComposioTool("INSTAGRAM_GET_IG_USER_MEDIA", { limit });
 }
 
 export async function composioGetComments(mediaId: string) {
-  return executeInstagramComposioTool("INSTAGRAM_GET_COMMENTS", { media_id: mediaId, ig_media_id: mediaId });
+  return executeInstagramComposioTool("INSTAGRAM_GET_IG_MEDIA_COMMENTS", { ig_media_id: mediaId });
 }
 
 export async function composioReplyComment(commentId: string, message: string) {
-  try {
-    return await executeInstagramComposioTool("INSTAGRAM_REPLY_TO_COMMENT", { comment_id: commentId, message });
-  } catch {
-    return executeInstagramComposioTool("INSTAGRAM_POST_COMMENT", { comment_id: commentId, message, text: message });
-  }
+  return executeInstagramComposioTool("INSTAGRAM_POST_IG_COMMENT_REPLIES", { ig_comment_id: commentId, message: message.slice(0, 300) });
 }
 
 export async function composioListConversations() {
-  return executeInstagramComposioTool("INSTAGRAM_LIST_CONVERSATIONS", {});
+  const igUserId = await resolveIgUserId();
+  return executeInstagramComposioTool("INSTAGRAM_LIST_ALL_CONVERSATIONS", { ig_user_id: igUserId });
 }
 
 export async function composioGetMessages(conversationId: string) {
-  return executeInstagramComposioTool("INSTAGRAM_GET_MESSAGES", { conversation_id: conversationId });
+  return executeInstagramComposioTool("INSTAGRAM_LIST_ALL_MESSAGES", { conversation_id: conversationId });
 }
 
 export async function composioSendMessage(recipientId: string, text: string) {
-  return executeInstagramComposioTool("INSTAGRAM_SEND_MESSAGE", { recipient_id: recipientId, text, message: text });
+  return executeInstagramComposioTool("INSTAGRAM_SEND_TEXT_MESSAGE", { recipient_id: recipientId, text });
 }
 
 export async function composioUserInfo() {
