@@ -12,6 +12,7 @@ import { DEFAULT_CLAW_NVIDIA_MODEL, NVIDIA_BASE, isNvidiaModelId, type NvidiaMod
 import { applyThinkingMode } from "./request";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
+import { heliconeRoute } from "./helicone";
 
 export class NvidiaAuthError extends Error {
   constructor(message: string) { super(message); this.name = "NvidiaAuthError"; }
@@ -105,12 +106,14 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
   const ac = req.signal ? null : new AbortController();
   const t = ac ? setTimeout(() => ac.abort(), 30_000) : null;
   try {
-    const r = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+    const { url, extraHeaders } = heliconeRoute(`${NVIDIA_BASE}/chat/completions`);
+    const r = await fetch(url, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        ...extraHeaders
       },
       body: JSON.stringify(body),
       cache: "no-store",
@@ -161,12 +164,14 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
   const ac = req.signal ? null : new AbortController();
   const t = ac ? setTimeout(() => ac.abort(), 60_000) : null;
   try {
-    const r = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+    const { url, extraHeaders } = heliconeRoute(`${NVIDIA_BASE}/chat/completions`);
+    const r = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
-        Accept: "text/event-stream"
+        Accept: "text/event-stream",
+        ...extraHeaders
       },
       body: JSON.stringify(body),
       cache: "no-store",

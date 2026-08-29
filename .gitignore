@@ -8,6 +8,8 @@ node_modules
 /data/videos/*
 !/data/videos/.gitkeep
 /data/claw-files/*
+/public/generated/images/*
+!/public/generated/images/.gitkeep
 npm-debug.log*
 .DS_Store
 

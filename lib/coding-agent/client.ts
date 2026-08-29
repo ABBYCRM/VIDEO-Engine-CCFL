@@ -21,6 +21,7 @@ import net from "node:net";
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { scrubSecrets } from "@/lib/coding-agent/secret-scrub";
+import { e2bCreateSession, e2bListFiles, e2bReadFile, e2bRunCommand, e2bWriteFile, isE2bConfigured, saveE2bApiKey } from "@/lib/coding-agent/e2b-backend";
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS coding_sessions (
@@ -42,6 +43,11 @@ CREATE INDEX IF NOT EXISTS idx_coding_commands_session ON coding_commands(sessio
 
 const URL_KEY = "coding_sandbox_url";
 const TOKEN_KEY = "coding_sandbox_token_encrypted";
+// "custom" (default) = the operator's own CODING_SANDBOX_URL server. "e2b"
+// = lib/coding-agent/e2b-backend.ts's hosted E2B sandboxes. Either way,
+// every Claw tool still only ever calls the functions in *this* file —
+// the provider choice is invisible past this module.
+const PROVIDER_KEY = "coding_sandbox_provider";
 const MAX_OUTPUT_CHARS = 8000;
 const COMMAND_TIMEOUT_MS = 30_000;
 
@@ -52,8 +58,17 @@ function setRaw(key: string, value: string) {
   db.prepare("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run(key, value);
 }
 
+export type CodingSandboxProvider = "custom" | "e2b";
+
+export function getCodingSandboxProvider(): CodingSandboxProvider {
+  const stored = getRaw(PROVIDER_KEY) || process.env.CODING_SANDBOX_PROVIDER;
+  return stored === "e2b" ? "e2b" : "custom";
+}
+
 export function isCodingSandboxConfigured(): boolean {
-  return Boolean(getRaw(URL_KEY) || process.env.CODING_SANDBOX_URL);
+  return getCodingSandboxProvider() === "e2b"
+    ? isE2bConfigured()
+    : Boolean(getRaw(URL_KEY) || process.env.CODING_SANDBOX_URL);
 }
 
 export function getCodingSandboxUrl(): string {
@@ -68,9 +83,11 @@ function getCodingSandboxToken(): string | null {
   return process.env.CODING_SANDBOX_TOKEN || null;
 }
 
-export function saveCodingSandboxConfig(input: { url?: string; token?: string }) {
+export function saveCodingSandboxConfig(input: { url?: string; token?: string; provider?: CodingSandboxProvider; e2bApiKey?: string }) {
   if (input.url) setRaw(URL_KEY, input.url.trim());
   if (input.token) setRaw(TOKEN_KEY, encryptSecret(input.token.trim()));
+  if (input.provider) setRaw(PROVIDER_KEY, input.provider);
+  if (input.e2bApiKey) saveE2bApiKey(input.e2bApiKey);
 }
 
 function isPrivateOrLocalHost(hostname: string): boolean {
@@ -83,9 +100,12 @@ function isPrivateOrLocalHost(hostname: string): boolean {
   return host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
 }
 
-export function createCodingSession(purpose?: string): { id: string; workspaceRef: string } {
+export async function createCodingSession(purpose?: string): Promise<{ id: string; workspaceRef: string }> {
   const id = crypto.randomUUID();
-  const workspaceRef = `ws-${id.slice(0, 8)}`;
+  // The "custom" backend's workspaceRef is just an opaque label the
+  // operator's own server assigns meaning to; E2B's is a real sandbox id
+  // that must exist before any runCommand/readFile call can reconnect to it.
+  const workspaceRef = getCodingSandboxProvider() === "e2b" ? await e2bCreateSession() : `ws-${id.slice(0, 8)}`;
   db.prepare("INSERT INTO coding_sessions(id,purpose,workspace_ref) VALUES(?,?,?)").run(id, purpose || null, workspaceRef);
   return { id, workspaceRef };
 }
@@ -127,24 +147,32 @@ function logCommand(sessionId: string, command: string, exitCode: number | null,
 }
 
 export async function runCommand(input: { sessionId: string; workspaceRef: string; command: string }): Promise<{ exitCode: number | null; output: string }> {
-  const result = await sandboxRequest("/run", { workspaceRef: input.workspaceRef, command: input.command });
-  const output = scrubSecrets(String(result?.output ?? result?.raw ?? "")).slice(0, MAX_OUTPUT_CHARS);
-  const exitCode = Number.isFinite(result?.exitCode) ? Number(result.exitCode) : null;
-  logCommand(input.sessionId, input.command, exitCode, output);
-  return { exitCode, output };
+  const raw = getCodingSandboxProvider() === "e2b"
+    ? await e2bRunCommand(input.workspaceRef, input.command)
+    : await (async () => {
+        const result = await sandboxRequest("/run", { workspaceRef: input.workspaceRef, command: input.command });
+        return { exitCode: Number.isFinite(result?.exitCode) ? Number(result.exitCode) : null, output: String(result?.output ?? result?.raw ?? "") };
+      })();
+  const output = scrubSecrets(raw.output).slice(0, MAX_OUTPUT_CHARS);
+  logCommand(input.sessionId, input.command, raw.exitCode, output);
+  return { exitCode: raw.exitCode, output };
 }
 
 export async function readFile(input: { workspaceRef: string; path: string }): Promise<string> {
-  const result = await sandboxRequest("/read-file", { workspaceRef: input.workspaceRef, path: input.path });
-  return scrubSecrets(String(result?.content ?? "")).slice(0, MAX_OUTPUT_CHARS);
+  const content = getCodingSandboxProvider() === "e2b"
+    ? await e2bReadFile(input.workspaceRef, input.path)
+    : String((await sandboxRequest("/read-file", { workspaceRef: input.workspaceRef, path: input.path }))?.content ?? "");
+  return scrubSecrets(content).slice(0, MAX_OUTPUT_CHARS);
 }
 
 export async function writeFile(input: { workspaceRef: string; path: string; content: string }): Promise<{ ok: boolean }> {
+  if (getCodingSandboxProvider() === "e2b") return e2bWriteFile(input.workspaceRef, input.path, input.content);
   const result = await sandboxRequest("/write-file", { workspaceRef: input.workspaceRef, path: input.path, content: input.content });
   return { ok: Boolean(result?.ok ?? true) };
 }
 
 export async function listFiles(input: { workspaceRef: string; path?: string }): Promise<string[]> {
+  if (getCodingSandboxProvider() === "e2b") return e2bListFiles(input.workspaceRef, input.path || ".");
   const result = await sandboxRequest("/list-files", { workspaceRef: input.workspaceRef, path: input.path || "." });
   return Array.isArray(result?.files) ? result.files.map((f: unknown) => String(f)) : [];
 }
