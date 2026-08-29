@@ -42,7 +42,7 @@ test("Claw schedules an attached video via creator_upload_video", async ({ page 
   const convo = await stubConvo(page, "c-creator-ok", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
     convo.markSent();
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-creator-ok", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "creator_upload_video", args: { fileIds: ["f-video-1"], subject: "Got in a car crash", formats: "reel,story" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "creator_upload_video", ok: true, preview: "1 uploaded, 0 failed" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-creator-ok", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "creator_upload_video", args: { fileIds: ["f-video-1"], subject: "Got in a car crash", formats: "reel,story" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "creator_upload_video", ok: true, preview: "1 uploaded, 0 failed" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
@@ -59,7 +59,7 @@ test("Claw surfaces a creator_upload_video failure as text when the file id is u
   const convo = await stubConvo(page, "c-creator-fail", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
     convo.markSent();
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-creator-fail", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "creator_upload_video", args: { fileIds: ["missing-file"] } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "creator_upload_video", ok: false, preview: "No such Claw file — attach it with Upload files first" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-creator-fail", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "creator_upload_video", args: { fileIds: ["missing-file"] } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "creator_upload_video", ok: false, preview: "No such Claw file — attach it with Upload files first" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 

@@ -15,6 +15,7 @@
 // waitUntilFinished()/GET_POST_STATUS loop is gone.
 
 import { getActiveConnectedAccountId, getComposio, isComposioConfigured } from "@/lib/composio/client";
+import { formatInstagramToolError } from "@/lib/instagram-errors";
 
 const USER_ID = "admin";
 
@@ -25,9 +26,7 @@ function pickId(value: unknown): string | null {
 }
 
 function toolError(label: string, result: unknown): never {
-  const obj = result && typeof result === "object" ? (result as Record<string, any>) : {};
-  const msg = obj.error || obj.data?.error || obj.message || JSON.stringify(result).slice(0, 400);
-  throw new Error(`${label}: ${msg}`);
+  throw new Error(formatInstagramToolError(label, result));
 }
 
 export function isComposioInstagramConnected(): boolean {
@@ -38,12 +37,17 @@ export async function executeInstagramComposioTool(slug: string, args: Record<st
   if (!isComposioConfigured()) throw new Error("Composio is not configured (Instagram fallback unavailable)");
   const composio: any = getComposio();
   const connectedAccountId = getActiveConnectedAccountId("instagram") || undefined;
-  const result = await composio.tools.execute(slug, {
-    userId: USER_ID,
-    connectedAccountId,
-    arguments: args,
-    dangerouslySkipVersionCheck: true
-  });
+  let result: unknown;
+  try {
+    result = await composio.tools.execute(slug, {
+      userId: USER_ID,
+      connectedAccountId,
+      arguments: args,
+      dangerouslySkipVersionCheck: true
+    });
+  } catch (error) {
+    throw new Error(formatInstagramToolError(slug, error));
+  }
   if (result && typeof result === "object" && (result as any).successful === false) {
     toolError(slug, result);
   }

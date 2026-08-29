@@ -46,7 +46,7 @@ test("Claw reports a successful ig_publish and which path published it", async (
   const convo = await stubConvo(page, "c-ig-ok", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
     convo.markSent();
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-ok", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: true, via: "instagram-mcp", preview: "mediaId: 17999999999" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-ok", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: true, via: "instagram-mcp", preview: "mediaId: 17999999999" })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
@@ -64,7 +64,7 @@ test("Claw surfaces an ig_publish failure as text, not a crash, when nothing is 
   const convo = await stubConvo(page, "c-ig-fail", finalMessage);
   await page.route("**/api/claw/chat", async (route) => {
     convo.markSent();
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-fail", model: "nvidia/nemotron-3.5-lightning-30b-a3b" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: false, preview: "Instagram is not configured. Save Graph credentials on Integrations, or connect Composio Instagram as fallback." })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c-ig-fail", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "ig_publish", args: { mediaUrl: "/api/library/assets/asset-1/file", caption: "Test caption", postType: "feed" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "ig_publish", ok: false, preview: "Instagram is not configured. Save Graph credentials in Settings, or connect Composio Instagram as fallback." })}\n\ndata: ${JSON.stringify({ type: "token", text: finalMessage })}\n\ndata: ${JSON.stringify({ type: "done", assistant: finalMessage })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
