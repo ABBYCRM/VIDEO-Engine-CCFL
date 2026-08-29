@@ -2,20 +2,32 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Clapperboard, LogOut, Calendar, Library, X, Cog, Bird, Menu, Film } from "lucide-react";
+import { LogOut, Calendar, Library, X, Cog, Bird, Menu } from "lucide-react";
 import { DuckMark } from "@/components/duck-mark";
 import { MobileFrame } from "@/components/mobile-frame";
 
 type NavItem={href:string;label:string;icon:any;group:"CREATE"|"REVIEW"|"OPS";exact?:boolean};
-// 2026-08-27 operator directive: image generation is disabled. Show only the
-// surfaces that work without it — Create (no longer generates, surfaces a
-// banner), Creator (manual upload), Calendar, Library, Claw, Settings.
-// The other pages still exist on disk (commented / 410-gated) so we can
-// re-enable later by reverting the IMAGE_GEN_ENABLED flag.
+// 2026-08-27 operator directive simplified the live nav down to Creator
+// (manual upload), Calendar, Library, Claw, Settings. Avatars / Campaigns /
+// Pipeline / Sites / Integrations stay off the rail (still on disk,
+// 410/redirect-gated in next.config.ts) — that's a surface-simplification
+// call independent of image generation, so it's unchanged by the
+// 2026-08-28 directive that turned IMAGE_GEN_ENABLED back on.
+// 2026-08-28: Create also dropped from the nav — Claw's generate_video /
+// generate_still / ugc_batch_generate tools are the same server functions
+// Create called, so the page was a redundant front end regardless of the
+// image-gen flag. Root "/" now redirects to Calendar; app/page.tsx and
+// unified-create-console.tsx are left on disk, unlinked.
+// 2026-08-28 (later): Creator dropped from the nav too, by explicit
+// operator request — code-level only, for Claw to run. Claw's
+// creator_upload_video tool (lib/claw/tools.ts) now covers what the page
+// did: attach a video via Upload files, then Claw persists it and writes
+// the same scheduled_posts rows via lib/creator-upload.ts's
+// uploadAndScheduleCreatorVideo(), the exact function /api/creator/upload
+// still calls. "/creator" now redirects to Calendar; app/creator/page.tsx
+// and components/creator-console.tsx are left on disk, unlinked.
 const NAV:NavItem[]=[
   {href:"/claw",label:"Claw",icon:Bird,group:"CREATE"},
-  {href:"/",label:"Create",icon:Clapperboard,group:"CREATE",exact:true},
-  {href:"/creator",label:"Creator",icon:Film,group:"CREATE"},
   {href:"/calendar",label:"Calendar",icon:Calendar,group:"REVIEW"},
   {href:"/library",label:"Library",icon:Library,group:"REVIEW"},
   {href:"/settings",label:"Settings",icon:Cog,group:"OPS"}

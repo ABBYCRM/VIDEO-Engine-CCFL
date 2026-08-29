@@ -5,11 +5,11 @@
 // routes return 410 Gone and the UI hides every image-related control. All
 // generation code is kept on disk so the operator can flip this back on later.
 //
-// Operator's directive 2026-08-27: "shut down the image generator at this app.
-// we will only be using the manual calendar from now on. leave the app as is
-// just disconnect the image gen so no more surprises arrive."
+// Re-enabled by operator directive 2026-08-28, reversing the 2026-08-27
+// "manual calendar only" pause. Defaults to on; set IMAGE_GEN_ENABLED=false
+// to pause it again without a code change.
 
-export const IMAGE_GEN_ENABLED: boolean = process.env.IMAGE_GEN_ENABLED === "true";
+export const IMAGE_GEN_ENABLED: boolean = process.env.IMAGE_GEN_ENABLED !== "false";
 
 /** True iff the current process is allowed to call an image-generation API. */
 export function isImageGenEnabled(): boolean {

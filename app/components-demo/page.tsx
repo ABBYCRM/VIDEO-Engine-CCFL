@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { ModelSelectorKit, type AiModelSelection } from "@/components/ui/ai-model-select";
+import AILoader from "@/components/ui/ai-loader";
 
 export default function ComponentsDemoPage() {
   const dashboardTabs = [
@@ -86,6 +87,22 @@ export default function ComponentsDemoPage() {
           </div>
 
           <div className="mt-6">
+            <Card title="AI Loader">
+              <div className="flex flex-col gap-4">
+                <p className="text-sm text-slate-600">
+                  Waiting-indicator family used by Claw while it&rsquo;s thinking between tokens/tool calls.
+                  All three variants share one animation cycle so they never look out of sync with each other.
+                </p>
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                  <AILoader label="Thinking" showElapsed variant="dots" />
+                  <AILoader label="Reading the repository" showElapsed variant="bar" />
+                  <AILoader label="Running the test suite" variant="grid" />
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div className="mt-6">
             <Card title="Integration notes">
               <ul className="list-disc space-y-2 pl-5 text-sm text-slate-800">
                 <li>Project must be a shadcn-style Next.js app with TypeScript + Tailwind — already satisfied.</li>
@@ -93,6 +110,7 @@ export default function ComponentsDemoPage() {
                 <li>Required runtime deps: <code>framer-motion</code>, <code>usehooks-ts</code>, <code>lucide-react</code> — all installed.</li>
                 <li><code>ExpandableTabs</code> lives at <code>components/ui/expandable-tabs.tsx</code>.</li>
                 <li><code>ModelSelector</code> lives at <code>components/ui/ai-model-select.tsx</code>. Use <code>ModelSelectorKit</code> for the full trigger + content combo, or compose <code>ModelSelector / Trigger / Value / Content</code> manually.</li>
+                <li><code>AILoader</code> lives at <code>components/ui/ai-loader.tsx</code> (default export). Used live in Claw&rsquo;s chat as the &ldquo;Thinking&rdquo; indicator between tokens/tool calls.</li>
                 <li>Demo entry point: <code>app/components-demo/page.tsx</code>.</li>
               </ul>
             </Card>

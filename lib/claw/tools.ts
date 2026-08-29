@@ -35,7 +35,10 @@ import {
   isComposioInstagramConnected
 } from "@/lib/instagram-composio";
 import { withInstagramFallback } from "@/lib/claw/fallback";
-import { deleteClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
+import { deleteClawFile, getFile as getClawFile, listFiles, readClawFileText, renameClawFile } from "@/lib/claw/store";
+import fsp from "node:fs/promises";
+import { parseCreatorFormats, uploadAndScheduleCreatorVideo } from "@/lib/creator-upload";
+import { generateCreatorCaption } from "@/lib/creator-caption";
 import { isComposioConfigured } from "@/lib/composio/client";
 import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
 import { writeStandalonePost } from "@/lib/nvidia/content-writer";
@@ -115,6 +118,30 @@ export const CLAW_TOOLS: ClawTool[] = [
     }
   },
   {
+    // Named to match what the model naturally reaches for when a user asks
+    // about "Composio" — the system prompt mentions Composio as a fallback
+    // concept without ever listing a bare tool literally named "composio",
+    // which was causing "Unknown tool composio" hallucinated calls. This
+    // tool exists so that instinct resolves to something real.
+    name: "composio_health",
+    description: "Composio status: API key configured, and every cataloged toolkit's auth-config + live-connection state.",
+    args: "{}",
+    handler: async () => {
+      const settings = getEngineSettings();
+      const connected = db.prepare("SELECT toolkit, status, last_sync_at FROM connected_accounts WHERE UPPER(status)='ACTIVE'").all() as { toolkit: string; status: string; last_sync_at: string | null }[];
+      const connectedByToolkit = new Map(connected.map((c) => [c.toolkit, c]));
+      return {
+        keyConfigured: settings.composio.keyConfigured,
+        toolkits: settings.composio.toolkits.map((t) => ({
+          id: t.id,
+          authConfigConfigured: t.authConfigConfigured,
+          connected: connectedByToolkit.has(t.id),
+          lastSyncAt: connectedByToolkit.get(t.id)?.last_sync_at || null
+        }))
+      };
+    }
+  },
+  {
     name: "list_jobs",
     description: "Recent video jobs.",
     args: "{\"limit\":20}",
@@ -135,6 +162,7 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Start one Hedra/Veo/Grok/A2E video. Same as Create.",
     args: "{\"mission\":\"...\",\"category\":\"car_accident|rideshare|trucking|slip_fall|ugc\",\"provider\":\"hedra\",\"model\":\"fal/grok-video-i2v\"}",
     handler: async (a) => {
+      if (!isImageGenEnabled()) throw new Error("Image/video generation is disabled (manual-calendar mode). Set IMAGE_GEN_ENABLED=true to re-enable.");
       const category = str(a.category, "ugc") as CampaignCategory;
       if (!CATEGORIES.has(category)) throw new Error("category must be car_accident, rideshare, trucking, slip_fall, or ugc");
       const provider = (isProviderId(str(a.provider)) ? str(a.provider) : undefined) as ProviderId | undefined;
@@ -182,6 +210,7 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Generate a campaign still into Library + Calendar.",
     args: "{\"prompt\":\"...\",\"avatarId\":\"optional\"}",
     handler: async (a) => {
+      if (!isImageGenEnabled()) throw new Error("Image/video generation is disabled (manual-calendar mode). Set IMAGE_GEN_ENABLED=true to re-enable.");
       const prompt = str(a.prompt || a.mission);
       if (!prompt) throw new Error("prompt is required");
       const still = await generateCampaignStill({ prompt, avatarId: str(a.avatarId) || null });
@@ -462,6 +491,51 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Delete a Claw file.",
     args: "{\"id\":\"...\"}",
     handler: async (a) => ({ ok: await deleteClawFile(str(a.id)) })
+  },
+  {
+    name: "creator_upload_video",
+    description: "Take one or more already-made videos attached to this chat (use Upload files first, then pass their file ids) and schedule them exactly like the Creator tab did: persist to the library, write one Calendar row per format. If caption is omitted, generates the same PI-compliant Case Closed FL branded caption Creator used to auto-generate.",
+    args: "{\"fileIds\":[\"claw-file-id\"],\"subject\":\"optional, used to auto-generate caption\",\"caption\":\"optional, skips auto-generation if given\",\"formats\":\"reel,story,post\",\"scheduledAt\":\"optional ISO time, defaults to +1h\",\"network\":\"instagram\",\"autoPost\":true,\"category\":\"ugc\",\"title\":\"optional\"}",
+    handler: async (a) => {
+      const fileIds = Array.isArray(a.fileIds) ? a.fileIds.map((v) => String(v)) : a.fileId ? [str(a.fileId)] : [];
+      if (!fileIds.length) throw new Error("fileIds is required — attach a video via Upload files first");
+      const formats = parseCreatorFormats(str(a.formats));
+      if (!formats.length) throw new Error("formats must include at least one of reel, story, post");
+      const subject = str(a.subject);
+      const category = str(a.category, "ugc");
+      let caption = str(a.caption);
+      if (!caption && subject) {
+        const generated = await generateCreatorCaption({ subject, category, format: formats[0] });
+        caption = generated.caption;
+      }
+
+      const uploaded: unknown[] = [];
+      const failed: { name: string; error: string }[] = [];
+      for (const fileId of fileIds) {
+        const file = getClawFile(fileId);
+        if (!file) { failed.push({ name: fileId, error: "No such Claw file — attach it with Upload files first" }); continue; }
+        try {
+          const bytes = await fsp.readFile(file.path);
+          const result = await uploadAndScheduleCreatorVideo({
+            bytes,
+            fileName: file.name,
+            mimeType: file.mime,
+            title: str(a.title) || file.name,
+            formats,
+            scheduledAt: str(a.scheduledAt) || undefined,
+            network: str(a.network, "instagram"),
+            autoPost: a.autoPost !== false,
+            caption,
+            category
+          });
+          uploaded.push(result);
+        } catch (e) {
+          failed.push({ name: file.name, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      if (!uploaded.length) throw new Error(failed[0]?.error || "Upload failed");
+      return { uploaded, failed, caption };
+    }
   },
   {
     name: "list_seo_queue",

@@ -6,14 +6,31 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "80mb" }
   },
-  // 2026-08-27 operator directive: image generation is disabled. Pages that
-  // depend on it (Avatars, Campaigns, Pipeline, Sites, Integrations,
-  // Podcast-Interview, Components-Demo, Docs) are removed from the live UI but
-  // their code is kept on disk. Visiting them via a deep link now redirects
-  // back to the Calendar with a banner explaining the change.
+  // 2026-08-27 operator directive simplified the live UI down to Creator,
+  // Calendar, Library, Claw, Settings. Avatars, Campaigns, Pipeline, Sites,
+  // Integrations, Podcast-Interview, Components-Demo, and Docs are removed
+  // from the live nav but their code is kept on disk; visiting one via a
+  // deep link redirects back to Calendar with a banner. This surface
+  // simplification is independent of IMAGE_GEN_ENABLED (re-enabled
+  // 2026-08-28) — restoring image generation didn't restore these pages.
+  //
+  // 2026-08-28: Create ("/") joined this list too, for a different reason —
+  // Claw's generate_video/generate_still/ugc_batch_generate tools already
+  // call the same server functions Create's own POST route called, so the
+  // page was a redundant front end rather than a distinct capability.
+  // app/page.tsx and unified-create-console.tsx are left on disk, unlinked.
+  //
+  // 2026-08-28 (later): "/creator" joined too, by explicit operator request
+  // (code-level only, for Claw to run). Claw's creator_upload_video tool
+  // calls the same lib/creator-upload.ts function /api/creator/upload does
+  // — that API route itself is untouched by this redirect (only the page
+  // is), so Claw's tool keeps working. app/creator/page.tsx and
+  // components/creator-console.tsx are left on disk, unlinked.
   async redirects() {
     const back = "/calendar?feature_disabled=image_generation";
     return [
+      { source: "/", destination: back, permanent: false },
+      { source: "/creator", destination: back, permanent: false },
       { source: "/avatars", destination: back, permanent: false },
       { source: "/campaigns", destination: back, permanent: false },
       { source: "/pipeline", destination: back, permanent: false },

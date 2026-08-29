@@ -1,11 +1,12 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Bird, Copy, FilePlus2, FolderOpen, Loader2, Paperclip, Pencil, Plus, Send, Square, Trash2, X
+  Bird, Copy, FilePlus2, FolderOpen, Paperclip, Pencil, Plus, Send, Square, Trash2, X
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
+import AILoader from "@/components/ui/ai-loader";
 
 type Conv = { id: string; title: string; createdAt: string; updatedAt: string };
 type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content: string; toolJson?: any; createdAt: string };
@@ -244,6 +245,13 @@ export function ClawConsole() {
                     </div>
                   ))}
                   {streaming && <div className="max-w-[92%] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm whitespace-pre-wrap">{streaming}<span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-violet-500" /></div>}
+                  {busy && !streaming && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[92%] rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                        <AILoader label="Thinking" showElapsed variant="dots" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -307,7 +315,7 @@ export function ClawConsole() {
                 ))}
                 {!files.length && <div className="px-2 py-6 text-center text-xs text-slate-500">Upload briefs, scripts, stills. Claw can read and attach them to generate/post.</div>}
               </div>
-              {busy && <div className="flex items-center gap-2 border-t px-3 py-2 text-xs text-slate-500"><Loader2 size={12} className="animate-spin" /> Working…</div>}
+              {busy && <div className="border-t px-3 py-2"><AILoader label="Working" variant="bar" className="text-xs text-slate-500" /></div>}
             </aside>
           </div>
         </div>

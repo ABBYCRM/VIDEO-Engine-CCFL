@@ -78,6 +78,7 @@ export function SettingsConsole(){
  const [a2e,setA2e] = useState("");
  const [hedraKey,setHedraKey] = useState("");
  const [nvidiaKey,setNvidiaKey] = useState("");
+ const [steelKey,setSteelKey] = useState("");
  const [defaultProvider,setDefaultProvider] = useState<ProviderId>("hedra");
  const [providerModels,setProviderModels] = useState<Record<ProviderId,string>>({ veo:"", grok:"", a2e:"", hedra:"" });
  const [imageProvider,setImageProvider] = useState<ImageProviderId>("hedra");
@@ -165,6 +166,7 @@ export function SettingsConsole(){
        hedraApiKey: hedraKey || undefined,
        nvidiaApiKey: nvidiaKey || undefined,
        nvidiaModel: nvidiaSelection.id,
+       steelApiKey: steelKey || undefined,
        defaultProvider,
        veoModel: providerModels.veo,
        grokModel: providerModels.grok,
@@ -176,7 +178,7 @@ export function SettingsConsole(){
    });
    if(r.ok){
      setSettings(await r.json());
-     setGemini(""); setXai(""); setA2e(""); setHedraKey(""); setNvidiaKey("");
+     setGemini(""); setXai(""); setA2e(""); setHedraKey(""); setNvidiaKey(""); setSteelKey("");
      alert("Settings saved");
      loadLive();
    }
@@ -238,9 +240,6 @@ export function SettingsConsole(){
            <RefreshCcw size={14} className="mr-1"/>Reload
          </Button>
        </div>
-       <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">
-        <strong>Image generation is paused (operator directive 2026-08-27).</strong> The provider, model, and key are still configurable below so the setting is preserved, but the save button is disabled and the <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px]">/api/admin/image-provider</code> endpoint returns 410 until you set <code className="rounded bg-white px-1 py-0.5 font-mono text-[10px]">IMAGE_GEN_ENABLED=true</code>.
-       </div>
        <p className="mb-4 text-xs text-slate-500">Powers the campaign hero still and the 4-view avatar turnaround. Hedra is the default — 75+ image models behind one v3 endpoint, ~3.5¢ per generation. Same key as the Hedra video provider above.</p>
        <div className="grid gap-3 md:grid-cols-2">
          <label className="grid gap-2 text-sm">
@@ -251,7 +250,7 @@ export function SettingsConsole(){
              // Snap model to the first valid choice for the new provider
              const defaults: Record<ImageProviderId,string> = { hedra: "gpt-image-2", gemini: "gemini-2.5-flash-image", openai: "gpt-image-1", xai: "grok-imagine-image", a2e: "gpt-image-1.5", mock: "mock-stable-diffusion-1" };
              setImageModel(defaults[p]);
-           }} disabled>
+           }}>
              <option value="hedra">Hedra multi-model image (gpt-image-2, flux2-max, imagen-4, seedream-5, ideogram-v4, recraft-v3)</option>
              <option value="gemini">Google Gemini image generation</option>
              <option value="a2e">A2E GPT Image (gpt-image-1.5 / gpt-image-2)</option>
@@ -262,7 +261,7 @@ export function SettingsConsole(){
          </label>
          <label className="grid gap-2 text-sm">
            <span className="font-medium">Model</span>
-           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageModel} onChange={e => setImageModel(e.target.value)} disabled>
+           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageModel} onChange={e => setImageModel(e.target.value)}>
              {imageProvider === "hedra" && (<>
                <option value="gpt-image-2">gpt-image-2</option>
                <option value="flux2-max">flux2-max (FLUX.2 [max])</option>
@@ -297,9 +296,9 @@ export function SettingsConsole(){
          </label>
        </div>
        <div className="mt-4 flex items-center gap-3">
-         <Button onClick={saveImageProvider} disabled={imageBusy} aria-disabled>
+         <Button onClick={saveImageProvider} disabled={imageBusy}>
            {imageBusy ? <RefreshCcw size={14} className="mr-2 animate-spin"/> : <Save size={14} className="mr-2"/>}
-           Save image provider (disabled)
+           Save image provider
          </Button>
          {imageMsg && <span className="text-xs text-slate-600">{imageMsg}</span>}
        </div>
@@ -402,6 +401,23 @@ export function SettingsConsole(){
            </ul>
          </details>
        </div>
+     </Card>
+
+     <Card className="p-5">
+       <div className="mb-4 flex items-center justify-between">
+         <div className="flex items-center gap-2 font-medium"><Cloud size={18} className="text-slate-700"/>Steel.dev (Claw web research)</div>
+         <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${settings?.steel?.configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{settings?.steel?.configured ? "configured" : "not configured"}</span>
+       </div>
+       <p className="mb-3 text-sm text-slate-600">
+         Powers Claw's <code>steel_scrape</code> tool: renders a public web page and returns clean Markdown + metadata + links for live research. Local/private targets are always rejected server-side.
+       </p>
+       <label className="grid gap-2 text-sm">
+         <span>Steel API key</span>
+         <Input type="password" placeholder="ste-… paste to replace" onChange={e => setSteelKey(e.target.value)} />
+         <span className="text-[11px] text-slate-500">
+           Get one at <a className="text-cyan-700 underline-offset-2 hover:underline" href="https://steel.dev" target="_blank" rel="noreferrer">steel.dev</a>. Stored encrypted AES-256-GCM, same as every other provider key here.
+         </span>
+       </label>
      </Card>
 
      <Card className="p-5">
