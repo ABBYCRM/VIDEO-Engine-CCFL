@@ -89,31 +89,34 @@ export async function publishInstagram(input: {
   const graphReady = isInstagramConfigured();
   const composioReady = isComposioInstagramConnected();
 
-  if (graphReady) {
+  // Operator directive 2026-08-29: Composio is the primary Instagram MCP.
+  // Try Composio first. Only fall back to official Graph (instagram-mcp) if
+  // Composio is not connected or the publish errors.
+  if (composioReady) {
     try {
-      const result = await publishViaGraph(payload);
-      return { ...result, via: "instagram-mcp" };
-    } catch (mcpErr) {
-      const mcpMsg = mcpErr instanceof Error ? mcpErr.message : String(mcpErr);
-      if (!composioReady) throw mcpErr;
+      const result = await composioPublishInstagram(payload);
+      return { ...result, via: "composio" };
+    } catch (composioErr) {
+      const cMsg = composioErr instanceof Error ? composioErr.message : String(composioErr);
+      if (!graphReady) throw composioErr;
       try {
-        const result = await composioPublishInstagram(payload);
+        const result = await publishViaGraph(payload);
         return {
           ...result,
-          via: "composio",
-          fallbackNote: `instagram-mcp failed (${mcpMsg}). Used Composio Instagram.`
+          via: "instagram-mcp",
+          fallbackNote: `Composio Instagram failed (${cMsg}). Used official Graph (instagram-mcp).`
         };
-      } catch (composioErr) {
-        const cMsg = composioErr instanceof Error ? composioErr.message : String(composioErr);
-        throw new Error(`Instagram publish failed on both paths. Graph (instagram-mcp): ${mcpMsg}. Composio: ${cMsg}`);
+      } catch (mcpErr) {
+        const mcpMsg = mcpErr instanceof Error ? mcpErr.message : String(mcpErr);
+        throw new Error(`Instagram publish failed on both paths. Composio: ${cMsg}. Graph (instagram-mcp): ${mcpMsg}`);
       }
     }
   }
 
-  if (composioReady) {
-    const result = await composioPublishInstagram(payload);
-    return { ...result, via: "composio", fallbackNote: "instagram-mcp is not configured. Used Composio Instagram." };
+  if (graphReady) {
+    const result = await publishViaGraph(payload);
+    return { ...result, via: "instagram-mcp", fallbackNote: "Composio Instagram is not connected. Used official Graph (instagram-mcp)." };
   }
 
-  throw new Error("Instagram is not configured. Save Graph credentials in Settings, or connect Composio Instagram as fallback.");
+  throw new Error("Instagram is not configured. Connect Composio Instagram, or save Graph credentials in Settings.");
 }

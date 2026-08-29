@@ -1,4 +1,5 @@
-// Composio Instagram toolkit — fallback when official Graph (instagram-mcp) fails.
+// Composio Instagram toolkit — PRIMARY Instagram MCP for VIDEO-Engine CCFL
+// (operator directive 2026-08-29). Official Graph (instagram-mcp) is fallback only.
 //
 // Slugs verified against Composio's published Instagram toolkit docs
 // (docs.composio.dev/toolkits/instagram, 2026-08-29) after a live failure

@@ -108,7 +108,7 @@ function publicJob(j: any) {
 export const CLAW_TOOLS: ClawTool[] = [
   {
     name: "app_status",
-    description: "Pipeline snapshot: providers, Instagram Graph+Composio fallback, Steel, NVIDIA, open jobs.",
+    description: "Pipeline snapshot: providers, Instagram (Composio primary, Graph fallback), Steel, NVIDIA, open jobs.",
     args: "{}",
     handler: async () => {
       const settings = getEngineSettings();
@@ -344,7 +344,7 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "ig_health",
-    description: "Instagram Graph live check + Composio fallback state. Always report which path is live.",
+    description: "Instagram health check. Composio is primary, official Graph (instagram-mcp) is fallback (operator directive 2026-08-29). Always report which path is live.",
     args: "{}",
     handler: async () => {
       const graph = await instagramHealthcheck();
@@ -355,12 +355,17 @@ export const CLAW_TOOLS: ClawTool[] = [
       } else {
         composio = { connected: false };
       }
+      const composioLive = Boolean(composio && (composio as { connected: boolean }).connected && (composio as { error?: string }).error === undefined);
       return {
-        primary: "instagram-mcp",
+        primary: "composio",
         graph,
         composio,
         dmEnabled: isInstagramDmEnabled(),
-        note: graph.live ? "Graph (instagram-mcp) is live. Composio is fallback only." : isComposioInstagramConnected() ? "Graph is down/offline. Claw will use Composio Instagram as fallback and tell you." : "Neither Graph nor Composio Instagram is ready."
+        note: composioLive
+          ? "Composio Instagram is the primary MCP. Official Graph (instagram-mcp) is fallback only — only used if Composio is disconnected or errors."
+          : graph.live
+            ? "Composio Instagram is disconnected or erroring. Claw will use official Graph (instagram-mcp) as fallback and tell you."
+            : "Neither Composio nor Graph Instagram is ready."
       };
     }
   },
@@ -371,8 +376,8 @@ export const CLAW_TOOLS: ClawTool[] = [
     handler: async (a) => {
       const result = await withInstagramFallback(
         "ig_list_media",
-        async () => listMedia(num(a.limit, 12)),
-        isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined
+        isComposioInstagramConnected() ? async () => composioListMedia(num(a.limit, 12)) : undefined,
+        async () => listMedia(num(a.limit, 12))
       );
       const items = digArray(result.data) || [];
       return { via: result.via, fallbackNote: result.fallbackNote, media: summarizeMedia(items) };
@@ -387,8 +392,8 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
       return withInstagramFallback(
         "ig_media_insights",
-        async () => getMediaInsights(mediaId),
-        isComposioInstagramConnected() ? async () => composioGetMediaInsights(mediaId) : undefined
+        isComposioInstagramConnected() ? async () => composioGetMediaInsights(mediaId) : undefined,
+        async () => getMediaInsights(mediaId)
       );
     }
   },
@@ -401,8 +406,8 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
       return withInstagramFallback(
         "ig_get_comments",
-        async () => getComments(mediaId),
-        isComposioInstagramConnected() ? async () => composioGetComments(mediaId) : undefined
+        isComposioInstagramConnected() ? async () => composioGetComments(mediaId) : undefined,
+        async () => getComments(mediaId)
       );
     }
   },
@@ -416,8 +421,8 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!commentId || !message) throw new Error("commentId and message are required");
       return withInstagramFallback(
         "ig_reply_comment",
-        async () => replyToComment(commentId, message),
-        isComposioInstagramConnected() ? async () => composioReplyComment(commentId, message) : undefined
+        isComposioInstagramConnected() ? async () => composioReplyComment(commentId, message) : undefined,
+        async () => replyToComment(commentId, message)
       );
     }
   },
@@ -441,12 +446,12 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "ig_list_conversations",
-    description: "List Instagram DMs. Requires instagram_manage_messages + INSTAGRAM_MCP_DM_ENABLED=1. Graph first, Composio fallback.",
+    description: "List Instagram DMs. Composio is primary, Graph (instagram-mcp) is fallback.",
     args: "{}",
     handler: async () => withInstagramFallback(
       "ig_list_conversations",
-      async () => listConversations(),
-      isComposioInstagramConnected() ? async () => composioListConversations() : undefined
+      isComposioInstagramConnected() ? async () => composioListConversations() : undefined,
+      async () => listConversations()
     )
   },
   {
@@ -458,14 +463,14 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!conversationId) throw new Error("conversationId is required");
       return withInstagramFallback(
         "ig_get_messages",
-        async () => getConversationMessages(conversationId),
-        isComposioInstagramConnected() ? async () => composioGetMessages(conversationId) : undefined
+        isComposioInstagramConnected() ? async () => composioGetMessages(conversationId) : undefined,
+        async () => getConversationMessages(conversationId)
       );
     }
   },
   {
     name: "ig_send_dm",
-    description: "Send an Instagram DM (24h window). recipientId is the IGSID.",
+    description: "Send an Instagram DM. recipientId is the IGSID.",
     args: "{\"recipientId\":\"...\",\"text\":\"...\"}",
     handler: async (a) => {
       const recipientId = str(a.recipientId);
@@ -473,14 +478,14 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!recipientId || !text) throw new Error("recipientId and text are required");
       return withInstagramFallback(
         "ig_send_dm",
-        async () => sendDirectMessage(recipientId, text),
-        isComposioInstagramConnected() ? async () => composioSendMessage(recipientId, text) : undefined
+        isComposioInstagramConnected() ? async () => composioSendMessage(recipientId, text) : undefined,
+        async () => sendDirectMessage(recipientId, text)
       );
     }
   },
   {
     name: "ig_publish",
-    description: "Publish a public https media URL or library/video asset to Instagram (Reel/feed/story). Graph first, Composio fallback. Always report `via`.",
+    description: "Publish a public https media URL or library/video asset to Instagram (Reel/feed/story). Composio is primary, Graph (instagram-mcp) is fallback. Always report `via`.",
     args: "{\"mediaUrl\":\"/api/library/assets/.../file\",\"mediaType\":\"video/mp4\",\"caption\":\"...\",\"postType\":\"feed|story\",\"jobId\":\"optional\"}",
     handler: async (a) => publishInstagram({
       jobId: str(a.jobId) || null,
