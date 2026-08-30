@@ -144,43 +144,93 @@ export async function writeSocialPackage(input: ContentWriterInput): Promise<Con
     promptRagCandidates: input.promptRagCandidates ?? []
   })).digest("hex");
 
-  let response;
-  try {
-    response = await chatCompletion({
-      model,
-      temperature: 0.7,
-      topP: 0.9,
-      maxTokens: 1600,
-      jsonMode: true,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(input) }
-      ]
-    });
-  } catch (e) {
-    if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) throw e;
-    throw new NvidiaContentError("NVIDIA call failed", e);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(response.text);
-  } catch (e) {
-    // Some models wrap JSON in ```json fences despite the instruction. Strip and retry once.
-    const stripped = response.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  // Validation-retry helper (same pattern as writeStandalonePost below).
+  // Schema failures — most often the model returning hashtags as a single
+  // string instead of a string[] — get one corrective retry instead of an
+  // immediate throw. 5xx upstream errors don't get this treatment; the
+  // NVIDIA client already retries those internally.
+  const attempt = async (): Promise<SocialContentPackage> => {
+    let response;
     try {
-      parsed = JSON.parse(stripped);
-    } catch {
-      throw new NvidiaContentError(`NVIDIA returned non-JSON (finish=${response.finishReason})`, e);
+      response = await chatCompletion({
+        model,
+        temperature: 0.7,
+        topP: 0.9,
+        maxTokens: 1600,
+        jsonMode: true,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildUserPrompt(input) }
+        ]
+      });
+    } catch (e) {
+      if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) throw e;
+      throw new NvidiaContentError("NVIDIA call failed", e);
     }
-  }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(response.text);
+    } catch (e) {
+      // Some models wrap JSON in ```json fences despite the instruction. Strip and retry once.
+      const stripped = response.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+      try {
+        parsed = JSON.parse(stripped);
+      } catch {
+        throw new NvidiaContentError(`NVIDIA returned non-JSON (finish=${response.finishReason})`, e);
+      }
+    }
+    return parseSocialContentPackage(parsed, model);
+  };
 
   let pkg: SocialContentPackage;
   try {
-    pkg = parseSocialContentPackage(parsed, model);
+    pkg = await attempt();
   } catch (e) {
-    if (e instanceof SchemaError) throw new NvidiaContentError(`NVIDIA output failed validation: ${e.message}`, e);
-    throw e;
+    if (!(e instanceof SchemaError)) {
+      if (e instanceof NvidiaContentError) throw e;
+      throw e;
+    }
+    // One corrective retry. Most common case: hashtags returned as a
+    // single string. The corrective prompt tells the model exactly
+    // which field is wrong and what shape it expects.
+    const corrective = `Your previous response failed JSON schema validation with: ${e.message}. Re-emit the JSON object with the offending field corrected. The hashtags field MUST be a JSON array of strings (["tag1", "tag2"]) or omitted entirely — never a single string, never an object. Return only the corrected JSON.`;
+    try {
+      // We re-run the same attempt but with the corrective prompt
+      // tacked onto the user message.
+      let response;
+      try {
+        response = await chatCompletion({
+          model,
+          temperature: 0.7,
+          topP: 0.9,
+          maxTokens: 1600,
+          jsonMode: true,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: `${buildUserPrompt(input)}\n\n${corrective}` }
+          ]
+        });
+      } catch (e2) {
+        if (e2 instanceof NvidiaAuthError || e2 instanceof NvidiaUpstreamError) throw e2;
+        throw new NvidiaContentError("NVIDIA call failed (retry)", e2);
+      }
+      let parsed: unknown;
+      try { parsed = JSON.parse(response.text); } catch {
+        const stripped = response.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+        try { parsed = JSON.parse(stripped); } catch (e2) { throw new NvidiaContentError(`NVIDIA returned non-JSON on retry (finish=${response.finishReason})`, e2); }
+      }
+      try {
+        pkg = parseSocialContentPackage(parsed, model);
+      } catch (e2) {
+        if (e2 instanceof SchemaError) throw new NvidiaContentError(`NVIDIA output failed validation after retry: ${e2.message}`, e2);
+        throw e2;
+      }
+    } catch (e2) {
+      // Both calls failed validation. Surface the original schema error
+      // so the caller sees the most informative message.
+      if (e2 instanceof NvidiaContentError) throw e2;
+      throw e;
+    }
   }
   pkg.provenance.inputs = {
     campaignId: input.campaign.id,
@@ -220,7 +270,19 @@ Constraints:
 - instagram/facebook/tiktok: primaryText is a normal caption; hashtags are 3-15 short tags with no # symbol.
 - youtube: primaryText is the video description; title is the video title.
 
-JSON contract: { "primaryText": "string", "title": "string (optional)", "description": "string (optional)", "cta": "string (optional)", "hashtags": ["string", ...] (optional) }`;
+JSON contract (FOLLOW EXACTLY — every field type matters):
+{
+  "primaryText": "string (REQUIRED, non-empty)",
+  "title": "string (optional, may be omitted entirely if not relevant)",
+  "description": "string (optional)",
+  "cta": "string (optional)",
+  "hashtags": ["string", "string", "string"]  // ALWAYS a JSON array of strings when present, NEVER a single string, NEVER an object, NEVER null. Omit the field entirely if no hashtags.
+}
+
+Common mistakes to avoid:
+- hashtags as a single string like "#foo #bar" → WRONG. Use an array: ["#foo", "#bar"] (or strip the # and use ["foo", "bar"])
+- hashtags as a JSON object → WRONG. Use an array.
+- title as an object → WRONG. Use a string or omit it.`;
 
 export async function writeStandalonePost(input: StandalonePostInput): Promise<PlatformCopy> {
   if (!isNvidiaEnabled()) throw new NvidiaDisabledError();
@@ -235,40 +297,64 @@ export async function writeStandalonePost(input: StandalonePostInput): Promise<P
     `Return the JSON object now.`
   ].join("\n");
 
-  let response;
-  try {
-    response = await chatCompletion({
-      model,
-      temperature: 0.7,
-      topP: 0.9,
-      maxTokens: 900,
-      jsonMode: true,
-      messages: [
-        { role: "system", content: STANDALONE_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt }
-      ]
-    });
-  } catch (e) {
-    if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) throw e;
-    throw new NvidiaContentError("NVIDIA call failed", e);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(response.text);
-  } catch {
-    const stripped = response.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  // Validation-retry helper: schema failures (the most common one in
+  // practice is the model returning hashtags as a string instead of a
+  // string[]) get one retry with a corrective message instead of an
+  // immediate throw. The retry is a 2nd NVIDIA call so it costs a few
+  // hundred ms but recovers most near-miss outputs that would
+  // otherwise break an operator-facing flow. HTTP 5xx errors don't get
+  // this treatment — they're true transient failures and the upstream
+  // client already retries them internally.
+  const attempt = async (systemPrompt: string, userMsg: string): Promise<PlatformCopy> => {
+    let response;
     try {
-      parsed = JSON.parse(stripped);
+      response = await chatCompletion({
+        model,
+        temperature: 0.7,
+        topP: 0.9,
+        maxTokens: 900,
+        jsonMode: true,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMsg }
+        ]
+      });
     } catch (e) {
-      throw new NvidiaContentError(`NVIDIA returned non-JSON (finish=${response.finishReason})`, e);
+      if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) throw e;
+      throw new NvidiaContentError("NVIDIA call failed", e);
     }
-  }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(response.text);
+    } catch {
+      const stripped = response.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+      try {
+        parsed = JSON.parse(stripped);
+      } catch (e) {
+        throw new NvidiaContentError(`NVIDIA returned non-JSON (finish=${response.finishReason})`, e);
+      }
+    }
+    return parsePlatformCopy(parsed, "post", input.platform);
+  };
 
   try {
-    return parsePlatformCopy(parsed, "post", input.platform);
+    return await attempt(STANDALONE_SYSTEM_PROMPT, userPrompt);
   } catch (e) {
-    if (e instanceof SchemaError) throw new NvidiaContentError(`NVIDIA output failed validation: ${e.message}`, e);
-    throw e;
+    if (!(e instanceof SchemaError)) {
+      if (e instanceof NvidiaContentError) throw e;
+      throw e;
+    }
+    // One retry with the exact failure surfaced to the model. Most
+    // common case: model returns `hashtags: "#foo #bar"` (single
+    // string) and the schema wants an array. The retry message tells
+    // the model exactly what to fix.
+    const corrective = `Your previous response failed JSON schema validation with: ${e.message}. Please re-emit the JSON object with the offending field corrected. The hashtags field MUST be a JSON array of strings (e.g. ["tag1", "tag2", "tag3"]) or omitted entirely — never a single string, never an object. If you returned hashtags as a single string, split it into an array of individual tags. Return only the corrected JSON.`;
+    try {
+      return await attempt(STANDALONE_SYSTEM_PROMPT, `${userPrompt}\n\n${corrective}`);
+    } catch (e2) {
+      if (e2 instanceof NvidiaContentError) throw e2;
+      if (e2 instanceof SchemaError) throw new NvidiaContentError(`NVIDIA output failed validation after retry: ${e2.message}`, e2);
+      throw e2;
+    }
   }
 }
