@@ -67,10 +67,26 @@ export function getComposio(): Composio {
 }
 
 export function getActiveConnectedAccountId(toolkit: string, userId = "admin"): string | null {
-  const row = db.prepare(
+  // Prefer the row bound to the requested user_id (the single-operator
+  // default is "admin"), but fall back to ANY active row for this toolkit
+  // when the requested user has none. A connected Composio account that
+  // happens to be bound to a different user_id (e.g. a row created under
+  // a playwright-test prefix during a one-off OAuth flow) is still a real,
+  // usable connection — refusing to see it would force the operator to
+  // re-run the OAuth consent screen for what is, to Composio, the same
+  // account. Single-operator app: there's no second user to worry about.
+  const exact = db.prepare(
     "SELECT connected_account_id FROM connected_accounts WHERE toolkit=? AND user_id=? AND UPPER(status)='ACTIVE' LIMIT 1"
   ).get(toolkit, userId) as { connected_account_id: string } | undefined;
-  return row?.connected_account_id || null;
+  if (exact?.connected_account_id) return exact.connected_account_id;
+  const fallback = db.prepare(
+    "SELECT connected_account_id, user_id FROM connected_accounts WHERE toolkit=? AND UPPER(status)='ACTIVE' ORDER BY (user_id=?) DESC, updated_at DESC LIMIT 1"
+  ).get(toolkit, userId) as { connected_account_id: string; user_id: string } | undefined;
+  if (fallback?.connected_account_id) {
+    console.warn(`[composio] ${toolkit}: no active row for user_id="${userId}", falling back to user_id="${fallback.user_id}". This is fine for a single-operator app but means the OAuth flow that created this row bound it to a non-default user_id string.`);
+    return fallback.connected_account_id;
+  }
+  return null;
 }
 
 export async function syncConnectedAccounts() {
@@ -83,7 +99,6 @@ export async function syncConnectedAccounts() {
     const id = it?.id;
     if (!id) continue;
     const userId = it.user_id || it.userId || USER_ID;
-    if (userId !== USER_ID) continue;
     const status = String(it.status || "").toUpperCase();
     if (status !== "ACTIVE") continue;
     const toolkitRaw = it.toolkit?.slug ?? it.toolkit?.name ?? it.toolkit;
@@ -92,6 +107,16 @@ export async function syncConnectedAccounts() {
     if (!COMPOSIO_TOOLKITS.some((t) => t.id === meta.id)) continue;
     const updated = String(it.updated_at || it.updatedAt || "");
     const authConfigId = it.auth_config?.id || it.authConfig?.id;
+    // Single-operator app: pull in active connections regardless of which
+    // user_id Composio bound them to (some OAuth flows — playwright tests,
+    // operator-side re-binds — can land on a non-"admin" string). We
+    // re-key them to USER_ID in the row write below so every downstream
+    // getActiveConnectedAccountId() lookup finds them under the expected
+    // name. Previously this loop filtered non-admin rows out, which made
+    // a perfectly-working connection invisible to the rest of the app.
+    if (userId !== USER_ID) {
+      console.warn(`[composio] ${meta.id}: rebinding connected account ${id} from user_id="${userId}" to user_id="${USER_ID}" (single-operator app, expected for OAuth flows that didn't run with the default user).`);
+    }
     const prev = best.get(meta.id);
     if (!prev || updated > prev.updated) {
       best.set(meta.id, { id, toolkit: meta.id, status, raw: it, updated, authConfigId });
