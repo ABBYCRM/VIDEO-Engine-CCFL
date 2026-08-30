@@ -27,12 +27,21 @@ CREATE TABLE IF NOT EXISTS reddit_research_runs (
 CREATE INDEX IF NOT EXISTS idx_reddit_research_runs_created_at ON reddit_research_runs(created_at);
 `);
 
+// `query` was added after the initial table shape — same ALTER-TABLE-if-
+// missing pattern used throughout this codebase (e.g. lib/calendar-assets.ts)
+// rather than a new migration number for one column.
+try {
+  const cols = db.prepare("PRAGMA table_info(reddit_research_runs)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "query")) db.exec("ALTER TABLE reddit_research_runs ADD COLUMN query TEXT");
+} catch { /* ignore */ }
+
 export type RedditResearchRun = {
   id: string;
   status: "success" | "skipped" | "failed";
   trigger: "scheduled" | "manual";
   postsScanned: number;
   commentsScanned: number;
+  query: string | null;
   category: string | null;
   themeSummary: string | null;
   scheduledPostId: string | null;
@@ -45,6 +54,7 @@ export function saveRedditResearchRun(input: {
   trigger: "scheduled" | "manual";
   postsScanned: number;
   commentsScanned: number;
+  query?: string | null;
   category?: string | null;
   themeSummary?: string | null;
   scheduledPostId?: string | null;
@@ -53,14 +63,15 @@ export function saveRedditResearchRun(input: {
   const id = crypto.randomUUID();
   db.prepare(
     `INSERT INTO reddit_research_runs(
-      id, status, trigger, posts_scanned, comments_scanned, category, theme_summary, scheduled_post_id, error
-    ) VALUES(?,?,?,?,?,?,?,?,?)`
+      id, status, trigger, posts_scanned, comments_scanned, query, category, theme_summary, scheduled_post_id, error
+    ) VALUES(?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id,
     input.status,
     input.trigger,
     input.postsScanned,
     input.commentsScanned,
+    input.query ?? null,
     input.category ?? null,
     input.themeSummary ? input.themeSummary.slice(0, 2000) : null,
     input.scheduledPostId ?? null,
@@ -93,6 +104,7 @@ function rowToRun(row: any): RedditResearchRun {
     trigger: row.trigger,
     postsScanned: row.posts_scanned,
     commentsScanned: row.comments_scanned,
+    query: row.query,
     category: row.category,
     themeSummary: row.theme_summary,
     scheduledPostId: row.scheduled_post_id,

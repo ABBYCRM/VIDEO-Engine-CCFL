@@ -16,6 +16,18 @@ export function isImageGenEnabled(): boolean {
   return IMAGE_GEN_ENABLED;
 }
 
+// REDDIT_AUTOPILOT_ENABLED — master switch for the Reddit market-research
+// sub-agent (lib/reddit-research/*): both its autonomous daily scheduler and
+// its on-demand triggers (the Claw tool and the admin "run now" endpoint).
+// One flag stops every path that can queue a live post from that pipeline,
+// without a redeploy. Defaults to on; set REDDIT_AUTOPILOT_ENABLED=false to
+// pause it.
+export const REDDIT_AUTOPILOT_ENABLED: boolean = process.env.REDDIT_AUTOPILOT_ENABLED !== "false";
+
+export function isRedditAutopilotEnabled(): boolean {
+  return REDDIT_AUTOPILOT_ENABLED;
+}
+
 /**
  * Build a standard 410 Gone response for routes that are intentionally disabled.
  * Includes a `feature` so the UI can surface the right message.
