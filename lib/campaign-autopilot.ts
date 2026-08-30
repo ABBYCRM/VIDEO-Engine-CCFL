@@ -400,12 +400,13 @@ async function generateNext(slotId?:string){
         OR (sp.generation_status='failed' AND (
           (sp.content_type='podcast' AND (sp.upper_job_id IS NULL OR sp.error LIKE 'Split-screen compose%'))
           OR (sp.content_type!='podcast' AND (
-            sp.error LIKE 'A2E%'
-            OR sp.error LIKE 'Hedra%'
-            OR sp.error LIKE 'Veo%'
-            OR sp.error LIKE 'Grok%'
-            OR sp.error LIKE 'fal%'
-            OR sp.error LIKE 'HTTP%'
+            sp.error LIKE '%A2E%'
+            OR sp.error LIKE '%Hedra%'
+            OR sp.error LIKE '%Veo%'
+            OR sp.error LIKE '%Grok%'
+            OR sp.error LIKE '%fal start%'
+            OR sp.error LIKE '%xAI%'
+            OR sp.error LIKE '%HTTP [45]%'
           ))
         ))
       )
