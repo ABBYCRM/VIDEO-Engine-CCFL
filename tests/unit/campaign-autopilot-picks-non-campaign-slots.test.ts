@@ -66,6 +66,27 @@ function openTestDb() {
   return db;
 }
 
+// Extracted straight from lib/campaign-autopilot.ts's generateNext() so this
+// test can't silently drift from the real query (a hand-retyped copy is
+// exactly how the '%HTTP [45]%' bug below went untested in the first
+// place -- a duplicated-by-hand WHERE clause that quietly diverged from
+// what the app actually runs).
+function extractGenerateNextWhereClause(): string {
+  const src = readFileSync(join(repoRoot, "lib", "campaign-autopilot.ts"), "utf8");
+  const start = src.indexOf("WHERE sp.media_url IS NULL");
+  if (start === -1) throw new Error("could not locate generateNext's WHERE clause in lib/campaign-autopilot.ts");
+  const end = src.indexOf("LIMIT 1", start);
+  if (end === -1) throw new Error("could not locate the end of generateNext's WHERE clause");
+  const raw = src.slice(start, end + "LIMIT 1".length);
+  // The real code interpolates this bit as a JS template literal
+  // (`${slotId?"AND sp.id=?":""}`); extracting raw source text can't
+  // evaluate that, so substitute the "slotId given" branch directly --
+  // every test here always filters to one exact row by id.
+  const placeholder = '${slotId?"AND sp.id=?":""}';
+  if (!raw.includes(placeholder)) throw new Error("generateNext's WHERE clause no longer contains the expected slotId placeholder -- update this extraction");
+  return raw.replace(placeholder, "AND sp.id=?");
+}
+
 describe("campaign-autopilot loop eligibility", () => {
   it("picks up a pending post that has no campaign_id (non-campaign slot)", () => {
     const db = openTestDb();
@@ -158,5 +179,59 @@ describe("campaign-autopilot loop eligibility", () => {
       )
       .get(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
     assert.equal(row, undefined, "published slot must not be eligible");
+  });
+});
+
+describe("campaign-autopilot failed-slot retry eligibility (generateNext's real WHERE clause)", () => {
+  function insertFailedSlot(db: Database.Database, id: string, error: string) {
+    const inHorizon = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    db.prepare(
+      `INSERT INTO scheduled_posts(id, title, network, scheduled_at, status, auto_post, caption, content_type, generation_status, error)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`
+    ).run(id, "ugc · Day 1 · Video", "instagram", inHorizon, "approved", 1, "", "ugc", "failed", error);
+  }
+
+  function isEligible(db: Database.Database, id: string): boolean {
+    const whereClause = extractGenerateNextWhereClause();
+    const horizon = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const row = db
+      .prepare(`SELECT sp.id FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id ${whereClause}`)
+      .get(horizon, id) as { id: string } | undefined;
+    return row?.id === id;
+  }
+
+  it("picks up a failed slot whose error names an HTTP 4xx/5xx status without naming a provider", () => {
+    // This is exactly the case '%HTTP [45]%' was meant to catch and never
+    // did: SQLite's LIKE has no bracket character-class syntax (that's
+    // GLOB-only), so '%HTTP [45]%' only matches the literal substring
+    // "HTTP [45]" -- never real text like "HTTP 404". A generic transport
+    // error with no provider name in it relied on this clause alone.
+    const db = openTestDb();
+    insertFailedSlot(db, "slot-404", "Request rejected: HTTP 404 Not Found");
+    insertFailedSlot(db, "slot-500", "Upstream error: HTTP 500 Internal Server Error");
+    assert.equal(isEligible(db, "slot-404"), true, "a bare HTTP 404 error must be retry-eligible");
+    assert.equal(isEligible(db, "slot-500"), true, "a bare HTTP 500 error must be retry-eligible");
+  });
+
+  it("still picks up failed slots via the provider-name clauses (Hedra/Veo/Grok/A2E)", () => {
+    const db = openTestDb();
+    insertFailedSlot(db, "slot-veo", "Veo start HTTP 404: model not found");
+    insertFailedSlot(db, "slot-hedra", "Hedra start HTTP 500: server error");
+    insertFailedSlot(db, "slot-a2e", "A2E rejected task: insufficient coins");
+    for (const id of ["slot-veo", "slot-hedra", "slot-a2e"]) {
+      assert.equal(isEligible(db, id), true, `${id} must be retry-eligible`);
+    }
+  });
+
+  it("picks up a failed slot whose error contains an apostrophe (isn't supported)", () => {
+    const db = openTestDb();
+    insertFailedSlot(db, "slot-apos", "Model isn't supported for this provider");
+    assert.equal(isEligible(db, "slot-apos"), true);
+  });
+
+  it("does not pick up a failed slot with an unrelated error", () => {
+    const db = openTestDb();
+    insertFailedSlot(db, "slot-other", "Disk full");
+    assert.equal(isEligible(db, "slot-other"), false);
   });
 });

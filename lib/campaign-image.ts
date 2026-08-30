@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db";
-import { generateA2eGptImage, getImageApiKey, getImageModel, getImageProvider, ImageUpstreamError } from "@/lib/avatar-generation/client";
+import { generateA2eGptImage, getImageApiKey, getImageApiKeyForProvider, getImageModel, getImageProvider, ImageUpstreamError } from "@/lib/avatar-generation/client";
 import { generateAvatarImage } from "@/lib/nvidia/image";
 import { saveGeneratedImage } from "@/lib/media-library";
 import { composeStillPost } from "@/lib/still-compose";
@@ -177,10 +177,21 @@ async function renderWithConfiguredProvider(prompt: string, referencePath: strin
   // failure, fall through.
   const tryOrder: Array<{ provider: string; fn: () => Promise<{ base64: string; mimeType: string; model: string }> }> = [configuredFirst];
   // Fallback chain (skip if same as configured, skip if known-bad here).
+  //
+  // Every fallback call resolves its OWN key via getImageApiKeyForProvider,
+  // never getImageApiKey() (which returns the key for whatever provider is
+  // CONFIGURED, not the one actually being attempted here) -- calling that
+  // instead would mean, say, a Hedra-configured deployment falling through
+  // to Gemini using its Hedra key, guaranteeing a 401 on every fallback
+  // attempt except Hedra itself and defeating the whole point of this
+  // chain. getImageApiKeyForProvider() throws when that provider's key
+  // isn't configured at all; letting that throw happen inside fn() (rather
+  // than resolving the key eagerly here) means an unconfigured fallback is
+  // just another caught-and-skipped attempt, same as a real upstream error.
   const fallbacks: Array<{ provider: string; fn: () => Promise<{ base64: string; mimeType: string; model: string }> }> = [
-    { provider: "gemini", fn: () => editWithGemini(referencePath, prompt, "gemini-2.5-flash-image") },
-    { provider: "a2e",    fn: () => generateA2eGptImage({ prompt, model: "gpt-image-1.5", referencePath, aspectRatio: "9:16" }).then((g) => ({ base64: g.png.toString("base64"), mimeType: "image/png" as const, model: g.model })) },
-    { provider: "openai", fn: () => editWithOpenAI(referencePath, prompt, "gpt-image-1") },
+    { provider: "gemini", fn: () => editWithGemini(referencePath, prompt, "gemini-2.5-flash-image", getImageApiKeyForProvider("gemini")) },
+    { provider: "a2e",    fn: () => generateA2eGptImage({ prompt, model: "gpt-image-1.5", referencePath, aspectRatio: "9:16", apiKey: getImageApiKeyForProvider("a2e") }).then((g) => ({ base64: g.png.toString("base64"), mimeType: "image/png" as const, model: g.model })) },
+    { provider: "openai", fn: () => editWithOpenAI(referencePath, prompt, "gpt-image-1", getImageApiKeyForProvider("openai")) },
     { provider: "hedra",  fn: () => editWithHedra(referencePath, prompt, "gpt-image-2") }
   ];
   for (const fb of fallbacks) if (fb.provider !== configuredFirst.provider) tryOrder.push(fb);
@@ -188,7 +199,7 @@ async function renderWithConfiguredProvider(prompt: string, referencePath: strin
   // provider is anything that needs a reference AND all configured-
   // family fallbacks failed, we'd rather drop the reference and try
   // xAI than fail the whole render.
-  if (!referencePath) tryOrder.push({ provider: "xai", fn: () => renderWithXai(prompt, "grok-imagine-image") });
+  if (!referencePath) tryOrder.push({ provider: "xai", fn: () => renderWithXai(prompt, "grok-imagine-image", getImageApiKeyForProvider("xai")) });
 
   for (const attempt of tryOrder) {
     try {
@@ -209,8 +220,8 @@ async function renderWithConfiguredProvider(prompt: string, referencePath: strin
   throw new ImageUpstreamError(`All image providers failed. Chain: ${summary}`, 502);
 }
 
-async function renderWithXai(prompt: string, model: string) {
-  const key = getImageApiKey();
+async function renderWithXai(prompt: string, model: string, apiKey?: string) {
+  const key = apiKey ?? getImageApiKey();
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), 45_000);
   try {
