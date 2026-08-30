@@ -5,7 +5,17 @@ import { decideTool, exactConfirmation } from "@/lib/aion/policy";
 import { saveDecision, saveEpistemicRecord, saveAudit, countCostlyCommitsToday } from "@/lib/aion/store";
 import { auditAssistantResponse, type AuditFlag } from "@/lib/aion/audit";
 
-const TOOL_RE = /<tool_call\s+name="([^"]+)">([\s\S]*?)<\/tool_call>/gi;
+// Tolerates the one malformed variant models actually produce in practice
+// (a missing "/" on the closing tag) so a near-miss doesn't silently fall
+// through to zero matches — see the "text still contains a literal
+// <tool_call marker but parsed to zero calls" guard below for what happens
+// when the model's output is too malformed even for this to catch. The name
+// capture is restricted to identifier characters: every real tool name is
+// `[a-z_]+` (see lib/claw/tools.ts), so a name attribute containing spaces,
+// braces, or quotes (the model pasting example arg-shape text from the tool
+// catalog into the name attribute itself) is deliberately NOT matched here
+// rather than executed as a bogus "tool".
+const TOOL_RE = /<tool_call\s+name="([a-zA-Z0-9_]+)">([\s\S]*?)<\/?tool_call>/gi;
 const MAX_ROUNDS = 6;
 
 // Real, code-enforced cap on real-money generation calls (generate_video,
@@ -192,6 +202,41 @@ export async function runClawTurn(input: {
     const text = result.text || streamed;
     const calls = parseTools(text);
     if (!calls.length) {
+      // The model attempted tool-call syntax (the literal marker is
+      // present) but it didn't parse — most often a missing closing "/" or
+      // example arg-shape text pasted into the name attribute. This is NOT
+      // a legitimate final answer: on a multi-step task the model then
+      // treats its own malformed attempt as if tools had already run and
+      // fabricates a "results" section to match — the exact fabrication
+      // AION exists to catch. Never let that reach the operator as if it
+      // were real. Give the model one corrective nudge per remaining round
+      // instead of surfacing garbled pseudo-output as done.assistant.
+      if (text.toLowerCase().includes(marker)) {
+        try {
+          saveAudit({
+            conversationId: input.conversationId,
+            assistantMessageId: null,
+            passed: false,
+            flags: [{
+              severity: "HIGH",
+              code: "MALFORMED_TOOL_CALL_SYNTAX",
+              detail: "Assistant text contained a <tool_call marker that did not parse as a valid call; discarded rather than treated as a final answer."
+            }] as any
+          });
+        } catch { /* best-effort */ }
+        if (round < MAX_ROUNDS - 1) {
+          input.onEvent({ type: "token", text: "(retrying — my last tool-call format was malformed)\n" });
+          addMessage({
+            conversationId: input.conversationId,
+            role: "tool",
+            content: `<tool_result name="system">Your last response used malformed tool_call syntax and was discarded — nothing was executed, and any "results" you described are not real. Use exactly this format, one call per block: <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call> — a bare tool name (letters/numbers/underscore only) in the name attribute, valid JSON as the tag body, and the closing tag must include the "/". Retry the step you were on using a real tool_call block; do not describe results you have not actually received.</tool_result>`,
+            toolJson: { name: "system", ok: false }
+          });
+          continue;
+        }
+        finalText = "I couldn't complete this — my last response used malformed tool-call syntax and nothing actually ran. Please try again, or ask for one step at a time.";
+        break;
+      }
       if (!suppressToolOutput && pendingOutput) input.onEvent({ type: "token", text: pendingOutput });
       finalText = stripTools(text) || text;
       break;
