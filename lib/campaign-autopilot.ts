@@ -542,7 +542,15 @@ function tickCampaignAutopilot(){
   // timer. Since Node 15 an unhandled promise rejection crashes the whole
   // process by default, so an uncaught throw here would silently end every
   // autonomous pipeline in the process, not just this one.
-  runCampaignAutopilotOnce().catch(e=>console.error("[campaign-autopilot] scheduled run threw unexpectedly",e));
+  // Bump a per-process counter so the /api/health/loops endpoint can show
+  // whether the loop is actually ticking (helpful for diagnosing
+  // "Generation: pending" without admin auth).
+  const g = globalThis as Record<string, unknown>;
+  g.__campaignAutopilotTicks = Number(g.__campaignAutopilotTicks || 0) + 1;
+  runCampaignAutopilotOnce().catch(e=>{
+    console.error("[campaign-autopilot] scheduled run threw unexpectedly",e);
+    g.__campaignAutopilotLastError = String((e as Error)?.message || e);
+  });
 }
 
 export function startCampaignAutopilotLoop(){

@@ -46,6 +46,10 @@ export async function GET() {
       with_video_job: Number(rows?.with_video_job || 0),
       with_split_job: Number(rows?.with_split_job || 0)
     },
+    campaignAutopilot: {
+      ticks: Number((globalThis as any).__campaignAutopilotTicks || 0),
+      lastError: (globalThis as any).__campaignAutopilotLastError || null
+    },
     runs
   });
 }
