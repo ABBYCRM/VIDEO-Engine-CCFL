@@ -30,7 +30,14 @@ test("creator upload API: 2.6MB real file schedules successfully", async ({ page
   await page.goto("/login");
   await page.getByPlaceholder("Admin password").fill(process.env.ADMIN_PASSWORD || "e2e-local-only");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Content Calendar" })).toBeVisible({ timeout: 15000 });
+  // Wait for the shared app shell (present on every authenticated page,
+  // e.g. components/app-shell.tsx's "Sign out" control) rather than a
+  // specific page's heading -- this test only needs an authenticated
+  // browser session for the upload API calls below, and doesn't care
+  // which page a real login redirects to. Asserting on "Content Calendar"
+  // specifically broke when the post-login landing page changed to /claw;
+  // this makes the login check independent of that route.
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({ timeout: 15000 });
 
   const response = await page.evaluate(async () => {
     // 2.6MB file (matches the operator's clip) — built in-browser so the

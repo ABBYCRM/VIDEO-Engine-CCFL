@@ -406,7 +406,12 @@ async function generateNext(slotId?:string){
             OR sp.error LIKE '%Grok%'
             OR sp.error LIKE '%fal start%'
             OR sp.error LIKE '%xAI%'
-            OR sp.error LIKE '%HTTP [45]%'
+            -- SQLite's LIKE has no bracket character-class syntax (that's
+            -- GLOB-only) -- '%HTTP [45]%' matches the literal substring
+            -- "HTTP [45]" and never matches real text like "HTTP 404" or
+            -- "HTTP 500". Match each leading digit directly instead.
+            OR sp.error LIKE '%HTTP 4%'
+            OR sp.error LIKE '%HTTP 5%'
             OR sp.error LIKE '%isn' || char(39) || 't supported%'
             OR sp.error LIKE '%is not supported%'
             OR sp.error LIKE '%not supported by%'

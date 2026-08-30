@@ -334,9 +334,14 @@ export async function generateA2eGptImage(input: {
   model?: string;
   referencePath?: string | null;
   aspectRatio?: string;
+  /** Explicit key override for lib/campaign-image.ts's fallback chain --
+   *  see getImageApiKeyForProvider's comment. Defaults to getImageApiKey()
+   *  (the CONFIGURED provider's key) for every other caller, unchanged. */
+  apiKey?: string;
 }): Promise<GenerateResult> {
   const TIMEOUT_MS = 180000;
   const POLL_MS = 2500;
+  const key = input.apiKey ?? getImageApiKey();
   const model = input.model === "gpt-image-2" ? "gpt-image-2" : (input.model || "gpt-image-1.5");
   const prompt = input.prompt;
   const aspectRatio = input.aspectRatio || "9:16";
@@ -360,7 +365,7 @@ export async function generateA2eGptImage(input: {
     else startBody.quality = "high";
     const startRes = await fetch("https://video.a2e.ai/api/v1/userGptImage/start", {
       method: "POST",
-      headers: { Authorization: `Bearer ${getImageApiKey()}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(startBody),
       cache: "no-store",
       signal: ac.signal
@@ -387,7 +392,7 @@ export async function generateA2eGptImage(input: {
       await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS));
       const detailRes = await fetch(`https://video.a2e.ai/api/v1/userGptImage/detail/${encodeURIComponent(taskId)}`, {
         method: "GET",
-        headers: { Authorization: `Bearer ${getImageApiKey()}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         cache: "no-store",
         signal: ac.signal
       });
