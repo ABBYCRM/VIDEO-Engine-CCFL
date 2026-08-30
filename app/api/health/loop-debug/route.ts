@@ -16,7 +16,7 @@ export async function GET() {
   const rows = db.prepare(
     `SELECT id, title, content_type, scheduled_at, status, generation_status,
             media_url, media_type, source_asset_key, category, network, auto_post,
-            video_job_id, upper_job_id, lower_job_id,
+            video_job_id, upper_job_id, lower_job_id, video_provider, video_model,
             campaign_id, created_at, error
      FROM scheduled_posts
      WHERE media_url IS NULL
@@ -29,8 +29,7 @@ export async function GET() {
       r.video_job_id == null &&
       r.upper_job_id == null &&
       r.lower_job_id == null &&
-      r.scheduled_at <= horizon &&
-      r.campaign_id != null;
+      r.scheduled_at <= horizon;
     return {
       id: r.id,
       title: r.title,
@@ -47,6 +46,8 @@ export async function GET() {
       has_video_job: !!r.video_job_id,
       has_upper_job: !!r.upper_job_id,
       has_lower_job: !!r.lower_job_id,
+      video_provider: r.video_provider,
+      video_model: r.video_model,
       media_url: r.media_url,
       media_type: r.media_type,
       source_asset_key: r.source_asset_key,
