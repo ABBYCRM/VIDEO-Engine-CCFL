@@ -220,9 +220,6 @@ select, input, textarea, button {
  * every sibling, and every ancestor grid up the tree — wider than the
  * viewport. Zeroing the default lets each item shrink independently, the
  * same way normal block layout already does. */
-.grid > * {
-  min-width: 0;
-}
 select {
   max-width: 100%;
   text-overflow: ellipsis;
