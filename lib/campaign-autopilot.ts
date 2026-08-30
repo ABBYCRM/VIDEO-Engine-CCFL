@@ -304,8 +304,8 @@ async function startSingleSlot(row:any, chosen:ProviderId, avatarRef:{imageBase6
 async function finishGenerating(slotId?:string){
   const statement=db.prepare(`
     SELECT ${SLOT_SELECT}
-    FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
-    WHERE sp.campaign_id IS NOT NULL AND sp.generation_status='generating'
+    FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id
+    WHERE sp.generation_status='generating'
       ${slotId?"AND sp.id=?":""}
     ORDER BY sp.scheduled_at ASC LIMIT 1
   `);
@@ -373,11 +373,19 @@ async function generateSplitSlot(row:any){
 async function generateNext(slotId?:string){
   // Keep a 60-day schedule from starting every video immediately.
   const generationCutoff = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  // LEFT JOIN campaigns so non-campaign slots (e.g. posts created via
+  // /api/creator/upload that the operator scheduled manually, or
+  // /api/internal/ugc/batch where the user built a custom sequence)
+  // are still picked up. The previous INNER JOIN silently excluded
+  // every slot that didn't have a campaign row, leaving them stuck
+  // at generation_status='pending' forever — the operator's mobile
+  // screenshot on 2026-08-30 showed exactly that. Logic below
+  // branches on row.campaign_name being null to use a generic
+  // mission / category fallback.
   const statement=db.prepare(`
     SELECT ${SLOT_SELECT}
-    FROM scheduled_posts sp JOIN campaigns c ON c.id=sp.campaign_id
-    WHERE sp.campaign_id IS NOT NULL
-      AND sp.media_url IS NULL
+    FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id
+    WHERE sp.media_url IS NULL
       AND sp.status!='published'
       AND sp.scheduled_at <= ?
       AND (
@@ -396,8 +404,10 @@ async function generateNext(slotId?:string){
   if(row.content_type==="image"){
     try{
       db.prepare("UPDATE scheduled_posts SET generation_status='generating',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
-      const prompt=`Campaign: ${row.campaign_name}. ${row.mission}\nCreate a distinct visual variation for this scheduled post, suitable for Instagram and consistent with the campaign. Vary the scene, wardrobe, lighting, and camera angle from other posts in this campaign.`;
-      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false,stillTemplateId:row.still_template_id,seed:row.id,category:row.slot_category||row.campaign_category});
+      const sourceName = row.campaign_name || row.title || "Standalone post";
+      const sourceMission = row.mission || row.caption || "Create a distinct visual for this scheduled post.";
+      const prompt=`${row.campaign_name ? `Campaign: ${row.campaign_name}. ` : ""}${sourceMission}\nCreate a distinct visual variation for this scheduled post, suitable for Instagram${row.campaign_name ? " and consistent with the campaign" : ""}. Vary the scene, wardrobe, lighting, and camera angle from other posts.`;
+      const image=await generateCampaignStill({prompt,avatarId:resolveCampaignAvatarId(row.avatar_id),createCalendarPost:false,stillTemplateId:row.still_template_id,seed:row.id,category:row.slot_category||row.campaign_category||row.category||"ugc"});
       db.prepare(`UPDATE scheduled_posts SET media_url=?,media_type=?,caption=?,generation_status='ready',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(image.assetUrl,image.mimeType,slotPublicCaption(row),row.id);
     }catch(e){db.prepare("UPDATE scheduled_posts SET generation_status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),row.id);}
     return true;
