@@ -52,12 +52,34 @@ const INJURED_WORKER = `A stylized male cartoon figure with smooth features, lar
 
 const LEGAL_PRO = `A clean-cut male cartoon professional with swept dark hair, large expressive eyes, a rounded nose, and smooth skin. He wears a fitted navy-blue suit, clean white shirt, and a solid gold tie. He always has a confident, reassuring expression, often with one hand on the injured worker's shoulder.`;
 
-const STYLE_BLOCK = `High-end 3D animation in the style of Pixar or Illumination Entertainment. Soft even lighting, slightly oversaturated but cohesive colors, clean simplified backgrounds, exaggerated facial expressions for clarity, smooth rounded forms, no photorealism, no live-action references. Cartoon proportions (slightly larger heads, big eyes, simple rounded hands). Vertical 4:5 framing, scene fills the upper portion of the frame. The bottom ~15% of the image must be left empty as a clean solid-color zone (the image-generation model does NOT draw the orange footer — that is composited on top afterwards). No text, no letters, no numbers, no logos, no watermarks anywhere in the generated image.`;
+export const STYLE_BLOCK = `High-end 3D animation in the style of Pixar or Illumination Entertainment. Soft even lighting, slightly oversaturated but cohesive colors, clean simplified backgrounds, exaggerated facial expressions for clarity, smooth rounded forms, no photorealism, no live-action references. Cartoon proportions (slightly larger heads, big eyes, simple rounded hands). Vertical 4:5 framing, scene fills the upper portion of the frame. The bottom ~15% of the image must be left empty as a clean solid-color zone (the image-generation model does NOT draw the orange footer — that is composited on top afterwards). No text, no letters, no numbers, no logos, no watermarks anywhere in the generated image.`;
 
-const CHARACTERS = `Recurring characters (always exactly as described, with consistent clothing and proportions across all posts):
+export const CHARACTERS = `Recurring characters (always exactly as described, with consistent clothing and proportions across all posts):
 1. INJURED WORKER: ${INJURED_WORKER}
 2. LEGAL PROFESSIONAL: ${LEGAL_PRO}
 3. Optional supporting family/witness: same stylized 3D human form, simplified features, distinct but simplified clothing, exaggerated but clear expressions (shock, worry, relief).`;
+
+/** Assemble a full scene prompt from a bare scenario description, using the
+ *  exact same locked CHARACTERS + STYLE_BLOCK wrapping every hand-authored
+ *  variant above already uses. This is the seam a freshly AI-authored scene
+ *  (lib/cartoon-scene-writer.ts) hooks into — the model is only ever asked
+ *  to write the scenario paragraph, never the locked style/character text,
+ *  so the visual identity can't drift no matter what it generates. */
+export function assembleCartoonScene(sceneDescription: string): string {
+  return `${CHARACTERS}\n\nScene: ${sceneDescription} ${STYLE_BLOCK}`;
+}
+
+/** The inverse of assembleCartoonScene()'s wrapping: pulls the bare scenario
+ *  text back out of a full scene string (whether hand-authored or
+ *  AI-authored via assembleCartoonScene), stripping the locked
+ *  CHARACTERS/STYLE_BLOCK boilerplate — used to build a short, storable
+ *  "already used" summary for lib/cartoon-scene-writer.ts's anti-repeat
+ *  list, never the full prompt. */
+export function summarizeCartoonScene(variant: CartoonVariant): string {
+  const afterScene = variant.scene.split("Scene: ")[1] || variant.scene;
+  const beforeStyle = afterScene.split(/High-end 3D animation/)[0] || afterScene;
+  return beforeStyle.trim().slice(0, 400);
+}
 
 // ── TEMPLATES ──────────────────────────────────────────────────────────
 

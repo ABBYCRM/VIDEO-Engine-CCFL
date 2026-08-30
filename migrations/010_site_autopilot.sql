@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS site_autopilot_runs (
   status TEXT NOT NULL CHECK(status IN ('success','skipped','failed')),
   trigger TEXT NOT NULL CHECK(trigger IN ('scheduled','manual')),
   category TEXT,
+  scene_summary TEXT,
   scheduled_post_id TEXT,
   error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -186,7 +186,7 @@ function sanitizeStillPrompt(raw:string){
     .replace(/d\u00edas? \d+|day \d+/gi,"");
 }
 
-export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null;seed?:string|null;category?:string|null}){
+export async function generateCampaignStill(input:{prompt:string;avatarId?:string|null;createCalendarPost?:boolean;stillTemplateId?:string|null;seed?:string|null;category?:string|null;cartoonVariantOverride?:import("@/lib/cartoon-still-templates").CartoonVariant|null}){
   // Two template systems:
   //  - "cartoon-..." ids  → "The Animated Legal Ad" (Pixar-style 3D cartoon, orange footer, navy panel)
   //  - everything else    → the existing photoreal still template system
@@ -201,6 +201,7 @@ export async function generateCampaignStill(input:{prompt:string;avatarId?:strin
       category: input.category || "car_accident",
       seed: input.seed,
       templateId: input.stillTemplateId,
+      variantOverride: input.cartoonVariantOverride,
     });
     cartoonOverlay = plan.overlay;
     prompt = plan.imagePrompt;

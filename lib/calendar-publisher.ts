@@ -235,15 +235,30 @@ export async function runCalendarPublisherOnce(){
       catch(e){releaseInstagramPublish(post.id);db.prepare("UPDATE scheduled_posts SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run((e instanceof Error?e.message:String(e)).slice(0,2000),post.id);}
       processed++;
     }
-    if(processed>0)setTimeout(()=>{void verifyPublishedInstagramOnce();},20_000).unref?.();
+    if(processed>0)setTimeout(()=>{verifyPublishedInstagramOnce().catch(e=>console.error("[calendar-publisher] verify pass threw unexpectedly",e));},20_000).unref?.();
     try{await backfillOneYouTubeShort();}catch{}
+    return{processed};
+  }catch(e){
+    // This whole function is invoked fire-and-forget (`void
+    // runCalendarPublisherOnce()`) from the scheduler below and from
+    // /api/calendar/auto-approve, and since Node 15 an unhandled promise
+    // rejection crashes the whole process by default -- so an unexpected
+    // throw from the initial SELECT (a transient SQLITE_BUSY from one of
+    // the several other background loops writing concurrently, say) must
+    // be caught here, or a single transient error takes down every
+    // autonomous pipeline in the process, not just publishing.
+    console.error("[calendar-publisher] run threw unexpectedly",e);
     return{processed};
   }finally{running=false;}
 }
 
+function tickCalendarPublisher(){
+  runCalendarPublisherOnce().catch(e=>console.error("[calendar-publisher] scheduled run threw unexpectedly",e));
+}
+
 export function startCalendarPublisherLoop(){
   if(started||process.env.NODE_ENV==="test")return;started=true;
-  setInterval(()=>{void runCalendarPublisherOnce();},60_000).unref?.();
-  setInterval(()=>{void verifyPublishedInstagramOnce();},120_000).unref?.();
-  setTimeout(()=>{void runCalendarPublisherOnce();},5_000).unref?.();
+  setInterval(tickCalendarPublisher,60_000).unref?.();
+  setInterval(()=>{verifyPublishedInstagramOnce().catch(e=>console.error("[calendar-publisher] scheduled verify pass threw unexpectedly",e));},120_000).unref?.();
+  setTimeout(tickCalendarPublisher,5_000).unref?.();
 }

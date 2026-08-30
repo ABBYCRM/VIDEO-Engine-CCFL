@@ -6,9 +6,16 @@ let running = false;
 
 async function tick() {
   if (running) return;
-  if (hasScheduledRunToday()) return; // once per UTC day, autonomously
   running = true;
   try {
+    // hasScheduledRunToday() is a synchronous DB call and MUST live inside
+    // this try: tick() is invoked fire-and-forget (`void tick()`), and since
+    // Node 15 an unhandled promise rejection crashes the whole process by
+    // default. A transient SQLite error here (SQLITE_BUSY from one of the
+    // several other background loops writing concurrently, say) would
+    // otherwise take down the entire server -- every autonomous pipeline,
+    // not just this one -- instead of just skipping this one tick.
+    if (hasScheduledRunToday()) return; // once per UTC day, autonomously
     await runRedditMarketResearchOnce("scheduled");
   } catch (e) {
     // runRedditMarketResearchOnce already saves failures to

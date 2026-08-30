@@ -6,6 +6,7 @@
 
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
+import { computePostHash, findRecentDuplicatePost } from "@/lib/post-dedup";
 import { saveUploadedVideo } from "@/lib/upper-videos";
 
 export const CREATOR_UPLOAD_MAX_FILE_BYTES = 250 * 1024 * 1024; // 250MB per file
@@ -74,6 +75,12 @@ export async function uploadAndScheduleCreatorVideo(input: CreatorUploadInput): 
   const caption = (input.caption || "").slice(0, 5000);
   const category = (input.category || "ugc").toLowerCase();
 
+  // Fingerprint on the FILE'S OWN BYTES, not the storage URL saveUploadedVideo
+  // hands back below -- that url is freshly generated (a new uploadId) even
+  // when the exact same file is resubmitted, so hashing it would never catch
+  // an accidental double-submit of the same upload.
+  const fileHash = crypto.createHash("sha256").update(input.bytes).digest("hex");
+
   const saved = await saveUploadedVideo({
     bytes: input.bytes,
     title,
@@ -85,14 +92,22 @@ export async function uploadAndScheduleCreatorVideo(input: CreatorUploadInput): 
   const ids: string[] = [];
   const inserted: CreatorUploadResult["scheduled"] = [];
   for (const fmt of input.formats) {
+    const contentType = CONTENT_TYPE_BY_FORMAT[fmt];
+    const contentHash = computePostHash({ network, contentType, caption, identity: fileHash });
+    const dup = findRecentDuplicatePost(contentHash);
+    if (dup) {
+      ids.push(dup);
+      inserted.push({ id: dup, contentType, network, scheduledAt, autoPost, caption });
+      continue;
+    }
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO scheduled_posts(
         id, title, network, scheduled_at, status, auto_post, caption,
         content_type, media_url, media_type, source_asset_key,
         site_id, campaign_id, planning_horizon_days, generation_status,
-        category
-      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        category, content_hash
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       id,
       `${title}${input.formats.length > 1 ? ` · ${fmt}` : ""}`.slice(0, 180),
@@ -101,7 +116,7 @@ export async function uploadAndScheduleCreatorVideo(input: CreatorUploadInput): 
       autoPost ? "approved" : "pending",
       autoPost ? 1 : 0,
       caption,
-      CONTENT_TYPE_BY_FORMAT[fmt],
+      contentType,
       saved.url,
       input.mimeType,
       uploadId,
@@ -109,10 +124,11 @@ export async function uploadAndScheduleCreatorVideo(input: CreatorUploadInput): 
       null,
       null,
       "ready",
-      category
+      category,
+      contentHash
     );
     ids.push(id);
-    inserted.push({ id, contentType: CONTENT_TYPE_BY_FORMAT[fmt], network, scheduledAt, autoPost, caption });
+    inserted.push({ id, contentType, network, scheduledAt, autoPost, caption });
   }
 
   return {

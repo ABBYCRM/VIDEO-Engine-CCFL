@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS reddit_research_runs (
   query TEXT,
   category TEXT,
   theme_summary TEXT,
+  scene_summary TEXT,
   scheduled_post_id TEXT,
   error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

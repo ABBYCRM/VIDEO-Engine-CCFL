@@ -29,6 +29,7 @@ import { saveRedditResearchRun, hasScheduledRunToday } from "@/lib/reddit-resear
 import { chatCompletion } from "@/lib/nvidia/client";
 import { isNvidiaEnabled } from "@/lib/nvidia/client";
 import { pickCartoonTemplateForCategory } from "@/lib/cartoon-still-templates";
+import { generateFreshCartoonScene, summarizeCartoonScene, getRecentCartoonSceneSummaries } from "@/lib/cartoon-scene-writer";
 import { generateCampaignStill } from "@/lib/campaign-image";
 import { publicCaptionForSlot } from "@/lib/public-copy";
 import { db } from "@/lib/db";
@@ -37,6 +38,7 @@ import { isRedditAutopilotEnabled } from "@/lib/feature-flags";
 import { fetchSiteContext, type SiteContext } from "@/lib/brand-context";
 import { isAutopilotEnabled } from "@/lib/autopilot-control";
 import { DAILY_GENERATION_LIMIT, countAllGenerationCommitsToday, recordBackgroundGenerationCommit } from "@/lib/generation-ledger";
+import { computePostHash, findRecentDuplicatePost } from "@/lib/post-dedup";
 
 const VALID_CATEGORIES = ["car_accident", "rideshare", "trucking", "slip_fall", "workplace", "pedestrian"] as const;
 type Category = (typeof VALID_CATEGORIES)[number];
@@ -152,7 +154,31 @@ export type RedditResearchResult = {
   published?: boolean;
 };
 
+// In-process concurrency guard: the scheduler's own tick() already guards
+// itself against overlapping SCHEDULED runs, but /api/admin/reddit-research/
+// run-now calls this function directly with no lock of its own -- a
+// double-click, a slow client retry, or a manual click landing at the same
+// moment as the scheduler's tick could otherwise run this whole pipeline
+// twice concurrently and queue two live posts from one trigger. This lock
+// covers every entry point (scheduled AND manual) uniformly since it lives
+// in the pipeline function itself, not in any one caller.
+let runningLock = false;
+
 export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual"): Promise<RedditResearchResult> {
+  if (runningLock) {
+    const r: RedditResearchResult = { status: "skipped", reason: "Another Reddit research run is already in progress.", postsScanned: 0, commentsScanned: 0 };
+    saveRedditResearchRun({ status: "skipped", trigger, postsScanned: 0, commentsScanned: 0, error: r.reason });
+    return r;
+  }
+  runningLock = true;
+  try {
+    return await runRedditMarketResearchOnceLocked(trigger);
+  } finally {
+    runningLock = false;
+  }
+}
+
+async function runRedditMarketResearchOnceLocked(trigger: "scheduled" | "manual"): Promise<RedditResearchResult> {
   if (!isAutopilotEnabled()) {
     const r: RedditResearchResult = { status: "skipped", reason: "Autopilot is paused. Say \"start autopilot\" in Claw, or call autopilot_start, to resume.", postsScanned: 0, commentsScanned: 0 };
     saveRedditResearchRun({ status: "skipped", trigger, postsScanned: 0, commentsScanned: 0, error: r.reason });
@@ -235,13 +261,36 @@ export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual
     return { status: "skipped", reason, postsScanned: candidates.length, commentsScanned, category: synthesis.category, themeSummary: synthesis.themeSummary };
   }
 
+  // Windowed dedup backstop (see lib/post-dedup.ts), checked as early as
+  // possible -- before spending an NVIDIA scene-writer call or an image-gen
+  // call on a run we're about to discard anyway. The runningLock above
+  // already prevents two concurrent runs of THIS pipeline; this also catches
+  // the case where the Site autopilot pipeline queued the exact same
+  // category+caption combo moments ago (both pipelines can pick the same
+  // rotating caption on the same day).
+  const { caption: candidateCaption } = publicCaptionForSlot({ category: synthesis.category, title: `Day ${dayOfYear()}` });
+  const contentHash = computePostHash({ network: "instagram", contentType: "image", caption: candidateCaption });
+  if (findRecentDuplicatePost(contentHash)) {
+    const reason = "An identical post was already queued in the last few minutes (duplicate trigger or overlap with the Site autopilot pipeline).";
+    saveRedditResearchRun({ status: "skipped", trigger, postsScanned: candidates.length, commentsScanned, query, category: synthesis.category, themeSummary: synthesis.themeSummary, error: reason });
+    return { status: "skipped", reason, postsScanned: candidates.length, commentsScanned, category: synthesis.category, themeSummary: synthesis.themeSummary };
+  }
+
   const seed = `reddit-research-${new Date().toISOString().slice(0, 10)}`;
   const template = pickCartoonTemplateForCategory(synthesis.category, seed);
+
+  // Ask NVIDIA for a brand-new scenario each run instead of relying on the
+  // template's own hand-authored (2-3 entry) variant pool, which would
+  // otherwise cycle back to exact repeats under perpetual daily operation.
+  // A failed/disabled call falls back to the existing fixed pool below —
+  // this never blocks a run.
+  const freshVariant = await generateFreshCartoonScene(template, getRecentCartoonSceneSummaries()).catch(() => null);
+  const sceneSummary = freshVariant ? summarizeCartoonScene(freshVariant) : null;
 
   let stillUrl: string, stillMime: string;
   try {
     const still = await withRetry("still generation", () =>
-      generateCampaignStill({ prompt: "", stillTemplateId: template.id, category: synthesis.category, seed, createCalendarPost: false })
+      generateCampaignStill({ prompt: "", stillTemplateId: template.id, category: synthesis.category, seed, createCalendarPost: false, cartoonVariantOverride: freshVariant })
     );
     stillUrl = still.assetUrl;
     stillMime = still.mimeType;
@@ -252,14 +301,15 @@ export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual
     return { status: "failed", reason: `Still generation failed: ${msg}`, postsScanned: candidates.length, commentsScanned, category: synthesis.category, themeSummary: synthesis.themeSummary };
   }
 
-  const { caption } = publicCaptionForSlot({ category: synthesis.category, title: `Day ${dayOfYear()}` });
+  const caption = candidateCaption;
+
   const postId = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO scheduled_posts(
       id, title, network, scheduled_at, status, auto_post, caption,
-      content_type, media_url, media_type, generation_status, category, still_template_id
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      content_type, media_url, media_type, generation_status, category, still_template_id, content_hash
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     postId,
     `Reddit signal — ${synthesis.category} (auto)`.slice(0, 180),
@@ -273,7 +323,8 @@ export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual
     stillMime,
     "ready",
     synthesis.category,
-    template.id
+    template.id,
+    contentHash
   );
 
   // Fire the existing publish pipeline immediately so this goes live right
@@ -298,6 +349,7 @@ export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual
     query,
     category: synthesis.category,
     themeSummary: synthesis.themeSummary,
+    sceneSummary,
     scheduledPostId: postId
   });
 

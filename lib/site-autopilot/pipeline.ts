@@ -24,10 +24,12 @@ import { isAutopilotEnabled } from "@/lib/autopilot-control";
 import { isImageGenEnabled } from "@/lib/feature-flags";
 import { fetchSiteContext } from "@/lib/brand-context";
 import { pickCartoonTemplateForCategory, type CartoonTemplateDef } from "@/lib/cartoon-still-templates";
+import { generateFreshCartoonScene, summarizeCartoonScene, getRecentCartoonSceneSummaries } from "@/lib/cartoon-scene-writer";
 import { generateCampaignStill } from "@/lib/campaign-image";
 import { publicCaptionForSlot } from "@/lib/public-copy";
 import { runCalendarPublisherOnce } from "@/lib/calendar-publisher";
 import { DAILY_GENERATION_LIMIT, countAllGenerationCommitsToday, recordBackgroundGenerationCommit } from "@/lib/generation-ledger";
+import { computePostHash, findRecentDuplicatePost } from "@/lib/post-dedup";
 import { saveSiteAutopilotRun, lastPostedCategory, hasScheduledSiteRunToday } from "@/lib/site-autopilot/store";
 
 const VALID_CATEGORIES = ["car_accident", "rideshare", "trucking", "slip_fall", "workplace", "pedestrian"] as const;
@@ -80,7 +82,29 @@ export type SiteAutopilotResult = {
   published?: boolean;
 };
 
+// In-process concurrency guard -- same rationale as the Reddit research
+// pipeline's own lock: /api/admin/site-autopilot/run-now calls this
+// function directly with no lock of its own, so a double-click, a slow
+// client retry, or a manual click landing at the same moment as the
+// scheduler's own tick could otherwise run this pipeline twice concurrently
+// and queue two live posts from one trigger.
+let runningLock = false;
+
 export async function runSiteAutopilotOnce(trigger: "scheduled" | "manual"): Promise<SiteAutopilotResult> {
+  if (runningLock) {
+    const reason = "Another site autopilot run is already in progress.";
+    saveSiteAutopilotRun({ status: "skipped", trigger, error: reason });
+    return { status: "skipped", reason };
+  }
+  runningLock = true;
+  try {
+    return await runSiteAutopilotOnceLocked(trigger);
+  } finally {
+    runningLock = false;
+  }
+}
+
+async function runSiteAutopilotOnceLocked(trigger: "scheduled" | "manual"): Promise<SiteAutopilotResult> {
   if (!isAutopilotEnabled()) {
     const reason = 'Autopilot is paused. Say "start autopilot" in Claw, or call autopilot_start, to resume.';
     saveSiteAutopilotRun({ status: "skipped", trigger, error: reason });
@@ -115,10 +139,33 @@ export async function runSiteAutopilotOnce(trigger: "scheduled" | "manual"): Pro
   const seed = `site-autopilot-${new Date().toISOString().slice(0, 10)}`;
   const template: CartoonTemplateDef = pickCartoonTemplateForCategory(category, seed);
 
+  // Windowed dedup backstop (see lib/post-dedup.ts), checked as early as
+  // possible -- before spending an NVIDIA scene-writer call or an image-gen
+  // call on a run we're about to discard anyway. The runningLock above
+  // already prevents two concurrent runs of THIS pipeline; this also catches
+  // the case where the Reddit research pipeline queued the exact same
+  // category+caption combo moments ago (both pipelines can pick the same
+  // rotating caption on the same day).
+  const { caption: candidateCaption } = publicCaptionForSlot({ category, title: `Day ${dayOfYear()}` });
+  const contentHash = computePostHash({ network: "instagram", contentType: "image", caption: candidateCaption });
+  if (findRecentDuplicatePost(contentHash)) {
+    const reason = "An identical post was already queued in the last few minutes (duplicate trigger or overlap with the Reddit research pipeline).";
+    saveSiteAutopilotRun({ status: "skipped", trigger, category, error: reason });
+    return { status: "skipped", reason, category };
+  }
+
+  // Same fix as the Reddit research pipeline: author a fresh scenario each
+  // run (grounded against BOTH pipelines' recent history) instead of
+  // cycling through the template's small hand-authored variant pool, which
+  // would otherwise repeat under perpetual daily operation. Falls back to
+  // the fixed pool on any failure.
+  const freshVariant = await generateFreshCartoonScene(template, getRecentCartoonSceneSummaries()).catch(() => null);
+  const sceneSummary = freshVariant ? summarizeCartoonScene(freshVariant) : null;
+
   let stillUrl: string, stillMime: string;
   try {
     const still = await withRetry("still generation", () =>
-      generateCampaignStill({ prompt: "", stillTemplateId: template.id, category, seed, createCalendarPost: false })
+      generateCampaignStill({ prompt: "", stillTemplateId: template.id, category, seed, createCalendarPost: false, cartoonVariantOverride: freshVariant })
     );
     stillUrl = still.assetUrl;
     stillMime = still.mimeType;
@@ -129,14 +176,14 @@ export async function runSiteAutopilotOnce(trigger: "scheduled" | "manual"): Pro
     return { status: "failed", reason: `Still generation failed: ${msg}`, category };
   }
 
-  const { caption } = publicCaptionForSlot({ category, title: `Day ${dayOfYear()}` });
+  const caption = candidateCaption;
   const postId = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO scheduled_posts(
       id, title, network, scheduled_at, status, auto_post, caption,
-      content_type, media_url, media_type, generation_status, category, still_template_id
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      content_type, media_url, media_type, generation_status, category, still_template_id, content_hash
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     postId,
     `Site autopilot — ${category}`.slice(0, 180),
@@ -150,7 +197,8 @@ export async function runSiteAutopilotOnce(trigger: "scheduled" | "manual"): Pro
     stillMime,
     "ready",
     category,
-    template.id
+    template.id,
+    contentHash
   );
 
   // Same immediate-publish pattern as the Reddit pipeline: fire the normal
@@ -166,7 +214,7 @@ export async function runSiteAutopilotOnce(trigger: "scheduled" | "manual"): Pro
     console.warn("[site-autopilot] immediate publish attempt failed, will retry on the normal publisher loop:", e instanceof Error ? e.message : e);
   }
 
-  saveSiteAutopilotRun({ status: "success", trigger, category, scheduledPostId: postId });
+  saveSiteAutopilotRun({ status: "success", trigger, category, sceneSummary, scheduledPostId: postId });
   return { status: "success", category, scheduledPostId: postId, published };
 }
 
