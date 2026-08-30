@@ -13,15 +13,23 @@ export const runtime = "nodejs";
 export async function GET() {
   const now = Date.now();
   const horizon = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+  // The scheduled_posts SQLite table has no video_provider / video_model
+  // columns (those live on the campaigns table). The campaign-autopilot
+  // SELECT in lib/campaign-autopilot.ts LEFT JOINs campaigns so it can
+  // read those from c.video_provider / c.video_model; do the same here
+  // so we surface the same effective provider/model the loop will use
+  // when it picks up the slot.
   const rows = db.prepare(
-    `SELECT id, title, content_type, scheduled_at, status, generation_status,
-            media_url, media_type, source_asset_key, category, network, auto_post,
-            video_job_id, upper_job_id, lower_job_id, video_provider, video_model,
-            campaign_id, created_at, error
-     FROM scheduled_posts
-     WHERE media_url IS NULL
-       AND status!='published'
-     ORDER BY scheduled_at ASC`
+    `SELECT sp.id, sp.title, sp.content_type, sp.scheduled_at, sp.status, sp.generation_status,
+            sp.media_url, sp.media_type, sp.source_asset_key, sp.category, sp.network, sp.auto_post,
+            sp.video_job_id, sp.upper_job_id, sp.lower_job_id,
+            sp.campaign_id, sp.created_at, sp.error,
+            c.video_provider as campaign_video_provider,
+            c.video_model as campaign_video_model
+     FROM scheduled_posts sp LEFT JOIN campaigns c ON c.id=sp.campaign_id
+     WHERE sp.media_url IS NULL
+       AND sp.status!='published'
+     ORDER BY sp.scheduled_at ASC`
   ).all() as any[];
   const out = rows.map((r) => {
     const eligible =
@@ -46,8 +54,8 @@ export async function GET() {
       has_video_job: !!r.video_job_id,
       has_upper_job: !!r.upper_job_id,
       has_lower_job: !!r.lower_job_id,
-      video_provider: r.video_provider,
-      video_model: r.video_model,
+      campaign_video_provider: r.campaign_video_provider || null,
+      campaign_video_model: r.campaign_video_model || null,
       media_url: r.media_url,
       media_type: r.media_type,
       source_asset_key: r.source_asset_key,
