@@ -407,7 +407,7 @@ async function generateNext(slotId?:string){
             OR sp.error LIKE '%fal start%'
             OR sp.error LIKE '%xAI%'
             OR sp.error LIKE '%HTTP [45]%'
-            OR sp.error LIKE "%isn't supported%"
+            OR sp.error LIKE '%isn' || char(39) || 't supported%'
             OR sp.error LIKE '%is not supported%'
             OR sp.error LIKE '%not supported by%'
             OR sp.error LIKE '%Unknown model%'
