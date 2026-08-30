@@ -89,7 +89,13 @@ test("AION gate DEFERs ig_publish until exact CONFIRM is supplied", async ({ pag
   await page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…").fill("Publish this reel");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText(/DEFER:/)).toBeVisible();
-  await expect(page.getByText(/CONFIRM ig_publish/)).toBeVisible();
+  // Not a separate getByText(/CONFIRM ig_publish/) assertion: finalMessage
+  // itself contains that substring, and the tool_end preview chip does
+  // too — asserting it as its own locator is a genuine pre-existing bug
+  // (present on main before this fix, confirmed via CI), a Playwright
+  // strict-mode violation from two elements matching the same text. The
+  // exact-string check below already proves the confirmation instruction
+  // is visible; this isn't a coverage loss.
   await expect(page.getByText(finalMessage)).toBeVisible();
   // A DEFER is Claw pausing for confirmation, not a failure — the chip
   // must say so, never "Failed" (a real bug found and fixed: the tool_end
