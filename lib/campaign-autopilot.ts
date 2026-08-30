@@ -407,6 +407,12 @@ async function generateNext(slotId?:string){
             OR sp.error LIKE '%fal start%'
             OR sp.error LIKE '%xAI%'
             OR sp.error LIKE '%HTTP [45]%'
+            OR sp.error LIKE "%isn't supported%"
+            OR sp.error LIKE '%is not supported%'
+            OR sp.error LIKE '%not supported by%'
+            OR sp.error LIKE '%Unknown model%'
+            OR sp.error LIKE '%invalid argument%'
+            OR sp.error LIKE '%bad request%'
           ))
         ))
       )
@@ -458,6 +464,18 @@ async function generateNext(slotId?:string){
         const last = provider(String(lastJob.provider));
         const next = fallbackProvider(last);
         if (next) chosenRequested = next;
+        else {
+          // Already at the end of the chain — every provider has been
+          // tried. Mark the slot as pending_manual so the operator
+          // can rearm with a different model instead of the loop
+          // hammering providers forever.
+          db.prepare("UPDATE scheduled_posts SET generation_status='pending_manual',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(
+            (row.error ? `All providers tried. Last error: ${row.error}. ` : "All providers tried. ") +
+            "Rearm the slot with a different model or re-plan the campaign.",
+            row.id
+          );
+          return true;
+        }
       }
     } catch {
       /* fall through to the configured provider */
