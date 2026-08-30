@@ -46,10 +46,8 @@ import fsp from "node:fs/promises";
 import { parseCreatorFormats, uploadAndScheduleCreatorVideo } from "@/lib/creator-upload";
 import { generateCreatorCaption } from "@/lib/creator-caption";
 import { isComposioConfigured } from "@/lib/composio/client";
-import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
-import { scrapeWithFirecrawl } from "@/lib/firecrawl";
-import { scrapeWithScrapingBee } from "@/lib/scrapingbee";
-import { scrapeWithScrapfly } from "@/lib/scrapfly";
+import { isSteelConfigured } from "@/lib/steel";
+import { scrapePublicUrl } from "@/lib/scrape";
 import { takeScreenshot } from "@/lib/screenshotone";
 import { webSearch } from "@/lib/web-search";
 import { analyzeImage } from "@/lib/nvidia/vision";
@@ -569,25 +567,7 @@ export const CLAW_TOOLS: ClawTool[] = [
     name: "steel_scrape",
     description: "Browse a public web page and return clean Markdown, metadata, and links. Tries Steel.dev first (supports an inline screenshot + a proxy), then falls back to Firecrawl, ScrapingBee, and Scrapfly in order if a provider fails or isn't configured — always reports which one actually served the page via `via`. Never use it for local/private URLs.",
     args: "{\"url\":\"https://example.com\",\"delayMs\":0,\"useProxy\":false,\"screenshot\":false}",
-    handler: async (a) => {
-      const attempts: { name: string; run: () => Promise<any> }[] = [
-        { name: "steel.dev", run: () => scrapeWithSteel({ url: a.url, delayMs: a.delayMs, useProxy: a.useProxy, screenshot: a.screenshot }) },
-        { name: "firecrawl", run: () => scrapeWithFirecrawl({ url: a.url }) },
-        { name: "scrapingbee", run: () => scrapeWithScrapingBee({ url: a.url }) },
-        { name: "scrapfly", run: () => scrapeWithScrapfly({ url: a.url }) }
-      ];
-      const errors: string[] = [];
-      for (const attempt of attempts) {
-        try {
-          const result = await attempt.run();
-          if (errors.length) result.fallbackNote = `Tried ${errors.length} provider(s) first: ${errors.join("; ")}`;
-          return result;
-        } catch (e) {
-          errors.push(`${attempt.name}: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      }
-      throw new Error(`steel_scrape failed on every provider. ${errors.join(" | ")}`);
-    }
+    handler: async (a) => scrapePublicUrl({ url: a.url, delayMs: a.delayMs, useProxy: a.useProxy, screenshot: a.screenshot })
   },
   {
     name: "web_screenshot",
@@ -814,7 +794,7 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "reddit_market_research",
-    description: "Read-only market-research sub-agent — NOT a Reddit chat bot, never posts/comments/replies on Reddit. Discovers public PI-relevant Reddit discussion, anonymizes it (usernames/links/contact info stripped before anything reaches a model), and asks NVIDIA to classify the AGGREGATE theme into one campaign category — never to quote or summarize a specific post. Generates one on-brand Pixar-style still + a pre-approved compliant caption from that category, then queues it as an auto-publish Instagram post (same pipeline every other campaign post uses) and triggers an immediate publish pass. Runs autonomously once a day on its own; this tool lets the operator trigger an extra run on demand.",
+    description: "Read-only market-research sub-agent — NOT a Reddit chat bot, never posts/comments/replies on Reddit. Discovers public PI-relevant Reddit discussion, anonymizes it (usernames/links/contact info stripped before anything reaches a model), and asks NVIDIA to classify the AGGREGATE theme into one campaign category — grounded against caseclosedfl.com's current content, but never to quote or summarize a specific Reddit post. Generates one on-brand Pixar-style still + a pre-approved compliant caption from that category, then queues it as an auto-publish Instagram post (same pipeline every other campaign post uses) and triggers an immediate publish pass. Runs autonomously once a day on its own (disable with REDDIT_AUTOPILOT_ENABLED=false); this tool lets the operator trigger an extra run on demand.",
     args: "{}",
     handler: async () => runRedditMarketResearchOnce("manual")
   },
