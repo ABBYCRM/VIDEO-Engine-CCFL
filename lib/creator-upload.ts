@@ -81,25 +81,50 @@ export async function uploadAndScheduleCreatorVideo(input: CreatorUploadInput): 
   // an accidental double-submit of the same upload.
   const fileHash = crypto.createHash("sha256").update(input.bytes).digest("hex");
 
-  const saved = await saveUploadedVideo({
-    bytes: input.bytes,
-    title,
-    mimeType: input.mimeType,
-    label: input.label || "Creator upload",
-    id: uploadId
-  });
+  // Check dedup for every requested format BEFORE touching storage: a
+  // duplicate submission (same file, same formats, same caption, within the
+  // dedup window) must not persist the video bytes again just to then throw
+  // the file away when every resulting row turns out to be a dup — this is
+  // a bulky upload (up to 250MB), not a cheap text row, so a wasted write
+  // here is a real, not just cosmetic, resource leak on every accidental
+  // double-submit.
+  const existingIds = new Map<CreatorUploadFormat, string>();
+  for (const fmt of input.formats) {
+    const contentHash = computePostHash({ network, contentType: CONTENT_TYPE_BY_FORMAT[fmt], caption, identity: fileHash });
+    const dup = findRecentDuplicatePost(contentHash);
+    if (dup) existingIds.set(fmt, dup);
+  }
+
+  const allDuplicate = existingIds.size === input.formats.length;
+  let saved: { id: string; url: string } | null = null;
+  if (!allDuplicate) {
+    saved = await saveUploadedVideo({
+      bytes: input.bytes,
+      title,
+      mimeType: input.mimeType,
+      label: input.label || "Creator upload",
+      id: uploadId
+    });
+  } else {
+    // Every requested format already has a recent duplicate row -- reuse
+    // its stored media_url instead of returning an empty one, since no new
+    // upload happened.
+    const anyDupId = existingIds.values().next().value as string;
+    const row = db.prepare("SELECT media_url, source_asset_key FROM scheduled_posts WHERE id=?").get(anyDupId) as { media_url: string | null; source_asset_key: string | null } | undefined;
+    saved = { id: row?.source_asset_key || uploadId, url: row?.media_url || "" };
+  }
 
   const ids: string[] = [];
   const inserted: CreatorUploadResult["scheduled"] = [];
   for (const fmt of input.formats) {
     const contentType = CONTENT_TYPE_BY_FORMAT[fmt];
-    const contentHash = computePostHash({ network, contentType, caption, identity: fileHash });
-    const dup = findRecentDuplicatePost(contentHash);
+    const dup = existingIds.get(fmt);
     if (dup) {
       ids.push(dup);
       inserted.push({ id: dup, contentType, network, scheduledAt, autoPost, caption });
       continue;
     }
+    const contentHash = computePostHash({ network, contentType, caption, identity: fileHash });
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO scheduled_posts(
@@ -133,7 +158,7 @@ export async function uploadAndScheduleCreatorVideo(input: CreatorUploadInput): 
 
   return {
     name: input.fileName,
-    uploadId,
+    uploadId: saved.id,
     url: saved.url,
     mimeType: input.mimeType,
     bytes: input.bytes.length,
