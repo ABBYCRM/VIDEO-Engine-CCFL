@@ -45,3 +45,16 @@ export async function composioReplyComment(thingId: string, text: string) {
 export async function composioSearchSubreddits(query: string) {
   return executeRedditComposioTool("REDDIT_GET_SUBREDDITS_SEARCH", { q: query });
 }
+
+// Cross-subreddit post search by keyword — the discovery primitive for the
+// Reddit market-research pipeline (lib/reddit-research). Verified against
+// Composio's published Reddit toolkit action list (docs.composio.dev/
+// toolkits/reddit, fetched 2026-08-30): REDDIT_SEARCH_ACROSS_SUBREDDITS —
+// "Searches Reddit for posts using a query" — the one cross-subreddit post
+// search action in that catalog. Not exercised against a live Composio key
+// in this environment; the pipeline treats a slug/shape mismatch as a
+// normal upstream failure (caught, logged, retried on the next scheduled
+// run) rather than assuming it's correct.
+export async function composioSearchPosts(query: string, limit = 10) {
+  return executeRedditComposioTool("REDDIT_SEARCH_ACROSS_SUBREDDITS", { query, limit, sort: "relevance" });
+}

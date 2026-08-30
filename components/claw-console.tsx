@@ -13,11 +13,16 @@ type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
 type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
 
-// Autopilot is a one-click prompt, not a background/unattended loop — it
-// still runs through the normal chat turn, the normal AION confirmation
-// gate for anything that publishes, and the normal daily generation cap
-// (lib/claw/runtime.ts's DAILY_GENERATION_LIMIT, shared across every
-// conversation) before any real spend happens.
+// Autopilot triggers two independent things on one click:
+//   1. A normal Claw chat turn (AUTOPILOT_PROMPT below) — still runs through
+//      the normal AION confirmation gate and the daily generation cap
+//      (lib/claw/runtime.ts's DAILY_GENERATION_LIMIT) before any real spend
+//      happens, and only ever drafts (save_post, never auto-published).
+//   2. A direct call to the Reddit market-research pipeline
+//      (runRedditResearchNow below), which bypasses the chat/AION loop
+//      entirely — same pattern as Calendar's "Run autopilot" button — and
+//      really does publish immediately, so pressing the button once
+//      produces a live, checkable result rather than another draft.
 const AUTOPILOT_PROMPT = `Run the brand-consistent Instagram content task:
 1. Use steel_scrape on caseclosedfl.com (homepage and one or two other key pages) to confirm the current brand voice and messaging.
 2. Call ig_list_media to see recent posts, then use ig_analyze_media on a handful of likely candidates (narrow first by caption/date, don't analyze every post) to find which existing posts use the Pixar-style 3D cartoon look (navy side panel, orange CaseClosedFL.com footer bar, animated character/vehicle scene) versus other styles.
@@ -50,6 +55,8 @@ export function ClawConsole() {
   const [pane, setPane] = useState<"chat" | "threads" | "files">("chat");
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState("");
+  const [redditRunStatus, setRedditRunStatus] = useState<string | null>(null);
+  const [redditRunBusy, setRedditRunBusy] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -134,6 +141,36 @@ export function ClawConsole() {
     setRenameId(null);
     if (active) await loadThread(active);
     else await loadConvs();
+  }
+
+  // Fires the Reddit market-research pipeline directly (bypassing Claw's
+  // chat/AION loop, same pattern as Calendar's "Run autopilot" button) so
+  // one click actually goes live and the operator can check the outcome
+  // immediately, instead of needing a follow-up "CONFIRM" reply.
+  async function runRedditResearchNow() {
+    setRedditRunBusy(true);
+    setRedditRunStatus("Reddit research: scanning…");
+    try {
+      const r = await fetch("/api/admin/reddit-research/run-now", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) { setRedditRunStatus(`Reddit research failed: ${d.error || r.status}`); return; }
+      if (d.status === "success") {
+        setRedditRunStatus(d.published ? `Posted live — ${d.category} (check Instagram)` : `Queued — ${d.category} (publishing within the minute)`);
+      } else if (d.status === "skipped") {
+        setRedditRunStatus(`Skipped: ${d.reason}`);
+      } else {
+        setRedditRunStatus(`Failed: ${d.reason || "unknown error"}`);
+      }
+    } catch (e) {
+      setRedditRunStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRedditRunBusy(false);
+    }
+  }
+
+  function runAutopilot() {
+    void send(AUTOPILOT_PROMPT);
+    void runRedditResearchNow();
   }
 
   async function send(overrideText?: string) {
@@ -295,16 +332,22 @@ export function ClawConsole() {
                     ))}
                   </div>
                 )}
+                {redditRunStatus && (
+                  <div className="mx-auto mb-2 max-w-[440px] rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                    {redditRunBusy && <span className="mr-1 inline-block animate-pulse">●</span>}
+                    {redditRunStatus}
+                  </div>
+                )}
                 <div className="mx-auto flex max-w-[440px] items-end gap-2">
                   <input ref={fileInput} type="file" className="hidden" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
                   <button type="button" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => fileInput.current?.click()} aria-label="Upload files"><Paperclip size={16} /></button>
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={busy || redditRunBusy}
                     className="grid h-10 w-10 place-items-center rounded-xl border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50"
-                    onClick={() => void send(AUTOPILOT_PROMPT)}
-                    aria-label="Autopilot: brand-consistent Instagram content task"
-                    title="Autopilot: scrape the site for brand voice, find matching-style Instagram posts, draft up to 3 new ones (never auto-published, capped generation spend)"
+                    onClick={runAutopilot}
+                    aria-label="Autopilot: brand-consistent Instagram content task + live Reddit-driven post"
+                    title="Autopilot: drafts up to 3 site/IG-matched stills (never auto-published) AND immediately runs the Reddit market-research pipeline, which posts live so you can check the outcome right away"
                   >
                     <Sparkles size={16} />
                   </button>
