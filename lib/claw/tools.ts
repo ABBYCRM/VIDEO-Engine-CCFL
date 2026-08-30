@@ -68,6 +68,7 @@ import { auditWebsite } from "@/lib/site-audit";
 import { composioDeleteTweet, composioGetTweet, composioListMentions, composioPostTweet, composioReplyTweet, isXComposioConnected } from "@/lib/x-composio";
 import { composioCommentOnPost, composioGetMyInfo, composioPostUpdate, isLinkedInComposioConnected } from "@/lib/linkedin-composio";
 import { composioListComments as composioRedditListComments, composioReplyComment as composioRedditReplyComment, composioSearchSubreddits, composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
+import { runRedditMarketResearchOnce } from "@/lib/reddit-research/pipeline";
 import { redditPreSubmitReminder } from "@/lib/reddit/rules-check";
 import { isImageGenEnabled } from "@/lib/feature-flags";
 import { listInfluencers, updateInfluencerStatus } from "@/lib/influencers";
@@ -810,6 +811,12 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Reply to a Reddit post or comment (thingId is the fullname, e.g. t3_xxx or t1_xxx).",
     args: "{\"thingId\":\"...\",\"text\":\"...\"}",
     handler: async (a) => composioRedditReplyComment(str(a.thingId), str(a.text))
+  },
+  {
+    name: "reddit_market_research",
+    description: "Read-only market-research sub-agent — NOT a Reddit chat bot, never posts/comments/replies on Reddit. Discovers public PI-relevant Reddit discussion, anonymizes it (usernames/links/contact info stripped before anything reaches a model), and asks NVIDIA to classify the AGGREGATE theme into one campaign category — never to quote or summarize a specific post. Generates one on-brand Pixar-style still + a pre-approved compliant caption from that category, then queues it as an auto-publish Instagram post (same pipeline every other campaign post uses) and triggers an immediate publish pass. Runs autonomously once a day on its own; this tool lets the operator trigger an extra run on demand.",
+    args: "{}",
+    handler: async () => runRedditMarketResearchOnce("manual")
   },
   {
     name: "coding_new_session",

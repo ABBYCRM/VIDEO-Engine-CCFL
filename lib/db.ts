@@ -297,3 +297,4 @@ seedDefaultAvatars();
 import("./avatar-watchdog").then((m) => m.startWatchdogLoop()).catch(() => { /* noop */ });
 import("./calendar-publisher").then((m) => m.startCalendarPublisherLoop()).catch(() => { /* noop */ });
 import("./blog-autopilot").then((m) => m.startBlogAutopilotLoop()).catch(() => { /* noop */ });
+import("./reddit-research/scheduler").then((m) => m.startRedditResearchAutopilotLoop()).catch(() => { /* noop */ });

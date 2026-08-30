@@ -70,7 +70,12 @@ const EXTERNAL_POST = new Set([
   "linkedin_comment",
   "reddit_submit_post",
   "reddit_reply",
-  "send_influencer_outreach"
+  "send_influencer_outreach",
+  // Same class as update_calendar: doesn't publish to Reddit itself (this
+  // is read-only research, never a Reddit post/comment/reply), but it
+  // queues an Instagram post with auto_post=1 — a real future publish the
+  // operator hasn't reviewed — so it needs the same CONFIRM gate.
+  "reddit_market_research"
 ]);
 
 // Responds to existing user-generated content. The customer-facing
