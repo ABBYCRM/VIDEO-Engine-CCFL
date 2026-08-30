@@ -27,18 +27,28 @@ const nextConfig: NextConfig = {
   // is), so Claw's tool keeps working. app/creator/page.tsx and
   // components/creator-console.tsx are left on disk, unlinked.
   async redirects() {
-    const back = "/calendar?feature_disabled=image_generation";
+    // Each removed feature page redirects to Calendar with a banner that
+    // matches the reason it was removed. Pages that were removed for
+    // "feature is gone, not just disabled" (Creator, Avatars, Campaigns,
+    // Pipeline, Sites, Integrations, Podcast-Interview, Components-Demo,
+    // Docs) point to the same "That page has moved" banner calendar/page.tsx
+    // already renders for the image_generation case — the query string is
+    // overloaded to carry any reason. "/" was removed because Claw's chat
+    // turn + the create/creator tools are the real entry point; it points
+    // to Claw, not the misleading image-generation banner that was here
+    // before this fix.
+    const removed = "/calendar?feature_disabled=page_removed";
     return [
-      { source: "/", destination: back, permanent: false },
-      { source: "/creator", destination: back, permanent: false },
-      { source: "/avatars", destination: back, permanent: false },
-      { source: "/campaigns", destination: back, permanent: false },
-      { source: "/pipeline", destination: back, permanent: false },
-      { source: "/sites", destination: back, permanent: false },
-      { source: "/integrations", destination: back, permanent: false },
-      { source: "/podcast-interview", destination: back, permanent: false },
-      { source: "/components-demo", destination: back, permanent: false },
-      { source: "/docs", destination: back, permanent: false }
+      { source: "/", destination: "/claw", permanent: false },
+      { source: "/creator", destination: removed, permanent: false },
+      { source: "/avatars", destination: removed, permanent: false },
+      { source: "/campaigns", destination: removed, permanent: false },
+      { source: "/pipeline", destination: removed, permanent: false },
+      { source: "/sites", destination: removed, permanent: false },
+      { source: "/integrations", destination: removed, permanent: false },
+      { source: "/podcast-interview", destination: removed, permanent: false },
+      { source: "/components-demo", destination: removed, permanent: false },
+      { source: "/docs", destination: removed, permanent: false }
     ];
   }
 };

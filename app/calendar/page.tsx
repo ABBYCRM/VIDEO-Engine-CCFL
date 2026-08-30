@@ -119,7 +119,12 @@ export default function CalendarPage() {
 
 function CalendarInner() {
   const search = useSearchParams();
-  const showFeatureDisabled = search.get("feature_disabled") === "image_generation";
+  // Any "feature_disabled" reason shows the moved-page banner. Today the
+  // redirect from /next.config.ts sends ?feature_disabled=page_removed for
+  // every removed feature, plus ?feature_disabled=image_generation if the
+  // image-gen flag is ever turned off. The banner text is intentionally
+  // generic ("That page has moved") so neither case needs a separate copy.
+  const showFeatureDisabled = search.get("feature_disabled") != null;
   const [posts, setPosts] = useState<Post[]>([]);
   const [week, setWeek] = useState(() => startOfWeek(new Date()));
   const [editing, setEditing] = useState<Post | null | "new">(null);

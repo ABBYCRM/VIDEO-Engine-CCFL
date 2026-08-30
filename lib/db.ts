@@ -55,7 +55,21 @@ class Db {
 }
 export const db = new Db(sqlite);
 
-db.pragma("journal_mode = WAL");
+// SQLite WAL mode is faster for concurrent readers + a single writer, but
+// is rejected on read-only filesystems, FUSE mounts, NFS volumes, and
+// other cases where the journal file can't be created (returns
+// "disk I/O error"). Falling through to the default DELETE journal mode
+// is the well-trodden escape hatch — slightly slower under heavy
+// concurrent writes, but always functional. Locked in agent memory
+// after a real DO App Platform boot failure.
+try {
+  db.pragma("journal_mode = WAL");
+} catch (e) {
+  console.warn(
+    "[db] journal_mode=WAL rejected, falling back to DELETE:",
+    e instanceof Error ? e.message : e
+  );
+}
 db.pragma("foreign_keys = ON");
 db.exec(`
 CREATE TABLE IF NOT EXISTS settings (
