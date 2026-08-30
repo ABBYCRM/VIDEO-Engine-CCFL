@@ -11,7 +11,7 @@ import AILoader from "@/components/ui/ai-loader";
 type Conv = { id: string; title: string; createdAt: string; updatedAt: string };
 type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content: string; toolJson?: any; createdAt: string };
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
-type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean };
+type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
 
 function sseParse(chunk: string, onEvent: (e: any) => void, carry: { buf: string }) {
   carry.buf += chunk;
@@ -164,7 +164,7 @@ export function ClawConsole() {
         sseParse(decoder.decode(value, { stream: true }), (e) => {
           if (e.type === "token") setStreaming((s) => s + e.text);
           if (e.type === "tool_start") setTools((t) => [...t, { name: e.name, running: true }]);
-          if (e.type === "tool_end") setTools((t) => t.map((x) => x.name === e.name && x.running ? { ...x, running: false, ok: e.ok, via: e.via, preview: e.preview } : x));
+          if (e.type === "tool_end") setTools((t) => t.map((x) => x.name === e.name && x.running ? { ...x, running: false, ok: e.ok, via: e.via, preview: e.preview, decision: e.decision } : x));
           if (e.type === "error") setError(e.error);
           if (e.type === "done") setStreaming("");
         }, carry);
@@ -237,13 +237,27 @@ export function ClawConsole() {
                       </div>
                     </div>
                   ))}
-                  {tools.map((t, i) => (
-                    <div key={`${t.name}-${i}`} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                      <span className="font-semibold">{t.running ? "Running" : t.ok ? "Did" : "Failed"} {t.name}</span>
-                      {t.via ? <span className="ml-2 rounded bg-white px-1.5 py-0.5">via {t.via}</span> : null}
-                      {t.preview ? <div className="mt-1 line-clamp-3 font-mono text-[11px] text-amber-800">{t.preview}</div> : null}
-                    </div>
-                  ))}
+                  {tools.map((t, i) => {
+                    // A DEFER/REJECT is Claw deliberately pausing for the
+                    // operator's confirmation, not a failure — rendering it
+                    // identically to "Failed" (as this used to) is actively
+                    // misleading, not just an open UX question.
+                    const label = t.running
+                      ? "Running"
+                      : t.decision === "DEFER"
+                        ? "Needs confirmation:"
+                        : t.decision === "REJECT"
+                          ? "Blocked:"
+                          : t.ok ? "Did" : "Failed";
+                    const isPause = t.decision === "DEFER" || t.decision === "REJECT";
+                    return (
+                      <div key={`${t.name}-${i}`} className={`rounded-xl border px-3 py-2 text-xs ${isPause ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                        <span className="font-semibold">{label} {t.name}</span>
+                        {t.via ? <span className="ml-2 rounded bg-white px-1.5 py-0.5">via {t.via}</span> : null}
+                        {t.preview ? <div className={`mt-1 line-clamp-3 font-mono text-[11px] ${isPause ? "text-sky-800" : "text-amber-800"}`}>{t.preview}</div> : null}
+                      </div>
+                    );
+                  })}
                   {streaming && <div className="max-w-[92%] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm whitespace-pre-wrap">{streaming}<span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-violet-500" /></div>}
                   {busy && !streaming && (
                     <div className="flex justify-start">

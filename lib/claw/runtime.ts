@@ -12,7 +12,10 @@ export type ClawEvent =
   | { type: "meta"; conversationId: string; model: string }
   | { type: "token"; text: string }
   | { type: "tool_start"; name: string; args: Record<string, unknown> }
-  | { type: "tool_end"; name: string; ok: boolean; via?: string; preview: string }
+  // `decision` is only set for a deliberate AION DEFER/REJECT — never for a
+  // genuine tool error. The UI must render these differently: a DEFER is
+  // Claw pausing for the operator's confirmation, not something broken.
+  | { type: "tool_end"; name: string; ok: boolean; via?: string; preview: string; decision?: "DEFER" | "REJECT" }
   | { type: "done"; assistant: string }
   | { type: "error"; error: string };
 
@@ -99,7 +102,22 @@ export async function runClawTurn(input: {
   if (!conv) throw new Error("Thread not found");
   if (!isNvidiaEnabled()) throw new Error("NVIDIA is not configured. The NVIDIA_API_KEY is already on DigitalOcean — confirm it in Settings.");
 
-  let userText = String(input.text || "").trim();
+  // Captured before attachment text is merged into userText below, and
+  // never reassigned after. This is the ONLY input AION's exact-string
+  // tool confirmation ("CONFIRM <tool_name>") checks against. Passing the
+  // attachment-merged userText instead would not be exploitable today
+  // (exactConfirmation requires a full-string match, and the "Attached
+  // file <id>:\n" prefix that's always prepended below means a bare
+  // "CONFIRM <tool>" string can never appear alone) — but it is a latent
+  // landmine: if that exact-match check is ever loosened to a substring
+  // check, attachment content (a scraped page, an uploaded document)
+  // could satisfy a confirmation gate the operator never actually typed.
+  // Keeping operatorText and userText as separate variables from the
+  // start removes the need to reason about that every time either is
+  // touched in the future.
+  const operatorText = String(input.text || "").trim();
+
+  let userText = operatorText;
   if (input.fileIds?.length) {
     const bits: string[] = [];
     for (const id of input.fileIds) {
@@ -171,7 +189,7 @@ export async function runClawTurn(input: {
     const turnOutcomes: Array<{ name: string; ok: boolean; error?: string }> = [];
     for (const call of calls) {
       input.onEvent({ type: "tool_start", name: call.name, args: call.args });
-      const decision = decideTool(call.name, userText);
+      const decision = decideTool(call.name, operatorText);
       try {
         saveDecision({
           conversationId: input.conversationId,
@@ -195,14 +213,21 @@ export async function runClawTurn(input: {
         addMessage({
           conversationId: input.conversationId,
           role: "tool",
-          content: `<tool_result name="${call.name}">ERROR: ${rationale}. Tool was not executed.</tool_result>`,
+          // Deliberately not prefixed "ERROR:" — this is Claw pausing for
+          // confirmation, not a failure, and the model reads this same
+          // content back as its own tool_result on the next round. An
+          // "ERROR:" prefix here risks the model treating a deliberate
+          // pause as a dead end instead of relaying the confirmation
+          // request to the operator as instructed in the system prompt.
+          content: `<tool_result name="${call.name}">${rationale}. Tool was not executed.</tool_result>`,
           toolJson: { name: call.name, ok: false, decision: decision.state }
         });
         input.onEvent({
           type: "tool_end",
           name: call.name,
           ok: false,
-          preview: rationale
+          preview: rationale,
+          decision: decision.state
         });
         continue;
       }
