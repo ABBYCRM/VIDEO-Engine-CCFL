@@ -310,6 +310,7 @@ seedDefaultAvatars();
 // the server's shared persistence layer is initialized.
 import("./avatar-watchdog").then((m) => m.startWatchdogLoop()).catch(() => { /* noop */ });
 import("./calendar-publisher").then((m) => m.startCalendarPublisherLoop()).catch(() => { /* noop */ });
+import("./campaign-autopilot").then((m) => m.startCampaignAutopilotLoop()).catch(() => { /* noop */ });
 import("./blog-autopilot").then((m) => m.startBlogAutopilotLoop()).catch(() => { /* noop */ });
 import("./reddit-research/scheduler").then((m) => m.startRedditResearchAutopilotLoop()).catch(() => { /* noop */ });
 import("./site-autopilot/scheduler").then((m) => m.startSiteAutopilotLoop()).catch(() => { /* noop */ });
