@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS reddit_research_runs (
   trigger TEXT NOT NULL CHECK(trigger IN ('scheduled','manual')),
   posts_scanned INTEGER NOT NULL DEFAULT 0,
   comments_scanned INTEGER NOT NULL DEFAULT 0,
+  query TEXT,
   category TEXT,
   theme_summary TEXT,
   scheduled_post_id TEXT,
