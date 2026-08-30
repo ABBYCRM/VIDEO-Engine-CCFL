@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Bird, Copy, FilePlus2, FolderOpen, Paperclip, Pencil, Plus, Send, Square, Trash2, X
+  Bird, Copy, FilePlus2, FolderOpen, Paperclip, Pencil, Plus, Send, Sparkles, Square, Trash2, X
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
@@ -12,6 +12,18 @@ type Conv = { id: string; title: string; createdAt: string; updatedAt: string };
 type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content: string; toolJson?: any; createdAt: string };
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
 type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
+
+// Autopilot is a one-click prompt, not a background/unattended loop — it
+// still runs through the normal chat turn, the normal AION confirmation
+// gate for anything that publishes, and the normal daily generation cap
+// (lib/claw/runtime.ts's DAILY_GENERATION_LIMIT, shared across every
+// conversation) before any real spend happens.
+const AUTOPILOT_PROMPT = `Run the brand-consistent Instagram content task:
+1. Use steel_scrape on caseclosedfl.com (homepage and one or two other key pages) to confirm the current brand voice and messaging.
+2. Call ig_list_media to see recent posts, then use ig_analyze_media on a handful of likely candidates (narrow first by caption/date, don't analyze every post) to find which existing posts use the Pixar-style 3D cartoon look (navy side panel, orange CaseClosedFL.com footer bar, animated character/vehicle scene) versus other styles.
+3. Generate at most 3 NEW still images matching that same look using generate_still with a cartoon-* stillTemplateId (or category) — do not invent a different "Pixar style" prompt from scratch, use the existing template system.
+4. Write matching captions in the site's brand voice and save each as a draft Calendar post (save_post) — do NOT publish them.
+5. Report back what you found and what you drafted. If you hit the daily generation cap partway through, stop and tell me instead of retrying.`;
 
 function sseParse(chunk: string, onEvent: (e: any) => void, carry: { buf: string }) {
   carry.buf += chunk;
@@ -124,10 +136,10 @@ export function ClawConsole() {
     else await loadConvs();
   }
 
-  async function send() {
+  async function send(overrideText?: string) {
     if (busy) return;
 
-    const body = text.trim();
+    const body = (overrideText ?? text).trim();
     if (!body && !pendingFiles.length) return;
     setBusy(true); setError(null); setStreaming(""); setTools([]);
     const ac = new AbortController();
@@ -141,7 +153,9 @@ export function ClawConsole() {
     }
     const optimistic: Msg = { id: "local-user", role: "user", content: body, createdAt: new Date().toISOString() };
     setMessages((m) => [...m, optimistic]);
-    setText("");
+    // Only clear the box for a normal send — an override (Autopilot) sends
+    // its own text without touching whatever draft the operator was typing.
+    if (overrideText === undefined) setText("");
     const fileIds = pendingFiles.map((f) => f.id);
     setPendingFiles([]);
     try {
@@ -284,6 +298,16 @@ export function ClawConsole() {
                 <div className="mx-auto flex max-w-[440px] items-end gap-2">
                   <input ref={fileInput} type="file" className="hidden" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
                   <button type="button" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => fileInput.current?.click()} aria-label="Upload files"><Paperclip size={16} /></button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="grid h-10 w-10 place-items-center rounded-xl border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                    onClick={() => void send(AUTOPILOT_PROMPT)}
+                    aria-label="Autopilot: brand-consistent Instagram content task"
+                    title="Autopilot: scrape the site for brand voice, find matching-style Instagram posts, draft up to 3 new ones (never auto-published, capped generation spend)"
+                  >
+                    <Sparkles size={16} />
+                  </button>
                   <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}

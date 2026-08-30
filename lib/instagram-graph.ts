@@ -284,6 +284,31 @@ export async function getMediaPermalink(mediaId: string) {
   return { id: String(media.id || mediaId), permalink: media.permalink ? String(media.permalink) : null };
 }
 
+/**
+ * Resolves a real, directly-fetchable image URL for a media item, for
+ * feeding to a vision-capable model. NOT the same as permalink (a webpage,
+ * not an image resource). Verified against Meta's Graph API docs
+ * (2026-08-30): media_url works for IMAGE/VIDEO/REELS; VIDEO/REELS also
+ * carry a separate thumbnail_url (a still JPEG) since a vision model needs
+ * a still frame, not a video file; CAROUSEL_ALBUM has no media_url of its
+ * own and needs children{media_url} to reach each slide.
+ */
+export async function getMediaVisual(mediaId: string): Promise<{ mediaType: string | null; imageUrl: string | null; carouselChildCount: number }> {
+  const media = await graphRequest("GET", mediaId, {
+    fields: "id,media_type,media_url,thumbnail_url,children{media_url}"
+  });
+  const mediaType = media.media_type ? String(media.media_type) : null;
+  const children = Array.isArray(media.children?.data) ? media.children.data : [];
+  if (mediaType === "CAROUSEL_ALBUM") {
+    const first = children[0];
+    return { mediaType, imageUrl: first?.media_url ? String(first.media_url) : null, carouselChildCount: children.length };
+  }
+  // Video/Reels: use the still thumbnail — NVIDIA's vision endpoint only
+  // accepts JPG/JPEG/PNG, not video files.
+  const imageUrl = media.thumbnail_url ? String(media.thumbnail_url) : media.media_url ? String(media.media_url) : null;
+  return { mediaType, imageUrl, carouselChildCount: 0 };
+}
+
 export async function listMedia(limit = 25) {
   const igUserId = getInstagramUserId();
   return graphRequest("GET", `${igUserId}/media`, {

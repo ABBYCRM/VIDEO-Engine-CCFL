@@ -316,6 +316,24 @@ export function listDecisions(
   return rows.map(rowToDecision);
 }
 
+/**
+ * Global (cross-conversation) count of committed "costly" tool calls
+ * (generate_video/generate_still/ugc_batch_generate/generate_blog_post)
+ * since UTC midnight. Used to cap real spend against generation APIs —
+ * counts tool INVOCATIONS, not raw assets: a single ugc_batch_generate
+ * commit may itself produce several assets internally, so this bounds
+ * how many times the tool was called, not a hard ceiling on every asset
+ * ever produced by it.
+ */
+export function countCostlyCommitsToday(): number {
+  const row = db
+    .prepare(
+      "SELECT COUNT(*) as n FROM aion_decision_contracts WHERE state='COMMIT' AND risk_level='costly' AND date(created_at) = date('now')"
+    )
+    .get() as { n: number };
+  return row.n;
+}
+
 export function saveAudit(input: {
   conversationId: string;
   assistantMessageId: string | null;

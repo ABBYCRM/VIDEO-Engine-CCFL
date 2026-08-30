@@ -146,7 +146,11 @@ const KNOWN_SAFE = new Set([
   "approve_strategy",
   "generate_geo_schema",
   "save_post",
-  "coding_new_session"
+  "coding_new_session",
+  // Read-only image inspection via a vision-capable NVIDIA model — looks
+  // at a public image URL and answers a question about it, no writes.
+  "ig_analyze_media",
+  "analyze_image"
 ]);
 
 // Exported so the completeness test can verify coverage without duplicating
@@ -160,7 +164,10 @@ export const CLASSIFIED_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...KNOWN_SAFE
 ]);
 
-function exactConfirmation(text: string, toolName: string): boolean {
+// Exported so other gates (e.g. the daily generation-cost cap in
+// lib/claw/runtime.ts) reuse the exact same confirmation matching instead
+// of a second, potentially-drifting reimplementation.
+export function exactConfirmation(text: string, toolName: string): boolean {
   return text.trim().toLowerCase() === `confirm ${toolName}`.toLowerCase();
 }
 
