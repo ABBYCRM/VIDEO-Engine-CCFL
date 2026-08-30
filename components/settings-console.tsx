@@ -197,12 +197,12 @@ export function SettingsConsole(){
 
  const ALL_PROVIDERS: ProviderId[] = ["hedra","a2e","grok","veo"];
 
- return <div className="mx-auto max-w-5xl">
+ return <div className="mx-auto min-w-0 max-w-5xl">
 
-   <div className="mt-2 grid gap-6">
+   <div className="mt-2 flex min-w-0 flex-col gap-6">
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><Shield size={18} className="text-cyan-700"/>Default video provider</div>
          <Button variant="ghost" size="sm" onClick={loadLive} disabled={liveBusy}>
            <RefreshCcw size={14} className={liveBusy ? "mr-1 animate-spin" : "mr-1"}/>Re-check live status
@@ -235,7 +235,7 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><ImageIcon size={18} className="text-cyan-700"/>Default image provider</div>
          <Button variant="ghost" size="sm" onClick={() => { loadImageProvider(); setImageMsg(null); }}>
            <RefreshCcw size={14} className="mr-1"/>Reload
@@ -345,7 +345,7 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><Cpu size={18} className="text-cyan-700"/>NVIDIA Content Intelligence + Performance Monitor</div>
          <LiveDot
            state={
@@ -382,7 +382,7 @@ export function SettingsConsole(){
                  onValueChange={setNvidiaSelection}
                  aria-label="NVIDIA NIM model"
                >
-                 <ModelSelectorTrigger className="min-h-11 w-full justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                 <ModelSelectorTrigger className="min-h-11 w-full min-w-0 justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm">
                    <ModelSelectorValue className="text-sm" />
                  </ModelSelectorTrigger>
                  <ModelSelectorContent side="bottom" />
@@ -405,7 +405,7 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><Cloud size={18} className="text-slate-700"/>Steel.dev (Claw web research)</div>
          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${settings?.steel?.configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{settings?.steel?.configured ? "configured" : "not configured"}</span>
        </div>
