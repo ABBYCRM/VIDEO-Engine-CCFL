@@ -65,7 +65,14 @@ function fallbackProvider(failed:ProviderId):ProviderId|null{
 }
 
 function isRecoverableProviderFailure(error:string){
-  return /A2E|rejected task|recharge|remaining time|Request failed|quota|insufficient|coins/i.test(error);
+  // A provider returned an error that another provider might handle:
+  //   - A2E-specific patterns (quota, recharge, coins, etc.)
+  //   - Hedra / xAI Grok / Veo / fal HTTP 4xx and 5xx (any 400/404/500/502/503)
+  //   - Generic provider/transport errors
+  // NOT recoverable: input validation failures (the prompt is malformed,
+  // not the provider's fault), character/audio constraints (the slot
+  // itself needs a different model), or user-supplied content_hash dups.
+  return /A2E|rejected task|recharge|remaining time|Request failed|quota|insufficient|coins|Hedra start HTTP [45]\d\d|Grok start HTTP [45]\d\d|Veo start HTTP [45]\d\d|fal start HTTP [45]\d\d|HTTP [45]\d\d/i.test(error);
 }
 
 function resolveReferencePath(referenceImagePath: string) {
@@ -424,13 +431,42 @@ async function generateNext(slotId?:string){
     await generateSplitSlot(row);
     return true;
   }
-  const retryingA2e = row.generation_status === "failed";
-  const chosenRequested=provider(String(row.video_provider||"hedra"));
-  const avatarRef = !retryingA2e ? await loadAvatarReference(row.avatar_id) : null;
+  // On retry of a previously-failed slot, pick the NEXT provider in the
+  // chain (not the same broken one). The earlier code hard-coded "grok"
+  // on retry — fine when the original failure was A2E, but a Hedra
+  // failure then went to grok, and a grok failure also went to grok
+  // (infinite loop). Look at the failed video_job's provider if we can
+  // identify it; otherwise fall back to the slot's configured
+  // video_provider. The catch block below handles the case where this
+  // retry also fails by calling fallbackProvider() on the chosen one.
+  const retryingFailed = row.generation_status === "failed";
+  let chosenRequested: ProviderId = provider(String(row.video_provider || "hedra"));
+  if (retryingFailed) {
+    // Identify the provider that previously failed by reading the most
+    // recent video_job row for this slot. If we find one, advance past
+    // it; if not, use the slot's configured provider as the starting
+    // point. This makes the recovery chain deterministic and avoids
+    // re-trying the exact same provider that just returned 400/404.
+    try {
+      const lastJob = db
+        .prepare(
+          `SELECT provider FROM video_jobs WHERE id=?`
+        )
+        .get(row.video_job_id) as { provider?: string } | undefined;
+      if (lastJob?.provider) {
+        const last = provider(String(lastJob.provider));
+        const next = fallbackProvider(last);
+        if (next) chosenRequested = next;
+      }
+    } catch {
+      /* fall through to the configured provider */
+    }
+  }
+  const avatarRef = !retryingFailed ? await loadAvatarReference(row.avatar_id) : null;
   const videoModel = String(row.video_model || "");
   const characterHedra = chosenRequested === "hedra" && HEDRA_CHARACTER_MODELS.has(videoModel);
-  const chosen: ProviderId = retryingA2e ? "grok" : chosenRequested;
-  if(!retryingA2e && characterHedra){
+  const chosen: ProviderId = chosenRequested;
+  if(!retryingFailed && characterHedra){
     db.prepare("UPDATE scheduled_posts SET generation_status='pending_manual',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run("Hedra Character/Avatar needs driving audio. Switch this campaign video model to fal/grok-video-i2v (still-to-video) or generate the slot from Create with audio.",row.id);
     return true;
   }
