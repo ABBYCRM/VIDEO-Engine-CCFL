@@ -67,6 +67,8 @@ import { composioDeleteTweet, composioGetTweet, composioListMentions, composioPo
 import { composioCommentOnPost, composioGetMyInfo, composioPostUpdate, isLinkedInComposioConnected } from "@/lib/linkedin-composio";
 import { composioListComments as composioRedditListComments, composioReplyComment as composioRedditReplyComment, composioSearchSubreddits, composioSubmitPost, isRedditComposioConnected } from "@/lib/reddit-composio";
 import { runRedditMarketResearchOnce } from "@/lib/reddit-research/pipeline";
+import { runSiteAutopilotOnce } from "@/lib/site-autopilot/pipeline";
+import { setAutopilotEnabled } from "@/lib/autopilot-control";
 import { redditPreSubmitReminder } from "@/lib/reddit/rules-check";
 import { isImageGenEnabled } from "@/lib/feature-flags";
 import { listInfluencers, updateInfluencerStatus } from "@/lib/influencers";
@@ -797,6 +799,24 @@ export const CLAW_TOOLS: ClawTool[] = [
     description: "Read-only market-research sub-agent — NOT a Reddit chat bot, never posts/comments/replies on Reddit. Discovers public PI-relevant Reddit discussion, anonymizes it (usernames/links/contact info stripped before anything reaches a model), and asks NVIDIA to classify the AGGREGATE theme into one campaign category — grounded against caseclosedfl.com's current content, but never to quote or summarize a specific Reddit post. Generates one on-brand Pixar-style still + a pre-approved compliant caption from that category, then queues it as an auto-publish Instagram post (same pipeline every other campaign post uses) and triggers an immediate publish pass. Runs autonomously once a day on its own (disable with REDDIT_AUTOPILOT_ENABLED=false); this tool lets the operator trigger an extra run on demand.",
     args: "{}",
     handler: async () => runRedditMarketResearchOnce("manual")
+  },
+  {
+    name: "site_autopilot_run",
+    description: "Runs the Site/IG autopilot pipeline once, right now: grounds against caseclosedfl.com's current content, rotates to the next campaign category, generates one on-brand Pixar-style still (existing cartoon-template system — always matches the brand's real Instagram look), pulls a pre-approved compliant caption, and queues it as an auto-publish Instagram post (same pipeline every other campaign post uses), then triggers an immediate publish pass. This is the pipeline that also runs autonomously on its own schedule with no operator step at all (say \"stop autopilot\" to pause it, \"start autopilot\" to resume) — this tool just lets the operator trigger an extra run on demand.",
+    args: "{}",
+    handler: async () => runSiteAutopilotOnce("manual")
+  },
+  {
+    name: "autopilot_stop",
+    description: "Pauses every autonomous background pipeline (Reddit market-research + Site/IG autopilot) immediately. This is a persisted setting, not conversation state — it stays paused across restarts and new threads until autopilot_start is called. Use this whenever the operator says \"stop\", \"stop autopilot\", \"pause the autopilot\", or similar in the context of the autonomous pipelines.",
+    args: "{}",
+    handler: async () => { setAutopilotEnabled(false); return { autopilotEnabled: false, note: "Every autonomous pipeline is paused. Say \"start autopilot\" to resume." }; }
+  },
+  {
+    name: "autopilot_start",
+    description: "Resumes every autonomous background pipeline paused by autopilot_stop. Use this whenever the operator says \"start\", \"start autopilot\", \"resume autopilot\", or similar.",
+    args: "{}",
+    handler: async () => { setAutopilotEnabled(true); return { autopilotEnabled: true, note: "Every autonomous pipeline is resumed — Reddit market-research and Site/IG autopilot will run on their own schedules again (still subject to each pipeline's own connection checks and the shared daily generation cap)." }; }
   },
   {
     name: "coding_new_session",
