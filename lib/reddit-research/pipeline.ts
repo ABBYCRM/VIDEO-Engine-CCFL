@@ -33,10 +33,10 @@ import { generateCampaignStill } from "@/lib/campaign-image";
 import { publicCaptionForSlot } from "@/lib/public-copy";
 import { db } from "@/lib/db";
 import { runCalendarPublisherOnce } from "@/lib/calendar-publisher";
-import { scrapePublicUrl } from "@/lib/scrape";
 import { isRedditAutopilotEnabled } from "@/lib/feature-flags";
-
-const BRAND_SITE_URL = "https://caseclosedfl.com";
+import { fetchSiteContext, type SiteContext } from "@/lib/brand-context";
+import { isAutopilotEnabled } from "@/lib/autopilot-control";
+import { DAILY_GENERATION_LIMIT, countAllGenerationCommitsToday, recordBackgroundGenerationCommit } from "@/lib/generation-ledger";
 
 const VALID_CATEGORIES = ["car_accident", "rideshare", "trucking", "slip_fall", "workplace", "pedestrian"] as const;
 type Category = (typeof VALID_CATEGORIES)[number];
@@ -103,30 +103,6 @@ function extractComments(result: unknown): Record<string, unknown>[] {
 }
 
 type SynthesisResult = { category: Category; themeSummary: string; confidence: number };
-type SiteContext = { title: string | null; description: string | null; excerpt: string };
-
-/** Best-effort brand-voice grounding: pulls the firm's own current site
- * content into the synthesis call so category judgment stays anchored to
- * what caseclosedfl.com is actually emphasizing right now, not just
- * whatever Reddit signal happened to surface. Never fatal — a failed or
- * unconfigured scrape just means synthesis runs on Reddit signal alone,
- * exactly as it did before this existed. This context only ever informs
- * which category the model picks; the published caption still always comes
- * from the pre-approved copy library in lib/public-copy.ts, never from
- * anything scraped here or written by the model. */
-async function fetchSiteContext(): Promise<SiteContext | null> {
-  try {
-    const scraped = await scrapePublicUrl({ url: BRAND_SITE_URL });
-    return {
-      title: scraped.title || null,
-      description: scraped.description || null,
-      excerpt: String(scraped.markdown || "").slice(0, 1500)
-    };
-  } catch (e) {
-    console.warn("[reddit-research] site-context scrape failed, continuing on Reddit signal alone:", e instanceof Error ? e.message : e);
-    return null;
-  }
-}
 
 async function synthesizeTheme(posts: AnonymizedPost[], comments: string[], siteContext: SiteContext | null): Promise<SynthesisResult> {
   const postsBlock = posts
@@ -177,6 +153,11 @@ export type RedditResearchResult = {
 };
 
 export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual"): Promise<RedditResearchResult> {
+  if (!isAutopilotEnabled()) {
+    const r: RedditResearchResult = { status: "skipped", reason: "Autopilot is paused. Say \"start autopilot\" in Claw, or call autopilot_start, to resume.", postsScanned: 0, commentsScanned: 0 };
+    saveRedditResearchRun({ status: "skipped", trigger, postsScanned: 0, commentsScanned: 0, error: r.reason });
+    return r;
+  }
   if (!isRedditAutopilotEnabled()) {
     const r: RedditResearchResult = { status: "skipped", reason: "Reddit autopilot is disabled (REDDIT_AUTOPILOT_ENABLED=false).", postsScanned: 0, commentsScanned: 0 };
     saveRedditResearchRun({ status: "skipped", trigger, postsScanned: 0, commentsScanned: 0, error: r.reason });
@@ -247,6 +228,13 @@ export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual
     return { status: "failed", reason: `Theme synthesis failed: ${msg}`, postsScanned: candidates.length, commentsScanned };
   }
 
+  const usedToday = countAllGenerationCommitsToday();
+  if (usedToday >= DAILY_GENERATION_LIMIT) {
+    const reason = `Daily generation cap reached (${usedToday}/${DAILY_GENERATION_LIMIT} across Claw chat + every autonomous pipeline today).`;
+    saveRedditResearchRun({ status: "skipped", trigger, postsScanned: candidates.length, commentsScanned, query, category: synthesis.category, themeSummary: synthesis.themeSummary, error: reason });
+    return { status: "skipped", reason, postsScanned: candidates.length, commentsScanned, category: synthesis.category, themeSummary: synthesis.themeSummary };
+  }
+
   const seed = `reddit-research-${new Date().toISOString().slice(0, 10)}`;
   const template = pickCartoonTemplateForCategory(synthesis.category, seed);
 
@@ -257,6 +245,7 @@ export async function runRedditMarketResearchOnce(trigger: "scheduled" | "manual
     );
     stillUrl = still.assetUrl;
     stillMime = still.mimeType;
+    recordBackgroundGenerationCommit("reddit-research");
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     saveRedditResearchRun({ status: "failed", trigger, postsScanned: candidates.length, commentsScanned, query, category: synthesis.category, themeSummary: synthesis.themeSummary, error: `image gen: ${msg}` });

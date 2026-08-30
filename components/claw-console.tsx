@@ -57,6 +57,10 @@ export function ClawConsole() {
   const [renameVal, setRenameVal] = useState("");
   const [redditRunStatus, setRedditRunStatus] = useState<string | null>(null);
   const [redditRunBusy, setRedditRunBusy] = useState(false);
+  const [siteRunStatus, setSiteRunStatus] = useState<string | null>(null);
+  const [siteRunBusy, setSiteRunBusy] = useState(false);
+  const [autopilotEnabled, setAutopilotEnabledState] = useState<boolean | null>(null);
+  const [autopilotToggling, setAutopilotToggling] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -168,9 +172,53 @@ export function ClawConsole() {
     }
   }
 
+  // Fires the Site/IG autopilot pipeline directly — same rationale as
+  // runRedditResearchNow above (bypasses chat/AION, publishes for real,
+  // reports the outcome immediately).
+  async function runSiteAutopilotNow() {
+    setSiteRunBusy(true);
+    setSiteRunStatus("Site autopilot: generating…");
+    try {
+      const r = await fetch("/api/admin/site-autopilot/run-now", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) { setSiteRunStatus(`Site autopilot failed: ${d.error || r.status}`); return; }
+      if (d.status === "success") {
+        setSiteRunStatus(d.published ? `Posted live — ${d.category} (check Instagram)` : `Queued — ${d.category} (publishing within the minute)`);
+      } else if (d.status === "skipped") {
+        setSiteRunStatus(`Skipped: ${d.reason}`);
+      } else {
+        setSiteRunStatus(`Failed: ${d.reason || "unknown error"}`);
+      }
+    } catch (e) {
+      setSiteRunStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSiteRunBusy(false);
+    }
+  }
+
   function runAutopilot() {
     void send(AUTOPILOT_PROMPT);
     void runRedditResearchNow();
+    void runSiteAutopilotNow();
+  }
+
+  const loadAutopilotState = useCallback(async () => {
+    try {
+      const r = await fetch("/api/admin/autopilot");
+      if (r.ok) setAutopilotEnabledState((await r.json()).enabled);
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => { void loadAutopilotState(); }, [loadAutopilotState]);
+
+  async function toggleAutopilot() {
+    if (autopilotEnabled === null) return;
+    setAutopilotToggling(true);
+    try {
+      const r = await fetch("/api/admin/autopilot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: !autopilotEnabled }) });
+      if (r.ok) setAutopilotEnabledState((await r.json()).enabled);
+    } finally {
+      setAutopilotToggling(false);
+    }
   }
 
   async function send(overrideText?: string) {
@@ -238,15 +286,29 @@ export function ClawConsole() {
     <AuthGuard>
       <AppShell>
         <div className="flex h-[calc(100dvh-7rem)] flex-col">
-          <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-            <Bird size={16} className="text-violet-600" />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold tracking-tight">Claw</div>
-              <div className="truncate text-[11px] text-slate-500">NVIDIA operator agent · Steel web research · Graph Instagram</div>
+          <header className="flex flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Bird size={16} className="shrink-0 text-violet-600" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold tracking-tight">Claw</div>
+                <div className="truncate text-[11px] text-slate-500">NVIDIA operator agent · Steel web research · Graph Instagram</div>
+              </div>
             </div>
-            <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "threads" ? "chat" : "threads")}>Threads</button>
-            <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "files" ? "chat" : "files")}>Files</button>
-            <Button size="sm" variant="secondary" onClick={newThread}><Plus size={14} className="mr-1" />New</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={autopilotEnabled === null || autopilotToggling}
+                onClick={toggleAutopilot}
+                title={autopilotEnabled ? "Autopilot is running (Reddit + Site/IG pipelines). Click to stop — same as typing \"stop\" to Claw." : "Autopilot is paused. Click to resume — same as typing \"start\" to Claw."}
+                className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${autopilotEnabled ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-slate-100 text-slate-500"}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${autopilotEnabled ? "bg-emerald-500" : "bg-slate-400"}`} />
+                {autopilotEnabled === null ? "…" : autopilotEnabled ? "Auto: On" : "Auto: Off"}
+              </button>
+              <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "threads" ? "chat" : "threads")}>Threads</button>
+              <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "files" ? "chat" : "files")}>Files</button>
+              <Button size="sm" variant="secondary" onClick={newThread}><Plus size={14} className="mr-1" />New</Button>
+            </div>
           </header>
 
           <div className="flex min-h-0 flex-1">
@@ -335,7 +397,13 @@ export function ClawConsole() {
                 {redditRunStatus && (
                   <div className="mx-auto mb-2 max-w-[440px] rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
                     {redditRunBusy && <span className="mr-1 inline-block animate-pulse">●</span>}
-                    {redditRunStatus}
+                    Reddit: {redditRunStatus}
+                  </div>
+                )}
+                {siteRunStatus && (
+                  <div className="mx-auto mb-2 max-w-[440px] rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                    {siteRunBusy && <span className="mr-1 inline-block animate-pulse">●</span>}
+                    Site: {siteRunStatus}
                   </div>
                 )}
                 <div className="mx-auto flex max-w-[440px] items-end gap-2">

@@ -75,7 +75,14 @@ const EXTERNAL_POST = new Set([
   // is read-only research, never a Reddit post/comment/reply), but it
   // queues an Instagram post with auto_post=1 — a real future publish the
   // operator hasn't reviewed — so it needs the same CONFIRM gate.
-  "reddit_market_research"
+  "reddit_market_research",
+  // Same rationale as reddit_market_research: this is the manual on-demand
+  // trigger for the Site/IG autopilot pipeline, and it queues an
+  // auto_post=1 Instagram post the operator hasn't reviewed. The
+  // pipeline's own autonomous scheduled runs bypass this chat/AION loop
+  // entirely (same as every other autopilot loop in this app) — this gate
+  // is specific to invoking it BY TYPING TO CLAW.
+  "site_autopilot_run"
 ]);
 
 // Responds to existing user-generated content. The customer-facing
@@ -155,7 +162,20 @@ const KNOWN_SAFE = new Set([
   // Read-only image inspection via a vision-capable NVIDIA model — looks
   // at a public image URL and answers a question about it, no writes.
   "ig_analyze_media",
-  "analyze_image"
+  "analyze_image",
+  // Pause/resume the autonomous background pipelines (Reddit
+  // market-research, Site/IG autopilot). Deliberately NOT CONFIRM-gated,
+  // unlike the pipelines' own on-demand run tools below: these two only
+  // ever flip a persisted on/off switch, they never themselves queue or
+  // publish anything — every actual publish still goes through each
+  // pipeline's own checks (connection status, the shared daily generation
+  // cap) whenever it next runs. Gating a "make this safer" action (stop)
+  // behind confirmation would be backwards; gating "resume" the same way
+  // it started would add friction to the exact frictionless operation the
+  // operator asked for, for no corresponding safety gain since nothing
+  // publishes at the moment either tool runs.
+  "autopilot_stop",
+  "autopilot_start"
 ]);
 
 // Exported so the completeness test can verify coverage without duplicating

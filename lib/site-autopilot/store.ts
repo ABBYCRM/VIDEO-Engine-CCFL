@@ -1,0 +1,88 @@
+// Run-history log for the Site/IG autopilot pipeline — same rationale as
+// lib/reddit-research/store.ts (a dedicated table, not AION's
+// conversation-scoped memory, since these runs come from a background
+// scheduler or a direct admin action, not a Claw chat turn).
+
+import crypto from "node:crypto";
+import { db } from "@/lib/db";
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS site_autopilot_runs (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK(status IN ('success','skipped','failed')),
+  trigger TEXT NOT NULL CHECK(trigger IN ('scheduled','manual')),
+  category TEXT,
+  scheduled_post_id TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_site_autopilot_runs_created_at ON site_autopilot_runs(created_at);
+`);
+
+export type SiteAutopilotRun = {
+  id: string;
+  status: "success" | "skipped" | "failed";
+  trigger: "scheduled" | "manual";
+  category: string | null;
+  scheduledPostId: string | null;
+  error: string | null;
+  createdAt: string;
+};
+
+export function saveSiteAutopilotRun(input: {
+  status: "success" | "skipped" | "failed";
+  trigger: "scheduled" | "manual";
+  category?: string | null;
+  scheduledPostId?: string | null;
+  error?: string | null;
+}): SiteAutopilotRun {
+  const id = crypto.randomUUID();
+  db.prepare(
+    `INSERT INTO site_autopilot_runs(id, status, trigger, category, scheduled_post_id, error) VALUES(?,?,?,?,?,?)`
+  ).run(
+    id,
+    input.status,
+    input.trigger,
+    input.category ?? null,
+    input.scheduledPostId ?? null,
+    input.error ? input.error.slice(0, 2000) : null
+  );
+  const row = db.prepare("SELECT * FROM site_autopilot_runs WHERE id=?").get(id) as any;
+  return rowToRun(row);
+}
+
+export function listSiteAutopilotRuns(limit = 20): SiteAutopilotRun[] {
+  const rows = db.prepare("SELECT * FROM site_autopilot_runs ORDER BY created_at DESC LIMIT ?").all(limit) as any[];
+  return rows.map(rowToRun);
+}
+
+/** UTC-day guard for the autonomous scheduler, same semantics as
+ *  lib/reddit-research/store.ts's hasScheduledRunToday. */
+export function hasScheduledSiteRunToday(): boolean {
+  const row = db.prepare(
+    `SELECT COUNT(*) as n FROM site_autopilot_runs WHERE trigger='scheduled' AND date(created_at) = date('now')`
+  ).get() as { n: number };
+  return row.n > 0;
+}
+
+/** Which category (of the 6 cartoon-template categories) this pipeline
+ *  most recently posted, so a new run can rotate to a different one
+ *  instead of repeating — reused across runs regardless of trigger type. */
+export function lastPostedCategory(): string | null {
+  const row = db.prepare(
+    `SELECT category FROM site_autopilot_runs WHERE status='success' AND category IS NOT NULL ORDER BY created_at DESC LIMIT 1`
+  ).get() as { category: string } | undefined;
+  return row?.category ?? null;
+}
+
+function rowToRun(row: any): SiteAutopilotRun {
+  return {
+    id: row.id,
+    status: row.status,
+    trigger: row.trigger,
+    category: row.category,
+    scheduledPostId: row.scheduled_post_id,
+    error: row.error,
+    createdAt: row.created_at
+  };
+}
