@@ -1,6 +1,9 @@
 import { chatCompletionStream, getClawModel, isNvidiaEnabled, type ChatMessage } from "@/lib/nvidia/client";
 import { addMessage, getConversation, listMessages, readClawFileText, renameConversation, type ClawMessage } from "@/lib/claw/store";
 import { executeClawTool, toolsCatalog } from "@/lib/claw/tools";
+import { decideTool } from "@/lib/aion/policy";
+import { saveDecision, saveEpistemicRecord, saveAudit } from "@/lib/aion/store";
+import { auditAssistantResponse, type AuditFlag } from "@/lib/aion/audit";
 
 const TOOL_RE = /<tool_call\s+name="([^"]+)">([\s\S]*?)<\/tool_call>/gi;
 const MAX_ROUNDS = 6;
@@ -160,8 +163,49 @@ export async function runClawTurn(input: {
       break;
     }
     addMessage({ conversationId: input.conversationId, role: "assistant", content: text, toolJson: calls });
+    // AION gate: each tool call is decided before execution. The runtime
+    // operator text is the only authorization input — never trust attached
+    // file text (which is hostile-by-default). The decision is persisted
+    // to aion_decision_contracts regardless of outcome, and the tool
+    // outcome (success or failure) is persisted as aion_epistemic_records.
+    const turnOutcomes: Array<{ name: string; ok: boolean; error?: string }> = [];
     for (const call of calls) {
       input.onEvent({ type: "tool_start", name: call.name, args: call.args });
+      const decision = decideTool(call.name, userText);
+      try {
+        saveDecision({
+          conversationId: input.conversationId,
+          toolName: call.name,
+          state: decision.state,
+          riskLevel: decision.riskLevel,
+          rationale: decision.rationale,
+          risks: decision.risks,
+          actionPayload: call.args,
+          confidence: decision.confidence,
+          reversible: decision.reversible,
+          confirmationRequired: decision.confirmationRequired
+        });
+      } catch {
+        // AION persistence is best-effort; never break the chat loop on
+        // a store write failure. The chat still proceeds.
+      }
+      if (decision.state !== "COMMIT") {
+        const rationale = `${decision.state}: ${decision.rationale}`;
+        turnOutcomes.push({ name: call.name, ok: false, error: rationale });
+        addMessage({
+          conversationId: input.conversationId,
+          role: "tool",
+          content: `<tool_result name="${call.name}">ERROR: ${rationale}. Tool was not executed.</tool_result>`,
+          toolJson: { name: call.name, ok: false, decision: decision.state }
+        });
+        input.onEvent({
+          type: "tool_end",
+          name: call.name,
+          ok: false,
+          preview: rationale
+        });
+        continue;
+      }
       try {
         const raw = await executeClawTool(call.name, call.args);
         let via: string | undefined;
@@ -174,11 +218,47 @@ export async function runClawTurn(input: {
         const body = fallbackNote ? `${raw}\nNOTE: ${fallbackNote}` : raw;
         addMessage({ conversationId: input.conversationId, role: "tool", content: `<tool_result name="${call.name}">${body}</tool_result>`, toolJson: { name: call.name, ok: true, via } });
         input.onEvent({ type: "tool_end", name: call.name, ok: true, via, preview: preview(raw) });
+        turnOutcomes.push({ name: call.name, ok: true });
+        try {
+          saveEpistemicRecord({
+            conversationId: input.conversationId,
+            entityKey: `tool:${call.name}:last_outcome`,
+            category: "OBSERVATION",
+            content: { toolName: call.name, ok: true },
+            confidence: 1,
+            source: `tool:${call.name}`
+          });
+        } catch { /* best-effort */ }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         addMessage({ conversationId: input.conversationId, role: "tool", content: `<tool_result name="${call.name}">ERROR: ${message}</tool_result>`, toolJson: { name: call.name, ok: false } });
         input.onEvent({ type: "tool_end", name: call.name, ok: false, preview: message });
+        turnOutcomes.push({ name: call.name, ok: false, error: message });
+        try {
+          saveEpistemicRecord({
+            conversationId: input.conversationId,
+            entityKey: `tool:${call.name}:last_outcome`,
+            category: "OBSERVATION",
+            content: { toolName: call.name, ok: false, errorType: "tool_error" },
+            confidence: 1,
+            source: `tool:${call.name}`
+          });
+        } catch { /* best-effort */ }
       }
+    }
+    // Audit the round-trip. Persist any high-severity flags. The model's
+    // text scan is the heuristic; the structured outcomes array is the
+    // honest comparison signal.
+    const audit = auditAssistantResponse(text, turnOutcomes);
+    if (!audit.passed) {
+      try {
+        saveAudit({
+          conversationId: input.conversationId,
+          assistantMessageId: null,
+          passed: false,
+          flags: audit.flags as any
+        });
+      } catch { /* best-effort */ }
     }
   }
 

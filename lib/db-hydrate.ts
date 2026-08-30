@@ -17,7 +17,22 @@ const TABLES = [
   "campaign_assets",
   "connected_accounts",
   "media_assets",
-  "audit_log"
+  "audit_log",
+  // AION continuity layer (operator directive 2026-08-30, "New era
+  // marketing"). Parent-first: claw_conversations and claw_messages come
+  // first because the four AION tables have FK ON DELETE CASCADE to
+  // claw_conversations(id). These two parent tables were previously
+  // missing from the hydration list, which meant Claw history never
+  // survived a DO redeploy via the PG mirror — this fixes that.
+  "claw_conversations",
+  "claw_messages",
+  "aion_epistemic_records",
+  "aion_state_entries",
+  "aion_decision_contracts",
+  "aion_audits"
+  // claw_files intentionally NOT in this list: the rows point to
+  // container-local filesystem paths that don't survive redeploy. The
+  // file bytes need a separate restore mechanism (out of scope here).
 ];
 
 let hydrated = false;
