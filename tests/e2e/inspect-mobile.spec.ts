@@ -18,7 +18,14 @@ test("inspect mobile create page", async ({ page, request }) => {
   await page.context().addCookies(storage.cookies);
 
   await page.goto("/", { waitUntil: "networkidle" });
-  await page.waitForSelector("h1", { timeout: 10000 });
+  // This page's markup has never used a semantic <h1> (confirmed: no <h1>
+  // anywhere in components/app-shell.tsx or unified-create-console.tsx) --
+  // waiting on one was always going to time out. This diagnostic has no
+  // real assertions of its own (just the login check above); it only
+  // needs the page settled before measuring layout, which the "main"
+  // selector below (already relied on for the actual measurements)
+  // confirms just as well as an <h1> would have.
+  await page.waitForSelector("main", { timeout: 10000 });
 
   // Inspect at 412x915 (Pixel 7)
   const data = await page.evaluate(() => {

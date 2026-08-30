@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function realLogin(page:Page){await page.goto("/login");await page.getByPlaceholder("Admin password").fill(process.env.ADMIN_PASSWORD||"e2e-local-only");await page.getByRole("button",{name:"Sign in"}).click();await expect(page.getByRole("heading",{name:"Content Calendar"})).toBeVisible({timeout:15000})}
+// Waits for the shared app shell's "Sign out" control (present on every
+// authenticated page) rather than a specific page's heading, since a real
+// login's post-login landing page has changed before (Calendar -> Claw)
+// and this helper's callers only need an authenticated session, never the
+// Calendar page itself.
+async function realLogin(page:Page){await page.goto("/login");await page.getByPlaceholder("Admin password").fill(process.env.ADMIN_PASSWORD||"e2e-local-only");await page.getByRole("button",{name:"Sign in"}).click();await expect(page.getByRole("button",{name:"Sign out"})).toBeVisible({timeout:15000})}
 async function sameOriginJson(page:Page,url:string){return page.evaluate(async url=>{const r=await fetch(url,{cache:"no-store"});return{status:r.status,body:await r.json()}},url)}
 
 test("real split-screen composition endpoint persists final media into Library and Calendar",async({page})=>{
