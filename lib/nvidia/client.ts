@@ -59,7 +59,22 @@ export function isNvidiaEnabled(): boolean {
   return getNvidiaModel() !== "disabled" && (Boolean(getRaw(SETTINGS_KEY)) || Boolean(process.env.NVIDIA_API_KEY));
 }
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+// Vision-capable models (see lib/nvidia/models.ts's "vision" capability)
+// accept an OpenAI-compatible content array instead of a plain string —
+// verified against NVIDIA's real hosted API (integrate.api.nvidia.com,
+// the exact NVIDIA_BASE this client already uses) via their own
+// documented curl/Python examples, 2026-08-30. A plain public HTTPS URL
+// works directly in image_url.url; the hosted API also accepts a
+// data: URI but caps inline base64 payloads at roughly 180KB, beyond
+// which NVIDIA's own docs say to use their separate NVCF asset-upload
+// API instead — this client does not implement that path, so callers
+// should prefer passing a real public URL (e.g. Instagram's own
+// media_url/thumbnail_url) over base64-encoding an image themselves.
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string | ChatContentPart[] };
 
 export type ChatRequest = {
   model: NvidiaModelId;

@@ -18,6 +18,7 @@ import {
   listMedia,
   getComments,
   getMediaInsights,
+  getMediaVisual,
   replyToComment,
   hideComment,
   deleteComment,
@@ -51,6 +52,8 @@ import { scrapeWithScrapingBee } from "@/lib/scrapingbee";
 import { scrapeWithScrapfly } from "@/lib/scrapfly";
 import { takeScreenshot } from "@/lib/screenshotone";
 import { webSearch } from "@/lib/web-search";
+import { analyzeImage } from "@/lib/nvidia/vision";
+import { validateSteelUrl } from "@/lib/steel-url";
 import { writeStandalonePost } from "@/lib/nvidia/content-writer";
 import type { PlatformKey } from "@/lib/nvidia/schemas";
 import crypto from "node:crypto";
@@ -229,13 +232,19 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "generate_still",
-    description: "Generate a campaign still into Library + Calendar.",
-    args: "{\"prompt\":\"...\",\"avatarId\":\"optional\"}",
+    description: "Generate a campaign still into Library + Calendar. For the operator's existing Pixar-style 3D cartoon brand look (the animated character/vehicle scenes with the navy side panel and orange CaseClosedFL footer bar — this is the SAME system that produced the operator's existing Pixar-style Instagram/site posts, not a new style to invent), pass stillTemplateId as one of: cartoon-slip-fall-grocery, cartoon-car-crash-rear-end, cartoon-trucking-highway, cartoon-rideshare-curbside, cartoon-workplace-construction, cartoon-pedestrian-crosswalk, cartoon-medical-bills — or omit stillTemplateId and just pass category (car_accident, rideshare, trucking, slip_fall) to auto-pick a matching template. Without stillTemplateId/category this generates a photorealistic (non-cartoon) still instead.",
+    args: "{\"prompt\":\"...\",\"avatarId\":\"optional\",\"stillTemplateId\":\"optional — e.g. cartoon-car-crash-rear-end for the Pixar-style look\",\"category\":\"optional — car_accident|rideshare|trucking|slip_fall|ugc\",\"seed\":\"optional — same seed+template always renders the same variant\"}",
     handler: async (a) => {
       if (!isImageGenEnabled()) throw new Error("Image/video generation is disabled (manual-calendar mode). Set IMAGE_GEN_ENABLED=true to re-enable.");
       const prompt = str(a.prompt || a.mission);
       if (!prompt) throw new Error("prompt is required");
-      const still = await generateCampaignStill({ prompt, avatarId: str(a.avatarId) || null });
+      const still = await generateCampaignStill({
+        prompt,
+        avatarId: str(a.avatarId) || null,
+        stillTemplateId: str(a.stillTemplateId) || null,
+        category: str(a.category) || null,
+        seed: str(a.seed) || null
+      });
       return { assetId: still.assetId, assetUrl: still.assetUrl, model: still.model };
     }
   },
@@ -418,6 +427,33 @@ export const CLAW_TOOLS: ClawTool[] = [
           graph: async () => getMediaInsights(mediaId)
         }
       );
+    }
+  },
+  {
+    name: "ig_analyze_media",
+    description: "Look at what a specific Instagram post actually shows (not just its caption/metadata) — style, subject, whether it's a real photo vs. an illustration/3D render, etc. Get the id from ig_list_media first. Requires direct Graph credentials (INSTAGRAM_MCP_ACCESS_TOKEN) — Composio's media-URL field isn't verified in this build, so this only works via the Graph path regardless of which provider is primary for other Instagram tools. For a carousel post this looks at the first slide only.",
+    args: "{\"mediaId\":\"...\",\"question\":\"optional — defaults to a general style/content description\"}",
+    handler: async (a) => {
+      const mediaId = str(a.mediaId || a.id);
+      if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
+      const visual = await getMediaVisual(mediaId);
+      if (!visual.imageUrl) {
+        throw new Error(visual.mediaType ? `No fetchable image URL for this ${visual.mediaType} (Graph didn't return media_url/thumbnail_url — the media may be inaccessible or a video still processing).` : "Could not resolve this media id via Graph.");
+      }
+      const question = str(a.question, "Describe what this image actually shows: subject, setting, and visual style — specifically call out whether it looks like a real photograph, a Pixar/Disney-style 3D animated render, a 2D illustration, or something else.");
+      const description = await analyzeImage({ imageUrl: visual.imageUrl, question });
+      return { mediaId, mediaType: visual.mediaType, carouselChildCount: visual.carouselChildCount, description };
+    }
+  },
+  {
+    name: "analyze_image",
+    description: "Look at any public image URL and answer a question about it (style, subject, content) using a vision-capable model. Never use it for local/private URLs.",
+    args: "{\"url\":\"https://...\",\"question\":\"what does this image show?\"}",
+    handler: async (a) => {
+      const url = validateSteelUrl(a.url);
+      const question = str(a.question, "Describe what this image shows, including its visual style.");
+      const description = await analyzeImage({ imageUrl: url, question });
+      return { url, description };
     }
   },
   {
