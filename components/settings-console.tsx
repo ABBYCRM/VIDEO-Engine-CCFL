@@ -197,18 +197,18 @@ export function SettingsConsole(){
 
  const ALL_PROVIDERS: ProviderId[] = ["hedra","a2e","grok","veo"];
 
- return <div className="mx-auto max-w-5xl">
+ return <div className="mx-auto min-w-0 max-w-5xl">
 
-   <div className="mt-2 grid gap-6">
+   <div className="mt-2 flex min-w-0 flex-col gap-6">
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><Shield size={18} className="text-cyan-700"/>Default video provider</div>
          <Button variant="ghost" size="sm" onClick={loadLive} disabled={liveBusy}>
            <RefreshCcw size={14} className={liveBusy ? "mr-1 animate-spin" : "mr-1"}/>Re-check live status
          </Button>
        </div>
-       <div className="grid gap-3 md:grid-cols-2">
+       <div className="grid gap-3">
          {ALL_PROVIDERS.map((p) => {
            const M = providerMeta[p];
            const I = M.icon;
@@ -235,14 +235,14 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><ImageIcon size={18} className="text-cyan-700"/>Default image provider</div>
          <Button variant="ghost" size="sm" onClick={() => { loadImageProvider(); setImageMsg(null); }}>
            <RefreshCcw size={14} className="mr-1"/>Reload
          </Button>
        </div>
        <p className="mb-4 text-xs text-slate-500">Powers the campaign hero still and the 4-view avatar turnaround. Hedra is the default — 75+ image models behind one v3 endpoint, ~3.5¢ per generation. Same key as the Hedra video provider above.</p>
-       <div className="grid gap-3 md:grid-cols-2">
+       <div className="grid gap-3">
          <label className="grid gap-2 text-sm">
            <span className="font-medium">Provider</span>
            <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={imageProvider} onChange={e => {
@@ -326,7 +326,7 @@ export function SettingsConsole(){
                  <LiveDot state={dot} latency={L?.latencyMs ?? null} status={L?.status ?? null} error={L?.error ?? null} compact />
                </div>
                <p className="text-xs text-slate-500">{M.help}</p>
-               <div className="grid gap-3 md:grid-cols-2">
+               <div className="grid gap-3">
                  <label className="grid gap-2 text-sm">
                    <span>{M.label} API key</span>
                    <Input type="password" placeholder="•••••• paste to replace" onChange={e => setKey(e.target.value)} />
@@ -345,7 +345,7 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><Cpu size={18} className="text-cyan-700"/>NVIDIA Content Intelligence + Performance Monitor</div>
          <LiveDot
            state={
@@ -361,7 +361,7 @@ export function SettingsConsole(){
          NVIDIA writes the social-media package (hook / captions / hashtags / platform variants) and — once ad metrics exist — feeds winning copy + prompts back into the engine. Not a video renderer; lives alongside Veo / Grok / A2E / Hedra.
        </p>
        <div className="grid gap-3 rounded-xl border border-slate-200 bg-white/70 p-4">
-         <div className="grid gap-3 md:grid-cols-2">
+         <div className="grid gap-3">
            <label className="grid gap-2 text-sm">
              <span>NVIDIA NIM API key</span>
              <Input type="password" placeholder="nvapi-… paste to replace" onChange={e => setNvidiaKey(e.target.value)} />
@@ -382,7 +382,7 @@ export function SettingsConsole(){
                  onValueChange={setNvidiaSelection}
                  aria-label="NVIDIA NIM model"
                >
-                 <ModelSelectorTrigger className="min-h-11 w-full justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                 <ModelSelectorTrigger className="min-h-11 w-full min-w-0 justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm">
                    <ModelSelectorValue className="text-sm" />
                  </ModelSelectorTrigger>
                  <ModelSelectorContent side="bottom" />
@@ -405,7 +405,7 @@ export function SettingsConsole(){
      </Card>
 
      <Card className="p-5">
-       <div className="mb-4 flex items-center justify-between">
+       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
          <div className="flex items-center gap-2 font-medium"><Cloud size={18} className="text-slate-700"/>Steel.dev (Claw web research)</div>
          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${settings?.steel?.configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{settings?.steel?.configured ? "configured" : "not configured"}</span>
        </div>
@@ -425,7 +425,7 @@ export function SettingsConsole(){
 
      <Card className="p-5">
        <div className="mb-4 font-medium">Default output</div>
-       <div className="grid gap-4 md:grid-cols-3">
+       <div className="grid gap-4">
          <label className="grid gap-2 text-sm"><span>Resolution</span>
            <select className="h-11 rounded-xl border border-slate-200 bg-white px-3" value={resolution} onChange={e=>setResolution(e.target.value)}>
              <option>720p</option><option>1080p</option><option>4k</option>
@@ -444,7 +444,7 @@ export function SettingsConsole(){
 
      <Card className="p-5">
        <div className="mb-4 font-medium">API tokens</div>
-       <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+       <div className="grid gap-3">
          <Input value={name} onChange={e=>setName(e.target.value)} placeholder="Token label (e.g. n8n pipeline)"/>
          <Button onClick={createToken} disabled={!name}>Create token</Button>
        </div>
@@ -516,7 +516,7 @@ function YouTubeCard(){
          <Button variant="ghost" onClick={disconnect}>Disconnect</Button>
        </div>
      : <div className="grid gap-3">
-         <div className="grid gap-3 md:grid-cols-2">
+         <div className="grid gap-3">
            <Input value={clientId} onChange={e=>setClientId(e.target.value)} placeholder="Google OAuth client ID"/>
            <Input value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Google OAuth client secret" type="password"/>
          </div>

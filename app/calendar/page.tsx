@@ -335,7 +335,7 @@ function CalendarInner() {
 
       {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+      <div className="mb-4 grid gap-3">
         <Stat label="Needs approval" value={posts.filter(p => p.status === "pending").length}/>
         <Stat label="Approved" value={posts.filter(p => p.status === "approved").length}/>
         <Stat label="Auto-post enabled" value={posts.filter(p => p.autoPost).length}/>
@@ -351,7 +351,7 @@ function CalendarInner() {
         <button className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-800 hover:bg-slate-200" onClick={() => setWeek(addDays(week, 7))} aria-label="Next week"><ChevronRight/></button>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-7">
+      <div className="grid gap-3">
         {days.map(day => {
           const items = posts.filter(p => new Date(p.scheduledAt).toDateString() === day.toDateString());
           return (
@@ -506,11 +506,11 @@ function PostModal({ post, onClose, onSave }: { post: Post | null; onClose: () =
 
             {isBlog && <>
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">Full SEO article review. Edits saved here are the exact content used by the Website publisher.</div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3">
                 <label>SEO title<input value={seoTitle} onChange={e => setSeoTitle(e.target.value)} className="mt-1 h-11 w-full rounded-xl border px-3" maxLength={180}/></label>
                 <label>Focus keyword<input value={focusKeyword} onChange={e => setFocusKeyword(e.target.value)} className="mt-1 h-11 w-full rounded-xl border px-3"/></label>
                 <label>Slug<input value={slug} onChange={e => setSlug(e.target.value)} className="mt-1 h-11 w-full rounded-xl border px-3"/></label>
-                <label className="md:col-span-2">Meta description<textarea rows={2} value={metaDescription} onChange={e => setMetaDescription(e.target.value)} className="mt-1 w-full rounded-xl border p-3"/></label>
+                <label>Meta description<textarea rows={2} value={metaDescription} onChange={e => setMetaDescription(e.target.value)} className="mt-1 w-full rounded-xl border p-3"/></label>
               </div>
               <label>Article body<textarea rows={16} value={contentBody} onChange={e => setContentBody(e.target.value)} className="mt-1 w-full rounded-xl border p-3 font-mono text-xs"/></label>
             </>}

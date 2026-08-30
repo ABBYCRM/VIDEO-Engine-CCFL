@@ -137,7 +137,7 @@ export function InstagramGraphCard() {
       {instagram?.configured && !instagram.live && instagram.error && (
         <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{instagram.error}</div>
       )}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3">
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium text-slate-700">Long-lived access token</span>
           <Input type="password" value={igToken} onChange={(e) => setIgToken(e.target.value)} placeholder={instagram?.configured ? "•••••• paste to replace" : "EAA…"} />
@@ -146,7 +146,7 @@ export function InstagramGraphCard() {
           <span className="font-medium text-slate-700">Instagram Business Account id</span>
           <Input value={igUserId} onChange={(e) => setIgUserId(e.target.value)} placeholder="178414…" />
         </label>
-        <label className="grid gap-1.5 text-sm md:col-span-2">
+        <label className="grid gap-1.5 text-sm">
           <span className="font-medium text-slate-700">App secret (optional · enables appsecret_proof)</span>
           <Input type="password" value={igSecret} onChange={(e) => setIgSecret(e.target.value)} placeholder="paste only to set or replace" />
         </label>

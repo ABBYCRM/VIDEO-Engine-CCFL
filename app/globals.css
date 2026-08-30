@@ -199,3 +199,38 @@ input, textarea, select { color-scheme: light; }
 /* Smooth scrolling for in-page nav */
 html { scroll-behavior: smooth; }
 html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }
+
+/* Form controls default to `min-width: auto`, which lets their intrinsic
+ * content (e.g. a <select>'s widest <option> text) refuse to shrink below
+ * that width. Inside a CSS Grid/flex layout this doesn't just clip the
+ * control itself — the whole grid track (every sibling row in that column,
+ * including unrelated cards) gets stretched to match, then silently
+ * clipped by the html/body overflow-x:hidden rule above. Zeroing the
+ * automatic minimum lets every control shrink to its actual box and
+ * ellipsize instead of blowing out the layout on narrow viewports. */
+select, input, textarea, button {
+  min-width: 0;
+}
+
+/* This codebase uses Tailwind's `grid` utility everywhere purely for
+ * vertical stacking (cards, form rows), not for real multi-track layout.
+ * CSS Grid tracks are shared: every item in a column defaults to
+ * `min-width: auto`, so ONE child with unshrinkable content (e.g. a model
+ * picker showing a long model name) forces that column — and therefore
+ * every sibling, and every ancestor grid up the tree — wider than the
+ * viewport. Zeroing the default lets each item shrink independently, the
+ * same way normal block layout already does. */
+select {
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+/* <code> chips routinely hold long, unbreakable identifiers (redirect
+ * URLs, scope names, model ids). Normal word-break has no break
+ * opportunity in those strings, so they force their flex/grid ancestor
+ * wider than the viewport instead of wrapping — same failure mode as the
+ * <select> rule above, different element. */
+code, pre {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
