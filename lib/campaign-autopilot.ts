@@ -449,16 +449,32 @@ export function rewriteUnpublishedCaptions(campaignId?:string){
 export async function runCampaignAutopilotOnce(options:{slotId?:string}={}){
   const slotId=options.slotId?.trim()||undefined;
   if(running){if(slotId)queuedSlotIds.add(slotId);return{processed:0,queued:Boolean(slotId)};}running=true;
+  // Deliberately still throws on failure (no catch here): several interactive
+  // API routes (rearm-pending, retry-generation, unified/create) await this
+  // directly and rely on the throw to surface a real error to the operator
+  // instead of a silent {processed:0}. The fire-and-forget scheduler below
+  // is the one that needs unhandled-rejection safety, so that's handled at
+  // its own call sites instead of swallowing errors here for everyone.
   try{if(await finishGenerating(slotId))return{processed:1,queued:false};if(await generateNext(slotId))return{processed:1,queued:false};return{processed:0,queued:false};}
   finally{
     running=false;
     const next=queuedSlotIds.values().next().value as string|undefined;
-    if(next){queuedSlotIds.delete(next);const timer=setTimeout(()=>{void runCampaignAutopilotOnce({slotId:next});},0);timer.unref?.();}
+    if(next){queuedSlotIds.delete(next);const timer=setTimeout(()=>{runCampaignAutopilotOnce({slotId:next}).catch(e=>console.error("[campaign-autopilot] queued run threw unexpectedly",e));},0);timer.unref?.();}
   }
+}
+
+function tickCampaignAutopilot(){
+  // .catch() here, not `void` -- runCampaignAutopilotOnce() deliberately still
+  // throws on failure for its interactive callers (see the comment on its
+  // own try/finally above), but this loop invokes it fire-and-forget on a
+  // timer. Since Node 15 an unhandled promise rejection crashes the whole
+  // process by default, so an uncaught throw here would silently end every
+  // autonomous pipeline in the process, not just this one.
+  runCampaignAutopilotOnce().catch(e=>console.error("[campaign-autopilot] scheduled run threw unexpectedly",e));
 }
 
 export function startCampaignAutopilotLoop(){
   if(started||process.env.NODE_ENV==="test")return;started=true;
-  setTimeout(()=>{void runCampaignAutopilotOnce();},7_000).unref?.();
-  setInterval(()=>{void runCampaignAutopilotOnce();},20_000).unref?.();
+  setTimeout(tickCampaignAutopilot,7_000).unref?.();
+  setInterval(tickCampaignAutopilot,20_000).unref?.();
 }

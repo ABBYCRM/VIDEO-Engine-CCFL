@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { computePostHash, findRecentDuplicatePost } from "@/lib/post-dedup";
 import { createJob, getJob } from "@/lib/jobs";
 import { generateCampaignStill } from "@/lib/campaign-image";
 import { listAvatars } from "@/lib/avatars";
@@ -989,14 +990,18 @@ export const CLAW_TOOLS: ClawTool[] = [
       if (!body) throw new Error("body is required");
       const title = str(a.title, body.slice(0, 80));
       const scheduledAt = str(a.scheduledAt) || new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const caption = body.slice(0, 5000);
+      const contentHash = computePostHash({ network: platform, contentType: "text-post", caption });
+      const dup = findRecentDuplicatePost(contentHash);
+      if (dup) return { id: dup, platform, title, scheduledAt, status: "draft", duplicate: true, note: "Identical draft was already saved moments ago — reusing it instead of creating a second copy." };
       const id = crypto.randomUUID();
       db.prepare(
         `INSERT INTO scheduled_posts(
           id, title, network, scheduled_at, status, auto_post, caption,
           content_type, media_url, media_type, source_asset_key,
-          site_id, campaign_id, planning_horizon_days, generation_status, category
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      ).run(id, title.slice(0, 180), platform, scheduledAt, "draft", 0, body.slice(0, 5000), "text-post", null, null, null, null, null, null, "ready", str(a.category, "ugc"));
+          site_id, campaign_id, planning_horizon_days, generation_status, category, content_hash
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(id, title.slice(0, 180), platform, scheduledAt, "draft", 0, caption, "text-post", null, null, null, null, null, null, "ready", str(a.category, "ugc"), contentHash);
       return { id, platform, title, scheduledAt, status: "draft" };
     }
   },

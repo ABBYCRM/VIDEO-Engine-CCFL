@@ -27,12 +27,18 @@ CREATE TABLE IF NOT EXISTS reddit_research_runs (
 CREATE INDEX IF NOT EXISTS idx_reddit_research_runs_created_at ON reddit_research_runs(created_at);
 `);
 
-// `query` was added after the initial table shape — same ALTER-TABLE-if-
-// missing pattern used throughout this codebase (e.g. lib/calendar-assets.ts)
-// rather than a new migration number for one column.
+// `query` and `scene_summary` were added after the initial table shape —
+// same ALTER-TABLE-if-missing pattern used throughout this codebase (e.g.
+// lib/calendar-assets.ts) rather than a new migration number per column.
+// `scene_summary` holds the bare AI-authored scenario text (never the full
+// image prompt, which also carries the locked CHARACTERS/STYLE_BLOCK
+// boilerplate) from lib/cartoon-scene-writer.ts, so future runs — across
+// this pipeline AND the Site autopilot one — can be told what's already
+// been used and avoid repeating it.
 try {
   const cols = db.prepare("PRAGMA table_info(reddit_research_runs)").all() as { name: string }[];
   if (!cols.some((c) => c.name === "query")) db.exec("ALTER TABLE reddit_research_runs ADD COLUMN query TEXT");
+  if (!cols.some((c) => c.name === "scene_summary")) db.exec("ALTER TABLE reddit_research_runs ADD COLUMN scene_summary TEXT");
 } catch { /* ignore */ }
 
 export type RedditResearchRun = {
@@ -57,14 +63,15 @@ export function saveRedditResearchRun(input: {
   query?: string | null;
   category?: string | null;
   themeSummary?: string | null;
+  sceneSummary?: string | null;
   scheduledPostId?: string | null;
   error?: string | null;
 }): RedditResearchRun {
   const id = crypto.randomUUID();
   db.prepare(
     `INSERT INTO reddit_research_runs(
-      id, status, trigger, posts_scanned, comments_scanned, query, category, theme_summary, scheduled_post_id, error
-    ) VALUES(?,?,?,?,?,?,?,?,?,?)`
+      id, status, trigger, posts_scanned, comments_scanned, query, category, theme_summary, scene_summary, scheduled_post_id, error
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id,
     input.status,
@@ -74,11 +81,24 @@ export function saveRedditResearchRun(input: {
     input.query ?? null,
     input.category ?? null,
     input.themeSummary ? input.themeSummary.slice(0, 2000) : null,
+    input.sceneSummary ? input.sceneSummary.slice(0, 500) : null,
     input.scheduledPostId ?? null,
     input.error ? input.error.slice(0, 2000) : null
   );
   const row = db.prepare("SELECT * FROM reddit_research_runs WHERE id=?").get(id) as any;
   return rowToRun(row);
+}
+
+/** Recent AI-authored scene summaries from THIS pipeline's successful runs,
+ *  most recent first — feeds lib/cartoon-scene-writer.ts's "already used, do
+ *  not repeat" list. Combined with the Site autopilot pipeline's own recent
+ *  scenes (lib/cartoon-scene-writer.ts's getRecentCartoonSceneSummaries) so
+ *  neither pipeline repeats the other's output either. */
+export function recentSceneSummaries(limit = 20): { sceneSummary: string; createdAt: string }[] {
+  const rows = db.prepare(
+    `SELECT scene_summary, created_at FROM reddit_research_runs WHERE status='success' AND scene_summary IS NOT NULL ORDER BY created_at DESC LIMIT ?`
+  ).all(limit) as { scene_summary: string; created_at: string }[];
+  return rows.map((r) => ({ sceneSummary: r.scene_summary, createdAt: r.created_at }));
 }
 
 export function listRedditResearchRuns(limit = 20): RedditResearchRun[] {

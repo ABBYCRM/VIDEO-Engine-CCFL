@@ -214,6 +214,13 @@ export function planCartoonStill(input: {
   category: string;
   seed?: string | null;
   templateId?: string | null;
+  /** A pipeline-supplied, freshly AI-authored scene (see
+   *  lib/cartoon-scene-writer.ts) that bypasses the fixed-pool variant pick
+   *  below entirely — this is the fix for the fixed 2-3-entry variant pool
+   *  otherwise cycling back to exact repeats under perpetual autonomous
+   *  operation. Undefined/null falls back to the original deterministic
+   *  pick unchanged. */
+  variantOverride?: CartoonVariant | null;
 }): {
   template: CartoonTemplateDef;
   variant: CartoonVariant;
@@ -224,6 +231,16 @@ export function planCartoonStill(input: {
   const template =
     getCartoonTemplate(input.templateId) ||
     pickCartoonTemplateForCategory(input.category, input.seed);
+  if (input.variantOverride) {
+    const variant = input.variantOverride;
+    return {
+      template,
+      variant,
+      variantIndex: -1,
+      imagePrompt: buildCartoonImagePrompt(template, variant),
+      overlay: buildCartoonOverlaySpec(template, variant, -1),
+    };
+  }
   const idx = Math.abs(hashStr(`${template.id}:${input.seed || "default"}`)) % template.variants.length;
   const variant = template.variants[idx] || {
     scene: "",
