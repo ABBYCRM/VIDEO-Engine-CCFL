@@ -19,8 +19,8 @@ function resolveReferencePath(referenceImagePath:string){
 }
 function mimeFor(pathname:string){const lower=pathname.toLowerCase();return lower.endsWith(".png")?"image/png":lower.endsWith(".webp")?"image/webp":"image/jpeg";}
 
-async function editWithGemini(referencePath:string|null,prompt:string,model:string){
-  const key=getImageApiKey(),ac=new AbortController(),timer=setTimeout(()=>ac.abort(),45_000);
+async function editWithGemini(referencePath:string|null,prompt:string,model:string, apiKey?: string){
+  const key=apiKey ?? getImageApiKey(),ac=new AbortController(),timer=setTimeout(()=>ac.abort(),45_000);
   const parts:Array<Record<string,unknown>>=[{text:prompt}];
   if(referencePath){
     const b64=(await fs.readFile(referencePath)).toString("base64");
@@ -33,8 +33,8 @@ async function editWithGemini(referencePath:string|null,prompt:string,model:stri
     const data=json.candidates?.[0]?.content?.parts?.find(p=>p.inline_data?.data)?.inline_data?.data;if(!data)throw new ImageUpstreamError("Gemini returned no image",502);return{base64:data,mimeType:"image/png",model};
   }finally{clearTimeout(timer)}
 }
-async function editWithOpenAI(referencePath:string|null,prompt:string,model:string){
-  const key=getImageApiKey(),ac=new AbortController(),timer=setTimeout(()=>ac.abort(),120_000);
+async function editWithOpenAI(referencePath:string|null,prompt:string,model:string, apiKey?: string){
+  const key=apiKey ?? getImageApiKey(),ac=new AbortController(),timer=setTimeout(()=>ac.abort(),120_000);
   try{
     let r:Response;
     if(!referencePath || model==="dall-e-3"){
@@ -142,33 +142,95 @@ async function editWithHedra(referencePath:string|null,prompt:string,model:strin
   }finally{clearTimeout(submitTimer)}
 }
 
-async function renderWithConfiguredProvider(prompt:string, referencePath:string|null){
-  const provider=getImageProvider(),model=getImageModel();
-  if(provider==="a2e"){
-    const generated=await generateA2eGptImage({prompt,model,referencePath,aspectRatio:"9:16"});
-    return{base64:generated.png.toString("base64"),mimeType:"image/png",model:generated.model};
+// One render call → one image. The chain below tries the configured
+// provider first, then walks a fixed fallback order if that one throws.
+// Without this, a single transient failure (Hedra job 4xx, Grok HTTP 400,
+// Veo busy, etc.) used to kill the Site/IG autopilot pipeline for the
+// whole day even when 4 other live providers were ready to render the
+// same prompt. The cartoon stills path in particular has no reference
+// image requirement, so the chain is unrestricted there.
+async function renderWithConfiguredProvider(prompt: string, referencePath: string | null) {
+  const errors: Array<{ provider: string; error: string }> = [];
+  // Configured provider first (operator's pick). Then the live fallback
+  // order — the chain skips providers that can't do the job (xAI without
+  // a reference path is not allowed; OpenAI without a key is not
+  // allowed) and tries the rest in this order: gemini, a2e, openai,
+  // hedra, xai. Veo is the Google video model and not on this list —
+  // the cartoon/photoreal still path doesn't use it.
+  const configuredFirst = (() => {
+    const p = getImageProvider();
+    const m = getImageModel();
+    if (p === "a2e")     return { provider: "a2e",     fn: () => generateA2eGptImage({ prompt, model: m, referencePath, aspectRatio: "9:16" }).then((g) => ({ base64: g.png.toString("base64"), mimeType: "image/png" as const, model: g.model })) };
+    if (p === "openai")  return { provider: "openai",  fn: () => editWithOpenAI(referencePath, prompt, m) };
+    if (p === "gemini")  return { provider: "gemini",  fn: () => editWithGemini(referencePath, prompt, m) };
+    if (p === "hedra")   return { provider: "hedra",   fn: () => editWithHedra(referencePath, prompt, m) };
+    if (p === "xai")     return { provider: "xai",     fn: async () => {
+      if (referencePath) throw new ImageUpstreamError("xAI cannot edit a canonical reference; pass null referencePath or pick another provider", 400);
+      return renderWithXai(prompt, m);
+    } };
+    if (p === "mock")   return { provider: "mock",    fn: async () => { throw new ImageUpstreamError("Mock image mode cannot produce a campaign-ready still.", 400); } };
+    // Unknown / unset default → Hedra, same behavior as before.
+    return { provider: "hedra", fn: () => editWithHedra(referencePath, prompt, m) };
+  })();
+
+  // Configured provider is the operator's choice — try it first; on
+  // failure, fall through.
+  const tryOrder: Array<{ provider: string; fn: () => Promise<{ base64: string; mimeType: string; model: string }> }> = [configuredFirst];
+  // Fallback chain (skip if same as configured, skip if known-bad here).
+  const fallbacks: Array<{ provider: string; fn: () => Promise<{ base64: string; mimeType: string; model: string }> }> = [
+    { provider: "gemini", fn: () => editWithGemini(referencePath, prompt, "gemini-2.5-flash-image") },
+    { provider: "a2e",    fn: () => generateA2eGptImage({ prompt, model: "gpt-image-1.5", referencePath, aspectRatio: "9:16" }).then((g) => ({ base64: g.png.toString("base64"), mimeType: "image/png" as const, model: g.model })) },
+    { provider: "openai", fn: () => editWithOpenAI(referencePath, prompt, "gpt-image-1") },
+    { provider: "hedra",  fn: () => editWithHedra(referencePath, prompt, "gpt-image-2") }
+  ];
+  for (const fb of fallbacks) if (fb.provider !== configuredFirst.provider) tryOrder.push(fb);
+  // xAI last because it can't take a reference — if the configured
+  // provider is anything that needs a reference AND all configured-
+  // family fallbacks failed, we'd rather drop the reference and try
+  // xAI than fail the whole render.
+  if (!referencePath) tryOrder.push({ provider: "xai", fn: () => renderWithXai(prompt, "grok-imagine-image") });
+
+  for (const attempt of tryOrder) {
+    try {
+      const result = await attempt.fn();
+      if (errors.length) {
+        console.warn(`[campaign-image] primary provider ${configuredFirst.provider} failed; fell through ${errors.map((e) => e.provider).join(", ")} and rendered via ${attempt.provider}`);
+      }
+      return result;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push({ provider: attempt.provider, error: msg });
+      // Continue to the next provider. Only stop when we run out.
+    }
   }
-  if(provider==="openai")return editWithOpenAI(referencePath,prompt,model);
-  if(provider==="gemini")return editWithGemini(referencePath,prompt,model);
-  if(provider==="hedra")return editWithHedra(referencePath,prompt,model);
-  if(provider==="xai"){
-    if(referencePath)throw new ImageUpstreamError("The selected xAI image provider cannot edit a canonical reference. Choose A2E, Gemini, or OpenAI for identity-preserving campaign stills.",400);
-    const key=getImageApiKey(),ac=new AbortController(),timer=setTimeout(()=>ac.abort(),45_000);
-    try{
-      const r=await fetch("https://api.x.ai/v1/images/generations",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},signal:ac.signal,body:JSON.stringify({model:model.startsWith("grok-")?model:"grok-imagine-image",prompt,n:1})});
-      if(!r.ok)throw new ImageUpstreamError(`xAI image API HTTP ${r.status}: ${(await r.text()).slice(0,300)}`,r.status);
-      const json=await r.json() as {data?:Array<{url?:string;b64_json?:string}>};
-      const item=json.data?.[0];
-      if(item?.b64_json)return{base64:item.b64_json,mimeType:"image/png",model};
-      if(!item?.url)throw new ImageUpstreamError("xAI returned no image",502);
-      const dl=await fetch(item.url,{signal:ac.signal,cache:"no-store"});
-      if(!dl.ok)throw new ImageUpstreamError(`xAI image download HTTP ${dl.status}`,dl.status);
-      return{base64:Buffer.from(await dl.arrayBuffer()).toString("base64"),mimeType:"image/png",model};
-    }finally{clearTimeout(timer)}
+  // Every provider failed. Surface the chain so the run log shows
+  // exactly which ones the operator needs to investigate.
+  const summary = errors.map((e) => `${e.provider}: ${e.error.slice(0, 120)}`).join(" | ");
+  throw new ImageUpstreamError(`All image providers failed. Chain: ${summary}`, 502);
+}
+
+async function renderWithXai(prompt: string, model: string) {
+  const key = getImageApiKey();
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 45_000);
+  try {
+    const r = await fetch("https://api.x.ai/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      signal: ac.signal,
+      body: JSON.stringify({ model: model.startsWith("grok-") ? model : "grok-imagine-image", prompt, n: 1 })
+    });
+    if (!r.ok) throw new ImageUpstreamError(`xAI image API HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`, r.status);
+    const json = await r.json() as { data?: Array<{ url?: string; b64_json?: string }> };
+    const item = json.data?.[0];
+    if (item?.b64_json) return { base64: item.b64_json, mimeType: "image/png", model };
+    if (!item?.url) throw new ImageUpstreamError("xAI returned no image", 502);
+    const dl = await fetch(item.url, { signal: ac.signal, cache: "no-store" });
+    if (!dl.ok) throw new ImageUpstreamError(`xAI image download HTTP ${dl.status}`, dl.status);
+    return { base64: Buffer.from(await dl.arrayBuffer()).toString("base64"), mimeType: "image/png", model };
+  } finally {
+    clearTimeout(timer);
   }
-  if(provider==="mock")throw new ImageUpstreamError("Mock image mode cannot produce a campaign-ready still.",400);
-  const fresh=await generateAvatarImage({prompt});
-  return{base64:fresh.base64,mimeType:fresh.mimeType,model:fresh.model};
 }
 
 function sanitizeStillPrompt(raw:string){

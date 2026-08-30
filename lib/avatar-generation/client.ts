@@ -46,6 +46,24 @@ export function getImageApiKey(): string {
   if (provider === "hedra") return getProviderKey("hedra");
   throw new Error("Image API key is not configured");
 }
+
+// Per-provider key lookup for the image-fallback chain in
+// lib/campaign-image.ts. getImageApiKey() above only returns the key for
+// the currently CONFIGURED provider, which means a fallback call
+// (e.g. configured=Hedra, falling through to Gemini) would call
+// Gemini with the Hedra key and 401. This resolver takes an explicit
+// provider and returns its key from the same sources, throwing when
+// the requested provider's key isn't configured so the chain can
+// skip it cleanly.
+export function getImageApiKeyForProvider(provider: ImageProvider): string {
+  if (provider === "openai" && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+  if (provider === "gemini" && process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+  if (provider === "xai" && process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
+  if (provider === "a2e") return getProviderKey("a2e");
+  if (provider === "hedra") return getProviderKey("hedra");
+  if (provider === "mock") return "mock";
+  throw new Error(`No API key configured for image provider "${provider}"`);
+}
 export function saveImageApiKey(value: string) { setRaw(SETTING_KEY, encryptSecret(value.trim())); }
 export function isImageProviderConfigured(): boolean {
   if (getImageProvider() === "mock") return true;

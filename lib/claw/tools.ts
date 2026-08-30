@@ -433,18 +433,38 @@ export const CLAW_TOOLS: ClawTool[] = [
   },
   {
     name: "ig_analyze_media",
-    description: "Look at what a specific Instagram post actually shows (not just its caption/metadata) — style, subject, whether it's a real photo vs. an illustration/3D render, etc. Get the id from ig_list_media first. Requires direct Graph credentials (INSTAGRAM_MCP_ACCESS_TOKEN) — Composio's media-URL field isn't verified in this build, so this only works via the Graph path regardless of which provider is primary for other Instagram tools. For a carousel post this looks at the first slide only.",
+    description: "Look at what a specific Instagram post actually shows (not just its caption/metadata) — style, subject, whether it's a real photo vs. an illustration/3D render, etc. Get the id from ig_list_media first. Requires direct Graph credentials (INSTAGRAM_MCP_ACCESS_TOKEN saved in Settings → Integrations, or in the INSTAGRAM_MCP_ACCESS_TOKEN env var); Composio's media-URL field shape isn't verified in this build, so this tool only works via the Graph path regardless of which provider is primary for other Instagram tools. If Graph isn't configured the tool returns {configured:false, reason:\"...\"} instead of throwing — the model should skip it and proceed with the rest of its task. For a carousel post this looks at the first slide only.",
     args: "{\"mediaId\":\"...\",\"question\":\"optional — defaults to a general style/content description\"}",
     handler: async (a) => {
       const mediaId = str(a.mediaId || a.id);
       if (!mediaId) throw new Error("mediaId is required — call ig_list_media first to get a real one");
-      const visual = await getMediaVisual(mediaId);
-      if (!visual.imageUrl) {
-        throw new Error(visual.mediaType ? `No fetchable image URL for this ${visual.mediaType} (Graph didn't return media_url/thumbnail_url — the media may be inaccessible or a video still processing).` : "Could not resolve this media id via Graph.");
+      // Fail-soft when Graph isn't configured: return a structured
+      // {configured:false} response instead of throwing, so the model
+      // can continue with the rest of the task (e.g. operator asked
+      // "list the recent posts" + "what style are they" — the model
+      // can answer the list and skip the style guess, instead of
+      // blowing up the whole turn on a missing Graph token).
+      if (!isInstagramConfigured()) {
+        return {
+          mediaId,
+          configured: false,
+          reason: "Instagram Graph is not configured (no INSTAGRAM_MCP_ACCESS_TOKEN). Save it in Settings → Integrations or set the env var, then retry. The image-style analysis needs a Graph token because Composio's media-URL field shape isn't verified in this build. ig_list_media / ig_get_comments / ig_reply_comment still work via the Composio path."
+        };
       }
-      const question = str(a.question, "Describe what this image actually shows: subject, setting, and visual style — specifically call out whether it looks like a real photograph, a Pixar/Disney-style 3D animated render, a 2D illustration, or something else.");
-      const description = await analyzeImage({ imageUrl: visual.imageUrl, question });
-      return { mediaId, mediaType: visual.mediaType, carouselChildCount: visual.carouselChildCount, description };
+      try {
+        const visual = await getMediaVisual(mediaId);
+        if (!visual.imageUrl) {
+          return { mediaId, configured: true, reason: visual.mediaType ? `No fetchable image URL for this ${visual.mediaType} (Graph didn't return media_url/thumbnail_url — the media may be inaccessible or a video still processing).` : "Could not resolve this media id via Graph." };
+        }
+        const question = str(a.question, "Describe what this image actually shows: subject, setting, and visual style — specifically call out whether it looks like a real photograph, a Pixar/Disney-style 3D animated render, a 2D illustration, or something else.");
+        const description = await analyzeImage({ imageUrl: visual.imageUrl, question });
+        return { mediaId, configured: true, mediaType: visual.mediaType, carouselChildCount: visual.carouselChildCount, description };
+      } catch (e) {
+        // Even when Graph IS configured, a single failing media id should
+        // not blow up the whole turn. Return a structured error and let
+        // the model continue.
+        return { mediaId, configured: true, reason: e instanceof Error ? e.message : String(e) };
+      }
     }
   },
   {

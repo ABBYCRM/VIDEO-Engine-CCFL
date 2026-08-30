@@ -80,7 +80,15 @@ export function getActiveConnectedAccountId(toolkit: string, userId = "admin"): 
   ).get(toolkit, userId) as { connected_account_id: string } | undefined;
   if (exact?.connected_account_id) return exact.connected_account_id;
   const fallback = db.prepare(
-    "SELECT connected_account_id, user_id FROM connected_accounts WHERE toolkit=? AND UPPER(status)='ACTIVE' ORDER BY (user_id=?) DESC, updated_at DESC LIMIT 1"
+    // Use COALESCE(last_sync_at, created_at) as the freshness sort key:
+    // the table (lib/db.ts CREATE TABLE) has no `updated_at` column. The
+    // row inserted by syncConnectedAccounts() bumps last_sync_at on every
+    // refresh; rows from a fresh sync on a freshly-created connection
+    // have no last_sync_at yet, so created_at is the right fallback. A
+    // previous version of this query (the user_id-fallback fix, 2026-08-30)
+    // referenced `updated_at` directly and crashed on every Reddit call
+    // with "no such column: updated_at". This is the in-place fix.
+    "SELECT connected_account_id, user_id FROM connected_accounts WHERE toolkit=? AND UPPER(status)='ACTIVE' ORDER BY (user_id=?) DESC, COALESCE(last_sync_at, created_at) DESC LIMIT 1"
   ).get(toolkit, userId) as { connected_account_id: string; user_id: string } | undefined;
   if (fallback?.connected_account_id) {
     console.warn(`[composio] ${toolkit}: no active row for user_id="${userId}", falling back to user_id="${fallback.user_id}". This is fine for a single-operator app but means the OAuth flow that created this row bound it to a non-default user_id string.`);

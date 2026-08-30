@@ -13,16 +13,26 @@ type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
 type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
 
-// Autopilot triggers two independent things on one click:
-//   1. A normal Claw chat turn (AUTOPILOT_PROMPT below) — still runs through
-//      the normal AION confirmation gate and the daily generation cap
-//      (lib/claw/runtime.ts's DAILY_GENERATION_LIMIT) before any real spend
-//      happens, and only ever drafts (save_post, never auto-published).
-//   2. A direct call to the Reddit market-research pipeline
-//      (runRedditResearchNow below), which bypasses the chat/AION loop
-//      entirely — same pattern as Calendar's "Run autopilot" button — and
-//      really does publish immediately, so pressing the button once
-//      produces a live, checkable result rather than another draft.
+// The Autopilot button is a fully autonomous one-click action. It fires
+// two direct pipeline calls (Reddit market-research + Site/IG autopilot)
+// in parallel. Each pipeline makes its own decisions end to end:
+//   - Reddit:        scan + anonymize + theme-classify + fresh-scene-author
+//                    + still-render + caption-from-library + publish-now
+//   - Site/IG:       steel_scrape caseclosedfl.com + category-rotate +
+//                    fresh-scene-author + still-render + caption-from-library
+//                    + publish-now
+// Both gate themselves on connection state + the shared daily generation
+// cap, and either returns a specific reason on skip/fail. They bypass
+// Claw's chat loop on purpose: the operator is gone after pressing the
+// button, so a CONFIRM round-trip is the wrong shape here.
+//
+// A chat turn (the AUTOPILOT_PROMPT below, plus anything the operator
+// types) is for operator-in-the-loop drafting. It runs through the AION
+// gate and the daily cap, and any EXTERNAL_POST tool it wants to fire
+// (publish_calendar, ig_publish, x_post, ...) is held until the
+// operator replies "CONFIRM <tool_name>". The two pipelines above are
+// not "smarter chat turns" — they are deliberately the part of the
+// system that does not ask.
 const AUTOPILOT_PROMPT = `Run the brand-consistent Instagram content task:
 1. Use steel_scrape on caseclosedfl.com (homepage and one or two other key pages) to confirm the current brand voice and messaging.
 2. Call ig_list_media to see recent posts, then use ig_analyze_media on a handful of likely candidates (narrow first by caption/date, don't analyze every post) to find which existing posts use the Pixar-style 3D cartoon look (navy side panel, orange CaseClosedFL.com footer bar, animated character/vehicle scene) versus other styles.
@@ -197,7 +207,23 @@ export function ClawConsole() {
   }
 
   function runAutopilot() {
-    void send(AUTOPILOT_PROMPT);
+    // One click, fully autonomous: the operator is gone after this press.
+    // No chat turn, no "CONFIRM" round-trip — the two direct pipeline
+    // calls below are already designed to make every decision themselves
+    // (Reddit anonymization + theme classification + caption-from-library;
+    // Site-IG steel_scrape + category rotation + pre-approved caption;
+    // both gated by the daily generation cap + the connection-state
+    // preflight, both ending in a real published post when every gate
+    // passes). Anything that can't go live comes back with a specific
+    // reason in the on-screen status text.
+    //
+    // The chat turn was previously also fired from this button, but the
+    // operator-directive 2026-08-30 ("once I hit it it has to act fully
+    // independent, no follow-up") makes a chat turn the wrong shape here:
+    // it would block on the first EXTERNAL_POST tool that needs CONFIRM,
+    // the model would surface a pause request, and the operator (gone)
+    // never replies. The two direct pipelines don't have that problem
+    // because they bypass Claw's chat/AION loop by design.
     void runRedditResearchNow();
     void runSiteAutopilotNow();
   }
