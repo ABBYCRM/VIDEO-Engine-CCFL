@@ -38,17 +38,29 @@ export async function startOneShot(input: VeoStartInput): Promise<string> {
     instance.image = { inlineData: { mimeType: input.imageMimeType, data: input.imageBase64 } };
   }
 
+  // Veo 3.1 model parameter set:
+  //   - aspectRatio, durationSeconds, resolution: supported
+  //   - numberOfVideos: REMOVED in 3.1 (the legacy 2.x parameter;
+  //     3.1 always returns exactly 1 sample per call)
+  //   - personGeneration: kept on allow_adult; safe for a lawyer-
+  //     marketing use case where the actor is the operator's own
+  //     avatar. If a future 3.x revision drops this too, the
+  //     Google API returns a 400 saying "personGeneration isn't
+  //     supported" and the campaign-autopilot recovery walks past
+  //     Veo to the next provider.
+  //   - negativePrompt: added in 3.1, safe to send.
+  const parameters: Record<string, unknown> = {
+    aspectRatio: input.aspectRatio,
+    durationSeconds: 8, // ONE CONTINUOUS SHOT ONLY
+    resolution: input.resolution,
+    personGeneration: "allow_adult"
+  };
+
   const response = await googleFetch(`${BASE_URL}/models/${encodeURIComponent(input.model)}:predictLongRunning`, {
     method: "POST",
     body: JSON.stringify({
       instances: [instance],
-      parameters: {
-        aspectRatio: input.aspectRatio,
-        durationSeconds: 8, // ONE CONTINUOUS SHOT ONLY
-        resolution: input.resolution,
-        numberOfVideos: 1,
-        personGeneration: "allow_adult"
-      }
+      parameters
     })
   });
   const operation = await response.json() as { name?: string };

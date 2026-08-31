@@ -76,9 +76,19 @@ export function unattendedLaneProvider(provider: ProviderId, model?: string | nu
 }
 
 export function nextLaneFallback(failed: ProviderId): ProviderId | null {
+  // Round-robin chain so a failed provider is never retried twice in a
+  // row. The original mapping (hedra→a2e→grok→veo) was a one-way
+  // linear chain that terminated at Veo with no exit, so a Veo
+  // failure left the slot permanently stuck. New chain wraps around:
+  // a Veo failure falls through to Hedra, and any other failure
+  // continues clockwise. campaign-autopilot still short-circuits
+  // the loop to pending_manual if every entry in the chain has
+  // been tried (see the fallbackProvider() === null guard in
+  // generateNext's cinematic branch).
   if (failed === "hedra") return "a2e";
   if (failed === "a2e") return "grok";
   if (failed === "grok") return "veo";
+  if (failed === "veo") return "hedra";
   return null;
 }
 
