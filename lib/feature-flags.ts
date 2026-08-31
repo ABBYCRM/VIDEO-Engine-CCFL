@@ -28,6 +28,23 @@ export function isRedditAutopilotEnabled(): boolean {
   return REDDIT_AUTOPILOT_ENABLED;
 }
 
+// CLAW_ENABLED — master switch for the Claw AI chat console
+// (lib/claw/* and /api/claw/*). When false:
+//   - /api/claw/chat returns 503 immediately (no NVIDIA LLM call, no
+//     tool invocations, no SSE stream opened)
+//   - /api/claw/conversations and /api/claw/files are read-only
+//   - the Claw page renders a "Claw is disabled" banner
+//   - every tool the Claw runtime would call (Composio, Steel, NVIDIA
+//     Vision, Instagram Graph, Hedra/A2E/Gemini/OpenAI/Grok image gen)
+//     is short-circuited: the request never leaves the process.
+// Defaults to on; set CLAW_ENABLED=false to disconnect every Claw
+// external connection without a redeploy.
+export const CLAW_ENABLED: boolean = process.env.CLAW_ENABLED !== "false";
+
+export function isClawEnabled(): boolean {
+  return CLAW_ENABLED;
+}
+
 /**
  * Build a standard 410 Gone response for routes that are intentionally disabled.
  * Includes a `feature` so the UI can surface the right message.

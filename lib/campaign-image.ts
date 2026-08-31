@@ -176,7 +176,16 @@ async function renderWithConfiguredProvider(prompt: string, referencePath: strin
   // Configured provider is the operator's choice — try it first; on
   // failure, fall through.
   const tryOrder: Array<{ provider: string; fn: () => Promise<{ base64: string; mimeType: string; model: string }> }> = [configuredFirst];
-  // Fallback chain (skip if same as configured, skip if known-bad here).
+  // Operator-locked image fallback chain (2026-08-30): only the providers
+  // the operator has paid budget for, in the order they want them tried.
+  //   1. Hedra   (paid)
+  //   2. Gemini  (Google, paid)
+  //   3. Grok    (xAI, paid)
+  //   4. OpenAI  (paid)
+  // A2E and the (no-reference-only) xAI generation path are intentionally
+  // dropped from the daily chain because the operator hasn't allocated
+  // budget for them; they're available via explicit /api/avatar-generation
+  // and /api/internal/ugc/batch calls if needed.
   //
   // Every fallback call resolves its OWN key via getImageApiKeyForProvider,
   // never getImageApiKey() (which returns the key for whatever provider is
@@ -189,17 +198,16 @@ async function renderWithConfiguredProvider(prompt: string, referencePath: strin
   // than resolving the key eagerly here) means an unconfigured fallback is
   // just another caught-and-skipped attempt, same as a real upstream error.
   const fallbacks: Array<{ provider: string; fn: () => Promise<{ base64: string; mimeType: string; model: string }> }> = [
+    { provider: "hedra",  fn: () => editWithHedra(referencePath, prompt, "gpt-image-2") },
     { provider: "gemini", fn: () => editWithGemini(referencePath, prompt, "gemini-2.5-flash-image", getImageApiKeyForProvider("gemini")) },
-    { provider: "a2e",    fn: () => generateA2eGptImage({ prompt, model: "gpt-image-1.5", referencePath, aspectRatio: "9:16", apiKey: getImageApiKeyForProvider("a2e") }).then((g) => ({ base64: g.png.toString("base64"), mimeType: "image/png" as const, model: g.model })) },
-    { provider: "openai", fn: () => editWithOpenAI(referencePath, prompt, "gpt-image-1", getImageApiKeyForProvider("openai")) },
-    { provider: "hedra",  fn: () => editWithHedra(referencePath, prompt, "gpt-image-2") }
+    { provider: "openai", fn: () => editWithOpenAI(referencePath, prompt, "gpt-image-1", getImageApiKeyForProvider("openai")) }
   ];
+  // xAI/Grok last and ONLY if there's no reference path (it can't edit
+  // a canonical avatar — it would reject the call). The cartoon-stills
+  // path runs without a reference, so the operator still gets xAI in
+  // that one case.
+  if (!referencePath) fallbacks.push({ provider: "xai", fn: () => renderWithXai(prompt, "grok-imagine-image", getImageApiKeyForProvider("xai")) });
   for (const fb of fallbacks) if (fb.provider !== configuredFirst.provider) tryOrder.push(fb);
-  // xAI last because it can't take a reference — if the configured
-  // provider is anything that needs a reference AND all configured-
-  // family fallbacks failed, we'd rather drop the reference and try
-  // xAI than fail the whole render.
-  if (!referencePath) tryOrder.push({ provider: "xai", fn: () => renderWithXai(prompt, "grok-imagine-image", getImageApiKeyForProvider("xai")) });
 
   for (const attempt of tryOrder) {
     try {
