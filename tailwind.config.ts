@@ -11,7 +11,11 @@ export default {
         border: "hsl(var(--border))",
         muted: "hsl(var(--muted))",
         "muted-foreground": "hsl(var(--muted-foreground))",
-        primary: "hsl(var(--primary))"
+        primary: "hsl(var(--primary))",
+        popover: "hsl(var(--popover))",
+        "popover-foreground": "hsl(var(--popover-foreground))",
+        ring: "hsl(var(--ring))",
+        accent: "hsl(var(--accent))"
       }
     }
   },

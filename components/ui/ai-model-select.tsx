@@ -244,6 +244,11 @@ export interface ModelSelectorKitProps {
   disabled?: boolean
   className?: string
   "aria-label"?: string
+  /** Which way the popup opens relative to the trigger. Defaults to "bottom" — the
+   *  common case for this component (a compact trigger near the top of a header)
+   *  has no room to open upward without the popup covering the trigger and the
+   *  content above it. */
+  side?: "top" | "bottom"
 }
 
 // ---------------------------------------------------------------------------
@@ -1347,6 +1352,7 @@ function ModelSelectorKit({
   disabled,
   className,
   "aria-label": ariaLabel,
+  side = "bottom",
 }: ModelSelectorKitProps) {
   return (
     <ModelSelector
@@ -1361,7 +1367,7 @@ function ModelSelectorKit({
       <ModelSelectorTrigger>
         <ModelSelectorValue />
       </ModelSelectorTrigger>
-      <ModelSelectorContent />
+      <ModelSelectorContent side={side} />
     </ModelSelector>
   )
 }
