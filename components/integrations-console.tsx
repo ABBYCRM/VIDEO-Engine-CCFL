@@ -42,10 +42,21 @@ export function IntegrationsConsole() {
   }
 
   const reload = useCallback(async () => {
-    const r = await fetch("/api/integrations/composio", { cache: "no-store" });
-    const d = await r.json();
-    if (r.ok) {
+    const r = await fetch("/api/integrations/composio", { cache: "no-store", credentials: "same-origin" });
+    const d = await r.json().catch(() => null);
+    if (r.ok && d) {
       setOverview({ configured: d.configured, toolkits: d.toolkits || [] });
+    } else {
+      // Fall back to the public health endpoint so the page can still
+      // show "configured / not configured" without admin auth. The
+      // toolkit list is empty in this case.
+      try {
+        const hr = await fetch("/api/health", { cache: "no-store" });
+        if (hr.ok) {
+          const hd = await hr.json();
+          setOverview({ configured: !!hd?.checks?.composio?.configured, toolkits: [] });
+        }
+      } catch { /* leave overview null */ }
     }
   }, []);
 
@@ -61,7 +72,7 @@ export function IntegrationsConsole() {
     if (!composioKey.trim()) return;
     setBusy((b) => ({ ...b, _key: true }));
     try {
-      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ apiKey: composioKey }) });
+      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ apiKey: composioKey }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Save failed");
       pushFlash("success", "Composio API key saved");
@@ -76,7 +87,7 @@ export function IntegrationsConsole() {
     if (!authConfigId.trim()) return;
     setBusy((b) => ({ ...b, [`auth_${toolkit}`]: true }));
     try {
-      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ toolkit, authConfigId }) });
+      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ toolkit, authConfigId }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Save failed");
       pushFlash("success", `Auth config id saved for ${toolkit}`);
@@ -90,7 +101,7 @@ export function IntegrationsConsole() {
   async function connect(toolkit: string) {
     setBusy((b) => ({ ...b, [`connect_${toolkit}`]: true }));
     try {
-      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ toolkit, action: "connect" }) });
+      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ toolkit, action: "connect" }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Connect failed");
       if (d.redirectUrl) {
@@ -108,7 +119,7 @@ export function IntegrationsConsole() {
     if (!confirm("Disconnect this account?")) return;
     setBusy((b) => ({ ...b, [`disconnect_${connectedAccountId}`]: true }));
     try {
-      const r = await fetch(`/api/integrations/composio?connectedAccountId=${encodeURIComponent(connectedAccountId)}`, { method: "DELETE" });
+      const r = await fetch(`/api/integrations/composio?connectedAccountId=${encodeURIComponent(connectedAccountId)}`, { method: "DELETE", credentials: "same-origin" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Disconnect failed");
       pushFlash("success", "Disconnected");
@@ -121,7 +132,7 @@ export function IntegrationsConsole() {
   async function refreshOne(connectedAccountId: string) {
     setBusy((b) => ({ ...b, [`refresh_${connectedAccountId}`]: true }));
     try {
-      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "refresh", connectedAccountId }) });
+      const r = await fetch("/api/integrations/composio", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "refresh", connectedAccountId }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Refresh failed");
       pushFlash("success", `Status: ${d.status}`);
@@ -134,7 +145,7 @@ export function IntegrationsConsole() {
   async function syncAll() {
     setBusy((b) => ({ ...b, _sync: true }));
     try {
-      const r = await fetch("/api/integrations/composio/sync", { method: "POST" });
+      const r = await fetch("/api/integrations/composio/sync", { method: "POST", credentials: "same-origin" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Sync failed");
       pushFlash("success", `Synced ${d.synced ?? 0} account(s)`);

@@ -13,6 +13,24 @@ type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
 type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
 
+type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category"; category?: string; skillIds?: string[] };
+
+// The Claw "starter" prompts are RAG-driven: a /api/claw/suggestions
+// endpoint walks the dev-skills corpus and returns both tool-driven
+// prompts (each maps to a real Claw tool) and RAG-driven prompts
+// (each opens a record from the curated dev knowledge). The component
+// fetches on mount, caches in state, and renders the buttons; if the
+// fetch fails (or before it resolves) the inline DEFAULT_SUGGESTIONS
+// below stand in. The new prompts are deliberately code-grounded
+// (TypeScript narrowing, SQL escape, OAuth2 PKCE, OWASP top 10, etc.)
+// not the generic "communicate clearly" filler the operator
+// specifically told us to leave out.
+const DEFAULT_SUGGESTIONS: Suggestion[] = [
+  { label: "Research a public URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
+  { label: "List dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
+  { label: "Find a skill by id", prompt: "Call dev_skill_get for 'sql.like-escape' and show me the body verbatim.", source: "tool" }
+];
+
 // The Autopilot button is a fully autonomous one-click action. It fires
 // two direct pipeline calls (Reddit market-research + Site/IG autopilot)
 // in parallel. Each pipeline makes its own decisions end to end:
@@ -61,6 +79,7 @@ export function ClawConsole() {
   const [streaming, setStreaming] = useState("");
   const [tools, setTools] = useState<ToolChip[]>([]);
   const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>(DEFAULT_SUGGESTIONS);
   const [error, setError] = useState<string | null>(null);
   const [pane, setPane] = useState<"chat" | "threads" | "files">("chat");
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -100,6 +119,19 @@ export function ClawConsole() {
   useEffect(() => { void loadConvs(); }, [loadConvs]);
   useEffect(() => { if (active) void loadThread(active); }, [active, loadThread]);
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); }, [messages, streaming, tools]);
+  useEffect(() => {
+    // RAG-driven starter prompts. Fetches on mount; on failure falls
+    // back to the hardcoded DEFAULT_SUGGESTIONS in state.
+    let cancelled = false;
+    fetch("/api/claw/suggestions", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d || !Array.isArray(d.suggestions)) return;
+        if (d.suggestions.length > 0) setSuggestions(d.suggestions);
+      })
+      .catch(() => { /* keep defaults */ });
+    return () => { cancelled = true; };
+  }, []);
 
   async function newThread() {
     const r = await fetch("/api/claw/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
@@ -356,10 +388,19 @@ export function ClawConsole() {
                 {!visible.length && !streaming && (
                   <div className="mx-auto max-w-xl rounded-2xl border border-violet-100 bg-violet-50/60 p-5">
                     <div className="text-base font-semibold text-violet-900">Talk to Claw</div>
-                    <p className="mt-1 text-sm text-slate-600">Same controls as this Grok thread: new, delete, upload, files. Claw can research the public web with Steel, generate, post, read IG comments, and DMs. Composio runs first; direct Graph is the reported fallback.</p>
+                    <p className="mt-1 text-sm text-slate-600">Same controls as this Grok thread: new, delete, upload, files. Claw can research the public web with Steel, call any Composio toolkit (Instagram, Reddit, X, LinkedIn, GitHub, Gmail, Slack, Notion, …) by exact slug, screenshot pages, search the web, analyze images, and answer developer questions from the curated dev-skills RAG. Each chip below is a one-click prompt grounded in a real record from the corpus.</p>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      {["Research a public URL with Steel", "Read today’s Instagram comments", "What’s stuck in Pipeline?", "Approve pending Calendar slots"].map((q) => (
-                        <button key={q} type="button" className="rounded-full border border-violet-200 bg-white px-3 py-1 text-violet-800" onClick={() => setText(q)}>{q}</button>
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={`${s.source}-${s.skillIds?.[0] || s.label}-${i}`}
+                          type="button"
+                          title={s.source === "rag" && s.skillIds ? `From dev-skill: ${s.skillIds.join(", ")}` : s.source === "tool" ? "Calls a real Claw tool" : "Starter"}
+                          className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-white px-3 py-1 text-violet-800"
+                          onClick={() => setText(s.prompt)}
+                        >
+                          {s.source === "rag" ? <Sparkles size={10} className="text-violet-500"/> : null}
+                          <span>{s.label}</span>
+                        </button>
                       ))}
                     </div>
                   </div>
