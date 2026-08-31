@@ -12,7 +12,7 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      service: "VIDEO-Engine",
+      service: "Honey Badger",
       check: "readiness"
     },
     {

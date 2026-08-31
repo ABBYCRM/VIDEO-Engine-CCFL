@@ -1,6 +1,6 @@
 {
-  "name": "VIDEO-Engine CCFL",
-  "short_name": "VIDEO-Engine",
+  "name": "Honey Badger / Claw",
+  "short_name": "Honey Badger",
   "description": "Single-shot Veo 3.1 generation API and PI/UGC campaign console",
   "start_url": "/",
   "display": "standalone",

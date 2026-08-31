@@ -2,17 +2,17 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VIDEO-Engine",
-  description: "Single-shot Veo 3.1 generation API and PI/UGC campaign console",
+  title: "Honey Badger",
+  description: "Claw + Composio + Steel + NVIDIA operator console",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "VIDEO-Engine",
+    title: "Honey Badger"
   },
   formatDetection: {
-    telephone: false,
-  },
+    telephone: false
+  }
 };
 
 // Mobile-first viewport. We let the device pick its natural width (so the layout
@@ -26,7 +26,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  themeColor: "#ffffff"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
