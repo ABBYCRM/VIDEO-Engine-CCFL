@@ -13,7 +13,7 @@ export default function Login() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     const r = await fetch("/api/admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) });
-    if (r.ok) router.replace("/"); else setError("Invalid password");
+    if (r.ok) router.replace("/claw"); else setError("Invalid password");
   }
   return (
     <main className="grid min-h-screen place-items-center px-4">
