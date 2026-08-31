@@ -29,8 +29,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-white text-slate-900">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur">
         <Link href="/claw" className="flex items-center gap-2">
-          <span className="text-[15px] font-semibold tracking-tight">Claw</span>
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">CCFL</span>
+          <span className="text-[15px] font-semibold tracking-tight">Honey Badger</span>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">CLAW</span>
         </Link>
         <button
           type="button"
@@ -52,10 +52,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between border-b border-slate-200 p-3">
               <Link href="/claw" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
                 <span className="bg-gradient-to-r from-violet-700 via-violet-500 to-violet-700 bg-clip-text text-base font-semibold tracking-tight text-transparent">
-                  Claw
+                  Honey Badger
                 </span>
                 <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                  CCFL
+                  CLAW
                 </span>
               </Link>
               <button

@@ -1,7 +1,15 @@
 import crypto from "node:crypto";
 import { cookies, headers } from "next/headers";
 
-const COOKIE = "video_engine_session";
+const COOKIE = "claw_session";
+
+// Operator-locked unlock code (2026-08-30): the admin password is
+// hardcoded to "1234". The DO env ADMIN_PASSWORD (encrypted, not
+// changeable without re-encrypt + redeploy) is ignored by the login
+// route. If the operator wants to roll this back to env-driven auth,
+// restore the check at app/api/admin/login/route.ts.
+export const ADMIN_UNLOCK_CODE = "1234";
+
 function secret() { const s = process.env.SESSION_SECRET; if (!s || s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters"); return s; }
 function sign(payload: string) { return crypto.createHmac("sha256", secret()).update(payload).digest("base64url"); }
 export function createSessionValue() {

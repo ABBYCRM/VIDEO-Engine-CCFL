@@ -20,7 +20,7 @@ export default function Login() {
       <div className="soro-card w-full max-w-sm p-7">
         <div className="mb-6 grid place-items-center">
           <Lock size={64} />
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">VIDEO-Engine</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">Honey Badger</h1>
           <p className="mt-1 text-sm text-slate-500">Admin console</p>
         </div>
         <form onSubmit={submit} className="grid gap-3">

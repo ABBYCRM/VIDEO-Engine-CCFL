@@ -43,7 +43,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
-    service: "VIDEO-Engine / Claw only",
+    service: "Honey Badger / Claw only",
     durationMs: Date.now() - startedAt,
     checks: {
       database: dbCheck.ok ? { ok: true, ...(dbCheck.value as object) } : { ok: false, error: dbCheck.error },

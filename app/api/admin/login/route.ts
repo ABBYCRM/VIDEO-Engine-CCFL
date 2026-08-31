@@ -1,24 +1,23 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
+import { ADMIN_UNLOCK_CODE } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-// Single-credential admin login for the Claw console. Compares the
-// supplied password against the APP_ENCRYPTION_KEY-derived
-// ADMIN_PASSWORD env (set on DigitalOcean). On success, mints a
-// session row in the `sessions` table and returns its id in a
-// `claw_session` cookie.
+// Single-credential admin login for the Claw console. Operator-locked
+// unlock code (lib/auth.ts ADMIN_UNLOCK_CODE) wins over the DO env
+// ADMIN_PASSWORD so the operator can change the unlock without a
+// DO re-encrypt + redeploy. On success, mints a session row in the
+// `sessions` table and returns its id in a `claw_session` cookie.
 export async function POST(req: Request) {
   const { password } = await req.json().catch(() => ({}));
   if (typeof password !== "string" || !password) {
     return NextResponse.json({ error: "password is required" }, { status: 400 });
   }
-  const expected = process.env.ADMIN_PASSWORD || "";
-  if (!expected) {
-    return NextResponse.json({ error: "ADMIN_PASSWORD is not set on the server" }, { status: 500 });
-  }
-  if (password !== expected) {
+  // Accept the operator-locked code, OR (if env is set) the env value.
+  const ok = password === ADMIN_UNLOCK_CODE || (process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD);
+  if (!ok) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
   const sessionId = crypto.randomUUID();
