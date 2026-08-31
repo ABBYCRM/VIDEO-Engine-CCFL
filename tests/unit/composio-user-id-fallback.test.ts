@@ -1,23 +1,40 @@
 // Direct test of the SQL queries from lib/composio/client.ts
 // getActiveConnectedAccountId(). Avoids the @/lib/... import path issue
-// (same pattern as tests/unit/aion-policy-completeness.test.ts).
+// (same pattern as tests/unit/aion-policy-completeness.test.ts) by
+// extracting the literal query strings from the source file's raw text
+// instead of hand-copying them — a hand-copy previously drifted out of
+// sync with a real fix (the fallback query used to reference a
+// non-existent `updated_at` column; production was fixed to
+// `COALESCE(last_sync_at, created_at)` on 2026-08-30, but this test's
+// private copy kept the stale column and a matching fake schema column,
+// so it kept passing while testing SQL nothing in production still runs).
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import Database from "better-sqlite3";
 
-// Same SQL the production code runs.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SOURCE = fs.readFileSync(path.join(__dirname, "../../lib/composio/client.ts"), "utf8");
+
+function extractQuery(pattern: RegExp): string {
+  const match = SOURCE.match(pattern);
+  assert.ok(match, `expected to find a query matching ${pattern} in lib/composio/client.ts`);
+  return match[1];
+}
+
+const EXACT_SQL = extractQuery(/"(SELECT connected_account_id FROM connected_accounts WHERE toolkit=\? AND user_id=\?[^"]*)"/);
+const FALLBACK_SQL = extractQuery(/"(SELECT connected_account_id, user_id FROM connected_accounts WHERE toolkit=\?[^"]*)"/);
+
 function getActiveExact(db: any, toolkit: string, userId: string): string | null {
-  const row = db.prepare(
-    "SELECT connected_account_id FROM connected_accounts WHERE toolkit=? AND user_id=? AND UPPER(status)='ACTIVE' LIMIT 1"
-  ).get(toolkit, userId) as { connected_account_id: string } | undefined;
+  const row = db.prepare(EXACT_SQL).get(toolkit, userId) as { connected_account_id: string } | undefined;
   return row?.connected_account_id || null;
 }
 
 function getActiveFallback(db: any, toolkit: string, preferredUserId: string): string | null {
-  const row = db.prepare(
-    "SELECT connected_account_id FROM connected_accounts WHERE toolkit=? AND UPPER(status)='ACTIVE' ORDER BY (user_id=?) DESC, updated_at DESC LIMIT 1"
-  ).get(toolkit, preferredUserId) as { connected_account_id: string } | undefined;
+  const row = db.prepare(FALLBACK_SQL).get(toolkit, preferredUserId) as { connected_account_id: string } | undefined;
   return row?.connected_account_id || null;
 }
 
@@ -33,7 +50,6 @@ function setupDb() {
       alias TEXT,
       raw_json TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       last_sync_at TEXT,
       UNIQUE(toolkit, user_id)
     );
@@ -62,11 +78,11 @@ test("falls back to a non-admin user_id when admin has no row (THE BUG)", () => 
 
 test("prefers the requested user_id when both exist", () => {
   const db = setupDb();
-  db.prepare("INSERT INTO connected_accounts(id, toolkit, connected_account_id, user_id, status, updated_at) VALUES(?,?,?,?,?,?)")
+  db.prepare("INSERT INTO connected_accounts(id, toolkit, connected_account_id, user_id, status, last_sync_at) VALUES(?,?,?,?,?,?)")
     .run("row1", "instagram", "ca_admin_ig", "admin", "ACTIVE", "2026-08-24");
-  db.prepare("INSERT INTO connected_accounts(id, toolkit, connected_account_id, user_id, status, updated_at) VALUES(?,?,?,?,?,?)")
+  db.prepare("INSERT INTO connected_accounts(id, toolkit, connected_account_id, user_id, status, last_sync_at) VALUES(?,?,?,?,?,?)")
     .run("row2", "instagram", "ca_other_ig", "nova-luis", "ACTIVE", "2026-08-25");
-  assert.equal(getActiveFallback(db, "instagram", "admin"), "ca_admin_ig", "admin row wins even if other was updated more recently");
+  assert.equal(getActiveFallback(db, "instagram", "admin"), "ca_admin_ig", "admin row wins even if the other one synced more recently");
 });
 
 test("ignores EXPIRED rows", () => {
