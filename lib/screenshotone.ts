@@ -6,6 +6,7 @@
 // just the raw base64 + mime — Claw returns it inline and the operator
 // can copy it out of the chat.
 import crypto from "node:crypto";
+import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { validateSteelUrl } from "@/lib/steel-url";
 
@@ -13,13 +14,19 @@ const ACCESS_KEY_SETTING = "screenshotone_access_key";
 const SECRET_KEY_SETTING = "screenshotone_secret_key";
 const TIMEOUT_MS = 30_000;
 
+function setRaw(key: string, value: string) {
+  db.prepare(
+    "INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP"
+  ).run(key, value);
+}
+
 export function saveScreenshotOneCredentials(input: { accessKey?: string; secretKey?: string }) {
-  if (input.accessKey) encryptSecret(input.accessKey.trim());
-  if (input.secretKey) encryptSecret(input.secretKey.trim());
+  if (input.accessKey) setRaw(ACCESS_KEY_SETTING, encryptSecret(input.accessKey.trim()));
+  if (input.secretKey) setRaw(SECRET_KEY_SETTING, encryptSecret(input.secretKey.trim()));
 }
 
 function getRaw(key: string): string | null {
-  const v = (require("@/lib/db") as any).db.prepare("SELECT value FROM settings WHERE key=?").get(key) as { value: string } | undefined;
+  const v = db.prepare("SELECT value FROM settings WHERE key=?").get(key) as { value: string } | undefined;
   if (!v) return null;
   try { return decryptSecret(v.value); } catch { return v.value; }
 }
