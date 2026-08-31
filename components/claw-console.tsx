@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bird, Copy, FilePlus2, FolderOpen, Paperclip, Pencil, Plus, Send, Sparkles, Square, Trash2, X
 } from "lucide-react";
@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { AuthGuard } from "@/components/auth-guard";
 import { Button } from "@/components/ui/button";
 import AILoader from "@/components/ui/ai-loader";
+import { ModelSelectorKit, type AiModel } from "@/components/ui/ai-model-select";
 
 type Conv = { id: string; title: string; createdAt: string; updatedAt: string };
 type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content: string; toolJson?: any; createdAt: string };
@@ -30,33 +31,6 @@ const DEFAULT_SUGGESTIONS: Suggestion[] = [
   { label: "List dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
   { label: "Find a skill by id", prompt: "Call dev_skill_get for 'sql.like-escape' and show me the body verbatim.", source: "tool" }
 ];
-
-// The Autopilot button is a fully autonomous one-click action. It fires
-// two direct pipeline calls (Reddit market-research + Site/IG autopilot)
-// in parallel. Each pipeline makes its own decisions end to end:
-//   - Reddit:        scan + anonymize + theme-classify + fresh-scene-author
-//                    + still-render + caption-from-library + publish-now
-//   - Site/IG:       steel_scrape caseclosedfl.com + category-rotate +
-//                    fresh-scene-author + still-render + caption-from-library
-//                    + publish-now
-// Both gate themselves on connection state + the shared daily generation
-// cap, and either returns a specific reason on skip/fail. They bypass
-// Claw's chat loop on purpose: the operator is gone after pressing the
-// button, so a CONFIRM round-trip is the wrong shape here.
-//
-// A chat turn (the AUTOPILOT_PROMPT below, plus anything the operator
-// types) is for operator-in-the-loop drafting. It runs through the AION
-// gate and the daily cap, and any EXTERNAL_POST tool it wants to fire
-// (publish_calendar, ig_publish, x_post, ...) is held until the
-// operator replies "CONFIRM <tool_name>". The two pipelines above are
-// not "smarter chat turns" — they are deliberately the part of the
-// system that does not ask.
-const AUTOPILOT_PROMPT = `Run the brand-consistent Instagram content task:
-1. Use steel_scrape on caseclosedfl.com (homepage and one or two other key pages) to confirm the current brand voice and messaging.
-2. Call ig_list_media to see recent posts, then use ig_analyze_media on a handful of likely candidates (narrow first by caption/date, don't analyze every post) to find which existing posts use the Pixar-style 3D cartoon look (navy side panel, orange CaseClosedFL.com footer bar, animated character/vehicle scene) versus other styles.
-3. Generate at most 3 NEW still images matching that same look using generate_still with a cartoon-* stillTemplateId (or category) — do not invent a different "Pixar style" prompt from scratch, use the existing template system.
-4. Write matching captions in the site's brand voice and save each as a draft Calendar post (save_post) — do NOT publish them.
-5. Report back what you found and what you drafted. If you hit the daily generation cap partway through, stop and tell me instead of retrying.`;
 
 function sseParse(chunk: string, onEvent: (e: any) => void, carry: { buf: string }) {
   carry.buf += chunk;
@@ -84,12 +58,10 @@ export function ClawConsole() {
   const [pane, setPane] = useState<"chat" | "threads" | "files">("chat");
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState("");
-  const [redditRunStatus, setRedditRunStatus] = useState<string | null>(null);
-  const [redditRunBusy, setRedditRunBusy] = useState(false);
-  const [siteRunStatus, setSiteRunStatus] = useState<string | null>(null);
-  const [siteRunBusy, setSiteRunBusy] = useState(false);
-  const [autopilotEnabled, setAutopilotEnabledState] = useState<boolean | null>(null);
-  const [autopilotToggling, setAutopilotToggling] = useState(false);
+  const [models, setModels] = useState<{ id: string; label: string; notes: string; contextWindow: number }[]>([]);
+  const [model, setModel] = useState<string | null>(null);
+  const [modelEnvOverridden, setModelEnvOverridden] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -132,6 +104,44 @@ export function ClawConsole() {
       .catch(() => { /* keep defaults */ });
     return () => { cancelled = true; };
   }, []);
+
+  const loadModel = useCallback(async () => {
+    try {
+      const r = await fetch("/api/claw/model", { cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      setModels(d.models || []);
+      setModel(d.model);
+      setModelEnvOverridden(Boolean(d.envOverridden));
+    } catch { /* keep whatever we had */ }
+  }, []);
+  useEffect(() => { void loadModel(); }, [loadModel]);
+
+  async function changeModel(next: string) {
+    if (modelEnvOverridden || modelSaving || next === model) return;
+    setModelSaving(true);
+    const prev = model;
+    setModel(next);
+    try {
+      const r = await fetch("/api/claw/model", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: next }) });
+      if (!r.ok) { setModel(prev); const d = await r.json().catch(() => ({})); setError(d.error || "Failed to change model"); }
+    } catch (e) {
+      setModel(prev);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setModelSaving(false);
+    }
+  }
+
+  const aiModels: AiModel[] = useMemo(
+    () => models.map((m) => ({
+      id: m.id,
+      label: m.label,
+      description: m.notes,
+      contexts: [m.contextWindow]
+    })),
+    [models]
+  );
 
   async function newThread() {
     const r = await fetch("/api/claw/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
@@ -189,96 +199,6 @@ export function ClawConsole() {
     else await loadConvs();
   }
 
-  // Fires the Reddit market-research pipeline directly (bypassing Claw's
-  // chat/AION loop, same pattern as Calendar's "Run autopilot" button) so
-  // one click actually goes live and the operator can check the outcome
-  // immediately, instead of needing a follow-up "CONFIRM" reply.
-  async function runRedditResearchNow() {
-    setRedditRunBusy(true);
-    setRedditRunStatus("Reddit research: scanning…");
-    try {
-      const r = await fetch("/api/admin/reddit-research/run-now", { method: "POST" });
-      const d = await r.json();
-      if (!r.ok) { setRedditRunStatus(`Reddit research failed: ${d.error || r.status}`); return; }
-      if (d.status === "success") {
-        setRedditRunStatus(d.published ? `Posted live — ${d.category} (check Instagram)` : `Queued — ${d.category} (publishing within the minute)`);
-      } else if (d.status === "skipped") {
-        setRedditRunStatus(`Skipped: ${d.reason}`);
-      } else {
-        setRedditRunStatus(`Failed: ${d.reason || "unknown error"}`);
-      }
-    } catch (e) {
-      setRedditRunStatus(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRedditRunBusy(false);
-    }
-  }
-
-  // Fires the Site/IG autopilot pipeline directly — same rationale as
-  // runRedditResearchNow above (bypasses chat/AION, publishes for real,
-  // reports the outcome immediately).
-  async function runSiteAutopilotNow() {
-    setSiteRunBusy(true);
-    setSiteRunStatus("Site autopilot: generating…");
-    try {
-      const r = await fetch("/api/admin/site-autopilot/run-now", { method: "POST" });
-      const d = await r.json();
-      if (!r.ok) { setSiteRunStatus(`Site autopilot failed: ${d.error || r.status}`); return; }
-      if (d.status === "success") {
-        setSiteRunStatus(d.published ? `Posted live — ${d.category} (check Instagram)` : `Queued — ${d.category} (publishing within the minute)`);
-      } else if (d.status === "skipped") {
-        setSiteRunStatus(`Skipped: ${d.reason}`);
-      } else {
-        setSiteRunStatus(`Failed: ${d.reason || "unknown error"}`);
-      }
-    } catch (e) {
-      setSiteRunStatus(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSiteRunBusy(false);
-    }
-  }
-
-  function runAutopilot() {
-    // One click, fully autonomous: the operator is gone after this press.
-    // No chat turn, no "CONFIRM" round-trip — the two direct pipeline
-    // calls below are already designed to make every decision themselves
-    // (Reddit anonymization + theme classification + caption-from-library;
-    // Site-IG steel_scrape + category rotation + pre-approved caption;
-    // both gated by the daily generation cap + the connection-state
-    // preflight, both ending in a real published post when every gate
-    // passes). Anything that can't go live comes back with a specific
-    // reason in the on-screen status text.
-    //
-    // The chat turn was previously also fired from this button, but the
-    // operator-directive 2026-08-30 ("once I hit it it has to act fully
-    // independent, no follow-up") makes a chat turn the wrong shape here:
-    // it would block on the first EXTERNAL_POST tool that needs CONFIRM,
-    // the model would surface a pause request, and the operator (gone)
-    // never replies. The two direct pipelines don't have that problem
-    // because they bypass Claw's chat/AION loop by design.
-    void runRedditResearchNow();
-    void runSiteAutopilotNow();
-  }
-
-  const loadAutopilotState = useCallback(async () => {
-    try {
-      const r = await fetch("/api/admin/autopilot");
-      if (r.ok) setAutopilotEnabledState((await r.json()).enabled);
-    } catch { /* ignore */ }
-  }, []);
-  useEffect(() => { void loadAutopilotState(); }, [loadAutopilotState]);
-
-  async function toggleAutopilot() {
-    if (autopilotEnabled === null) return;
-    setAutopilotToggling(true);
-    try {
-      const r = await fetch("/api/admin/autopilot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: !autopilotEnabled }) });
-      if (r.ok) setAutopilotEnabledState((await r.json()).enabled);
-    } finally {
-      setAutopilotToggling(false);
-    }
-  }
-
   async function send(overrideText?: string) {
     if (busy) return;
 
@@ -296,8 +216,8 @@ export function ClawConsole() {
     }
     const optimistic: Msg = { id: "local-user", role: "user", content: body, createdAt: new Date().toISOString() };
     setMessages((m) => [...m, optimistic]);
-    // Only clear the box for a normal send — an override (Autopilot) sends
-    // its own text without touching whatever draft the operator was typing.
+    // Only clear the box for a normal send — a caller passing overrideText
+    // sends its own text without touching whatever draft was being typed.
     if (overrideText === undefined) setText("");
     const fileIds = pendingFiles.map((f) => f.id);
     setPendingFiles([]);
@@ -353,16 +273,13 @@ export function ClawConsole() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={autopilotEnabled === null || autopilotToggling}
-                onClick={toggleAutopilot}
-                title={autopilotEnabled ? "Autopilot is running (Reddit + Site/IG pipelines). Click to stop — same as typing \"stop\" to Claw." : "Autopilot is paused. Click to resume — same as typing \"start\" to Claw."}
-                className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${autopilotEnabled ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-slate-100 text-slate-500"}`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${autopilotEnabled ? "bg-emerald-500" : "bg-slate-400"}`} />
-                {autopilotEnabled === null ? "…" : autopilotEnabled ? "Auto: On" : "Auto: Off"}
-              </button>
+              <ModelSelectorKit
+                aria-label={modelEnvOverridden ? "Model is fixed by the CLAW_NVIDIA_MODEL environment variable" : "Choose the NVIDIA model Claw uses"}
+                models={aiModels}
+                value={model ? { id: model } : undefined}
+                onValueChange={(sel) => void changeModel(sel.id)}
+                disabled={!models.length || modelEnvOverridden || modelSaving}
+              />
               <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "threads" ? "chat" : "threads")}>Threads</button>
               <button type="button" className="rounded-lg border px-2 py-1 text-xs" onClick={() => setPane(pane === "files" ? "chat" : "files")}>Files</button>
               <Button size="sm" variant="secondary" onClick={newThread}><Plus size={14} className="mr-1" />New</Button>
@@ -461,31 +378,9 @@ export function ClawConsole() {
                     ))}
                   </div>
                 )}
-                {redditRunStatus && (
-                  <div className="mx-auto mb-2 max-w-[440px] rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
-                    {redditRunBusy && <span className="mr-1 inline-block animate-pulse">●</span>}
-                    Reddit: {redditRunStatus}
-                  </div>
-                )}
-                {siteRunStatus && (
-                  <div className="mx-auto mb-2 max-w-[440px] rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
-                    {siteRunBusy && <span className="mr-1 inline-block animate-pulse">●</span>}
-                    Site: {siteRunStatus}
-                  </div>
-                )}
                 <div className="mx-auto flex max-w-[440px] items-end gap-2">
                   <input ref={fileInput} type="file" className="hidden" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
                   <button type="button" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => fileInput.current?.click()} aria-label="Upload files"><Paperclip size={16} /></button>
-                  <button
-                    type="button"
-                    disabled={busy || redditRunBusy}
-                    className="grid h-10 w-10 place-items-center rounded-xl border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50"
-                    onClick={runAutopilot}
-                    aria-label="Autopilot: brand-consistent Instagram content task + live Reddit-driven post"
-                    title="Autopilot: drafts up to 3 site/IG-matched stills (never auto-published) AND immediately runs the Reddit market-research pipeline, which posts live so you can check the outcome right away"
-                  >
-                    <Sparkles size={16} />
-                  </button>
                   <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}

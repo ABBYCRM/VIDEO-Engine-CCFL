@@ -56,6 +56,23 @@ export function getClawModel(): NvidiaModelId {
   return DEFAULT_CLAW_NVIDIA_MODEL;
 }
 
+// Persists the operator's chosen Claw model to the `settings` table. A
+// CLAW_NVIDIA_MODEL env var still wins at read time (see getClawModel
+// above) — this only changes the DB-persisted fallback used when no env
+// override is set.
+export function setClawModel(model: NvidiaModelId): void {
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+  ).run(CLAW_MODEL_KEY, model);
+}
+
+// Whether an env var is currently overriding the persisted model — the
+// UI needs this to explain why a pick doesn't "stick" visibly.
+export function isClawModelEnvOverridden(): boolean {
+  return Boolean(process.env.CLAW_NVIDIA_MODEL);
+}
+
 export function isNvidiaEnabled(): boolean {
   return getNvidiaModel() !== "disabled" && (Boolean(getRaw(SETTINGS_KEY)) || Boolean(process.env.NVIDIA_API_KEY));
 }

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { cookies, headers } from "next/headers";
+import { db } from "@/lib/db";
 
 const COOKIE = "claw_session";
 
@@ -12,22 +13,22 @@ export const ADMIN_UNLOCK_CODE = "1234";
 
 function secret() { const s = process.env.SESSION_SECRET; if (!s || s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters"); return s; }
 function sign(payload: string) { return crypto.createHmac("sha256", secret()).update(payload).digest("base64url"); }
-export function createSessionValue() {
-  const exp = Date.now() + 12 * 60 * 60 * 1000;
-  const payload = Buffer.from(JSON.stringify({ exp }), "utf8").toString("base64url");
-  return `${payload}.${sign(payload)}`;
+
+// The login route (app/api/admin/login/route.ts) mints a row in the
+// `sessions` table and hands back its id as a plain claw_session cookie
+// value — this checks that row, the same way GET /api/admin/session does.
+function hasActiveSession(sessionId: string | undefined): boolean {
+  if (!sessionId) return false;
+  const row = db.prepare(
+    `SELECT expires_at, revoked_at FROM sessions WHERE id = ?`
+  ).get(sessionId) as { expires_at: string; revoked_at: string | null } | undefined;
+  if (!row || row.revoked_at) return false;
+  return new Date(row.expires_at).getTime() > Date.now();
 }
-export function verifySessionValue(value?: string | null) {
-  if (!value) return false;
-  const [payload, sig] = value.split(".");
-  if (!payload || !sig) return false;
-  const expected = sign(payload);
-  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
-  try { const body = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); return Number(body.exp) > Date.now(); } catch { return false; }
-}
+
 export async function requireAdmin() {
   const jar = await cookies();
-  if (verifySessionValue(jar.get(COOKIE)?.value)) return true;
+  if (hasActiveSession(jar.get(COOKIE)?.value)) return true;
   try {
     const h = await headers();
     const auth = h.get("authorization") || "";
