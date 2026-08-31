@@ -52,6 +52,26 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL,
   revoked_at TEXT
 );
+
+-- Composio connected accounts. migrations/004_integrations.sql defines
+-- this same table for the Postgres path (scripts/migrate.mjs, which
+-- no-ops without DATABASE_URL); this app runs SQLite-only since the
+-- Postgres mirror was stripped, so it must exist here too or every
+-- Composio route (lib/composio/client.ts, app/api/integrations/*,
+-- lib/settings.ts) throws "no such table: connected_accounts".
+CREATE TABLE IF NOT EXISTS connected_accounts (
+  id TEXT PRIMARY KEY,
+  toolkit TEXT NOT NULL,
+  connected_account_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  alias TEXT,
+  raw_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_sync_at TEXT,
+  UNIQUE(toolkit, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_connected_accounts_toolkit ON connected_accounts(toolkit);
 `);
 
 // Claw chat tables. The Claw console owns these end-to-end; no other
