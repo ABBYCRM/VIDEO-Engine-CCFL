@@ -148,7 +148,7 @@ export function IntegrationsConsole() {
       const r = await fetch("/api/integrations/composio/sync", { method: "POST", credentials: "same-origin" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Sync failed");
-      pushFlash("success", `Synced ${d.synced ?? 0} account(s)`);
+      pushFlash("success", `Synced ${d.mirrored ?? 0} account(s)`);
       await reload();
     } catch (e) {
       pushFlash("failed", e instanceof Error ? e.message : String(e));
