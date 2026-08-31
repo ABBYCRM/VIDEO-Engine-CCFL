@@ -305,7 +305,6 @@ export function ClawConsole() {
                 {!visible.length && !streaming && (
                   <div className="mx-auto max-w-xl rounded-2xl border border-violet-100 bg-violet-50/60 p-5">
                     <div className="text-base font-semibold text-violet-900">Talk to Claw</div>
-                    <p className="mt-1 text-sm text-slate-600">Same controls as this Grok thread: new, delete, upload, files. Claw can research the public web with Steel, call any Composio toolkit (Instagram, Reddit, X, LinkedIn, GitHub, Gmail, Slack, Notion, …) by exact slug, screenshot pages, search the web, analyze images, and answer developer questions from the curated dev-skills RAG. Each chip below is a one-click prompt grounded in a real record from the corpus.</p>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       {suggestions.map((s, i) => (
                         <button
