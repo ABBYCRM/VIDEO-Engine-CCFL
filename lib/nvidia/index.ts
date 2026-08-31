@@ -1,9 +1,15 @@
-// Adapter entry-point for the NVIDIA subsystem. UI / routes import from here
-// only — the model selection, key retrieval, and schema validation are
-// encapsulated so swapping the NIM model never touches call sites.
-
-export * from "./models";
-export * from "./schemas";
-export * from "./client";
-export { writeSocialPackage, writeStandalonePost, NvidiaContentError, type ContentWriterInput, type ContentWriterResult, type StandalonePostInput } from "./content-writer";
-export { runMonitor, NvidiaMonitorError, type AdMetric, type MonitorInput } from "./monitor";
+// lib/nvidia/index.ts — Claw-only re-exports.
+export {
+  getNvidiaApiKey,
+  getNvidiaModel,
+  getClawModel,
+  isNvidiaEnabled,
+  chatCompletion,
+  chatCompletionStream,
+  type ChatMessage,
+  type ChatRequest,
+  type ChatResponse
+} from "./client";
+export type { NvidiaModelId } from "./models";
+export { NVIDIA_MODELS, DEFAULT_CLAW_NVIDIA_MODEL, isNvidiaModelId } from "./models";
+export { analyzeImage } from "./vision";

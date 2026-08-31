@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DuckMark } from "@/components/duck-mark";
+// 2026-08-30: DuckMark stripped with the rest of the pre-Claw build
 
 export default function Login() {
   const [password, setPassword] = useState("");
@@ -19,7 +19,7 @@ export default function Login() {
     <main className="grid min-h-screen place-items-center px-4">
       <div className="soro-card w-full max-w-sm p-7">
         <div className="mb-6 grid place-items-center">
-          <DuckMark size={64} />
+          <Lock size={64} />
           <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">VIDEO-Engine</h1>
           <p className="mt-1 text-sm text-slate-500">Admin console</p>
         </div>

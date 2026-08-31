@@ -9,6 +9,7 @@
 // HTTP status, the truncated error message, and a redacted length.
 
 import { DEFAULT_CLAW_NVIDIA_MODEL, NVIDIA_BASE, isNvidiaModelId, type NvidiaModelId } from "./models";
+export { isNvidiaModelId } from "./models";
 import { applyThinkingMode } from "./request";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
@@ -108,7 +109,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
     if (e instanceof NvidiaAuthError) throw e;
     throw new NvidiaAuthError(e instanceof Error ? e.message : String(e));
   }
-  const body: Record<string, unknown> = {
+  const body: any = {
     model: req.model,
     messages: req.messages,
     temperature: req.temperature ?? 0.7,
@@ -130,7 +131,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
         "Accept": "application/json",
         ...extraHeaders
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body as any),
       cache: "no-store",
       signal: req.signal ?? ac!.signal
     });
@@ -167,7 +168,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
 export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: string) => void): Promise<ChatResponse> {
   if (req.model === "disabled") throw new NvidiaDisabledError();
   const key = getNvidiaApiKey();
-  const body: Record<string, unknown> = {
+  const body: any = {
     model: req.model,
     messages: req.messages,
     temperature: req.temperature ?? 0.3,
@@ -188,7 +189,7 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
         Accept: "text/event-stream",
         ...extraHeaders
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body as any),
       cache: "no-store",
       signal: req.signal ?? ac!.signal
     });

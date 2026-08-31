@@ -199,3 +199,111 @@ export async function executeComposioTool(toolkit: string, slug: string, args: R
   }
   return result;
 }
+
+// Claw-facing thin wrappers (added 2026-08-30 "Claw only" repo strip).
+// These are the two functions Claw's tools.ts uses; the per-network
+// adapters (reddit-composio.ts, instagram-composio.ts, x-composio.ts,
+// linkedin-composio.ts) are stripped with the rest of the pre-Claw
+// build, so the granular "in and out" Composio passthrough that the
+// operator asked for is the only Composio surface left.
+
+export type ComposioHealth = {
+  configured: boolean;
+  live: boolean;
+  toolkits: Array<{ id: string; label: string; status: string; lastSyncAt: string | null }>;
+  note?: string;
+};
+
+export async function composioHealth(): Promise<ComposioHealth> {
+  const configured = isComposioConfigured();
+  if (!configured) {
+    return {
+      configured: false,
+      live: false,
+      toolkits: [],
+      note: "Composio is not configured. Set COMPOSIO_API_KEY in the app env, or save it under the composio_api_key setting."
+    };
+  }
+  // Pull the latest connected-account snapshot from the local DB; the
+  // Claw health endpoint is supposed to be fast, so we don't ping
+  // Composio's server here. If you want a live reachability probe,
+  // hit /api/integrations/composio instead (admin-only).
+  try {
+    syncConnectedAccounts();
+  } catch (e) {
+    return { configured: true, live: false, toolkits: [], note: `Composio sync failed: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const rows = db.prepare(
+    `SELECT toolkit, status, last_sync_at FROM connected_accounts WHERE UPPER(status)='ACTIVE' ORDER BY toolkit ASC`
+  ).all() as Array<{ toolkit: string; status: string; last_sync_at: string | null }>;
+  return {
+    configured: true,
+    live: true,
+    toolkits: rows.map((r) => {
+      const meta = getToolkitMeta(r.toolkit);
+      return { id: r.toolkit, label: meta.label, status: r.status, lastSyncAt: r.last_sync_at };
+    })
+  };
+}
+
+export type ComposioActionInput = {
+  slug: string;
+  args: Record<string, unknown>;
+  toolkit?: string;
+  userId?: string;
+};
+
+export type ComposioActionResult =
+  | { ok: true; slug: string; toolkit: string | null; data: unknown }
+  | { ok: false; slug: string; toolkit: string | null; error: string; code?: string };
+
+/**
+ * Call any Composio tool by exact slug. The "in" half is the args dict
+ * the operator (or the LLM on the operator's behalf) provides; the
+ * "out" half is the raw upstream payload, returned as-is so the
+ * operator can see exactly what the upstream returned. Errors are
+ * surfaced as { ok:false, error } rather than thrown, so the chat
+ * sees the upstream's own message instead of a generic "request
+ * failed".
+ *
+ * If `toolkit` is provided, the call is routed to the active connected
+ * account for that toolkit. If `toolkit` is omitted, the slug is
+ * matched to a toolkit by Composio's catalog (the underlying SDK
+ * handles this); pass it explicitly when ambiguous.
+ */
+export async function composioAction(input: ComposioActionInput): Promise<ComposioActionResult> {
+  const slug = String(input.slug || "").trim();
+  if (!slug) return { ok: false, slug: "", toolkit: input.toolkit || null, error: "slug is required" };
+  const toolkit = input.toolkit?.trim() || undefined;
+  const userId = input.userId?.trim() || "admin";
+  if (!isComposioConfigured()) {
+    return { ok: false, slug, toolkit: toolkit || null, error: "Composio is not configured (COMPOSIO_API_KEY missing or composio_api_key setting empty)" };
+  }
+  try {
+    const composio: any = getComposio();
+    // Resolve the connected account (if a toolkit was named) before
+    // we send the call, so the upstream's "no connected account" error
+    // gets surfaced with a useful hint instead of a generic 4xx.
+    let connectedAccountId: string | undefined;
+    if (toolkit) {
+      connectedAccountId = getActiveConnectedAccountId(toolkit, userId) || undefined;
+      if (!connectedAccountId) {
+        return { ok: false, slug, toolkit, error: `${toolkit} is not connected. Connect it in /integrations first.` };
+      }
+    }
+    const result = await composio.tools.execute(slug, {
+      userId,
+      connectedAccountId,
+      arguments: input.args || {},
+      dangerouslySkipVersionCheck: true
+    });
+    if (result && typeof result === "object" && (result as any).successful === false) {
+      const obj = result as Record<string, any>;
+      const msg = obj.error || obj.data?.error || obj.message || JSON.stringify(result).slice(0, 400);
+      return { ok: false, slug, toolkit: toolkit || null, error: String(msg), code: obj.code || obj.data?.code };
+    }
+    return { ok: true, slug, toolkit: toolkit || null, data: result };
+  } catch (e) {
+    return { ok: false, slug, toolkit: toolkit || null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
