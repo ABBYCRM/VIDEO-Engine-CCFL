@@ -227,12 +227,8 @@ export async function composioHealth(): Promise<ComposioHealth> {
   // Pull the latest connected-account snapshot from the local DB; the
   // Claw health endpoint is supposed to be fast, so we don't ping
   // Composio's server here. If you want a live reachability probe,
-  // hit /api/integrations/composio instead (admin-only).
-  try {
-    syncConnectedAccounts();
-  } catch (e) {
-    return { configured: true, live: false, toolkits: [], note: `Composio sync failed: ${e instanceof Error ? e.message : String(e)}` };
-  }
+  // hit /api/integrations/composio instead (admin-only), which already
+  // awaits syncConnectedAccounts() itself.
   const rows = db.prepare(
     `SELECT toolkit, status, last_sync_at FROM connected_accounts WHERE UPPER(status)='ACTIVE' ORDER BY toolkit ASC`
   ).all() as Array<{ toolkit: string; status: string; last_sync_at: string | null }>;
