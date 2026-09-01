@@ -136,8 +136,15 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
   };
   if (req.jsonMode) body.response_format = { type: "json_object" };
   applyThinkingMode(body, req.thinking);
-  const ac = req.signal ? null : new AbortController();
-  const t = ac ? setTimeout(() => ac.abort(), 30_000) : null;
+  // A 30s hard timeout always applies, even when the caller (runtime.ts,
+  // on every real chat turn) also passes its own client-disconnect signal —
+  // combining them with AbortSignal.any() instead of only timing out when
+  // no external signal is given. Without this, a caller-supplied signal
+  // silently disabled the timeout entirely, so a hung NVIDIA connect/response
+  // could block until DigitalOcean's own gateway timeout produced a 504.
+  const timeoutController = new AbortController();
+  const t = setTimeout(() => timeoutController.abort(new Error("NVIDIA request timed out after 30s")), 30_000);
+  const signal = req.signal ? AbortSignal.any([req.signal, timeoutController.signal]) : timeoutController.signal;
   try {
     const { url, extraHeaders } = heliconeRoute(`${NVIDIA_BASE}/chat/completions`);
     const r = await fetch(url, {
@@ -150,7 +157,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
       },
       body: JSON.stringify(body as any),
       cache: "no-store",
-      signal: req.signal ?? ac!.signal
+      signal
     });
     if (!r.ok) {
       const text = await r.text();
@@ -178,7 +185,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
       rawModel: json.model ?? req.model
     };
   } finally {
-    if (t) clearTimeout(t);
+    clearTimeout(t);
   }
 }
 
@@ -194,8 +201,18 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
     stream: true
   };
   applyThinkingMode(body, req.thinking);
-  const ac = req.signal ? null : new AbortController();
-  const t = ac ? setTimeout(() => ac.abort(), 60_000) : null;
+  // Same fix as chatCompletion() above: a hard 60s ceiling on connect +
+  // full response, combined with any external signal via AbortSignal.any()
+  // instead of only arming a timeout when no external signal is passed.
+  // Previously this timeout — and the watchdog's ac.abort() below — were
+  // both silently disabled on every real chat turn, since runtime.ts
+  // always passes its own client-disconnect signal. A hang before the
+  // stream produced its first byte (e.g. NVIDIA slow to accept the
+  // connection) had no timeout at all, and would block until
+  // DigitalOcean's own gateway timeout returned a 504 to the browser.
+  const timeoutController = new AbortController();
+  const t = setTimeout(() => timeoutController.abort(new Error("NVIDIA stream timed out after 60s")), 60_000);
+  const signal = req.signal ? AbortSignal.any([req.signal, timeoutController.signal]) : timeoutController.signal;
   try {
     const { url, extraHeaders } = heliconeRoute(`${NVIDIA_BASE}/chat/completions`);
     const r = await fetch(url, {
@@ -208,7 +225,7 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
       },
       body: JSON.stringify(body as any),
       cache: "no-store",
-      signal: req.signal ?? ac!.signal
+      signal
     });
     if (!r.ok) {
       const text = await r.text();
@@ -229,7 +246,7 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
     const watchdog = setInterval(() => {
       if (Date.now() - lastActivity > 25_000) {
         try { reader.cancel("watchdog timeout").catch(() => {}); } catch { /* ignore */ }
-        try { ac?.abort("watchdog timeout"); } catch { /* ignore */ }
+        try { timeoutController.abort(new Error("watchdog timeout")); } catch { /* ignore */ }
       }
     }, 2_000);
     try {
@@ -290,6 +307,6 @@ export async function chatCompletionStream(req: ChatRequest, onToken: (chunk: st
     }
     return { text, finishReason, usage: null, rawModel: req.model };
   } finally {
-    if (t) clearTimeout(t);
+    clearTimeout(t);
   }
 }
