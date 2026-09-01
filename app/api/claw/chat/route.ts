@@ -39,11 +39,26 @@ export async function POST(req: Request) {
     async start(controller) {
       const enc = new TextEncoder();
       const emit = (e: ClawEvent) => controller.enqueue(enc.encode(sse(e)));
+      // Flush real bytes to the client immediately, before ever calling
+      // NVIDIA. Without this, time-to-first-byte is however long the first
+      // upstream call takes (up to the 30-60s ceilings in lib/nvidia/client.ts,
+      // or their sum on the stream-then-fallback path) with the client
+      // seeing nothing at all — long enough to trip DigitalOcean App
+      // Platform's own edge/gateway timeout and return a 504 before this
+      // response ever gets a chance to answer. A comment line (SSE ignores
+      // any line not starting with "data:") sent right away, plus a
+      // heartbeat every 10s while we're waiting on a slow tool/LLM call,
+      // keeps the connection actively streaming instead of silent.
+      controller.enqueue(enc.encode(": connected\n\n"));
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(enc.encode(": ping\n\n")); } catch { /* stream already closed */ }
+      }, 10_000);
       try {
         await runClawTurn({ conversationId, text, fileIds, signal: ac.signal, onEvent: emit });
       } catch (e) {
         emit({ type: "error", error: e instanceof Error ? e.message : String(e) });
       } finally {
+        clearInterval(heartbeat);
         controller.close();
       }
     }
