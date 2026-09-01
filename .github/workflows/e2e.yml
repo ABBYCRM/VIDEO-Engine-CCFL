@@ -33,36 +33,6 @@ jobs:
       - name: Run Playwright
         run: npm run test:e2e -- --project=chromium --grep-invert "deployed"
 
-  creator-upload-regression:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      ADMIN_PASSWORD: e2e-local-only
-      SESSION_SECRET: e2e-session-secret-that-is-long-enough-for-tests-123456
-      APP_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-      DATABASE_PATH: ./data/e2e-creator.db
-      NODE_ENV: test
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm install
-      - name: Build
-        run: npm run build
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run creator upload regression
-        # The "creator-upload-retry" file was a 2026-08-29 placeholder that
-        # was never created when the test was refactored into
-        # creator-real-file.spec.ts. Removed the missing reference so this
-        # job actually runs. If a dedicated retry test is needed again,
-        # add it under tests/e2e/ and wire it back here.
-        run: npx playwright test tests/e2e/creator-real-file.spec.ts --project=chromium
-
   live-ui:
     needs: verify
     runs-on: ubuntu-latest
@@ -82,16 +52,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Wait for deployed app and run live UI suite
         shell: bash
-        # The dedicated "live-ui.spec.ts" was a 2026-08-29 placeholder for a
-        # deployed-app smoke test. Run the existing calendar + claw
-        # spec against the deployed URL instead, which exercises the same
-        # login → primary feature → screenshot path that live-ui was meant
-        # to cover. (PLAYWRIGHT_BASE_URL is set above, so these tests
-        # target the deployed app, not the local webServer.)
+        # Runs the Claw spec against the deployed URL, exercising the
+        # login → primary feature → screenshot path.
+        # (PLAYWRIGHT_BASE_URL is set above, so this targets the deployed
+        # app, not the local webServer.)
         run: |
           for attempt in {1..24}; do
             if curl --fail --silent --show-error --max-time 10 "$PLAYWRIGHT_BASE_URL/login" >/dev/null; then
-              if npx playwright test tests/e2e/calendar.spec.ts tests/e2e/claw.spec.ts --project=chromium; then
+              if npx playwright test tests/e2e/claw.spec.ts --project=chromium; then
                 exit 0
               fi
             fi

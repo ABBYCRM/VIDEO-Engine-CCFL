@@ -21,7 +21,10 @@ test("claw page renders at mobile size with correct layout", async ({ page, requ
   await page.context().addCookies(storage.cookies);
 
   await page.goto("/claw", { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  // Wait for an actual readiness signal (the header controls finishing their
+  // mount) instead of a fixed sleep — a fixed delay is a race with whatever
+  // client-side work happens to be slow that day, not a correctness check.
+  await page.getByRole("button", { name: "Threads" }).waitFor({ state: "visible" });
 
   const data = await page.evaluate(() => {
     function rect(el: Element | null) {

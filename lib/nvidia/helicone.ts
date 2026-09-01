@@ -60,8 +60,9 @@ export function isHeliconeEnabled(): boolean {
 export function heliconeRoute(upstreamUrl: string): { url: string; extraHeaders: Record<string, string> } {
   if (!isHeliconeEnabled()) return { url: upstreamUrl, extraHeaders: {} };
   const key = getHeliconeApiKey()!;
+  const parsed = new URL(upstreamUrl);
   return {
-    url: GATEWAY_BASE + new URL(upstreamUrl).pathname,
+    url: GATEWAY_BASE + parsed.pathname + parsed.search,
     extraHeaders: {
       "Helicone-Auth": `Bearer ${key}`,
       "Helicone-Target-Url": upstreamUrl,
