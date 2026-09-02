@@ -25,6 +25,7 @@ import { db } from "@/lib/db";
 import {
   COMPOSIO_TOOLKITS,
   ComposioAuthError,
+  ComposioTimeoutError,
   ComposioUpstreamError,
   addCustomToolkit,
   authorizeToolkit,
@@ -36,7 +37,8 @@ import {
   removeCustomToolkit,
   saveComposioApiKey,
   setAuthConfigId,
-  syncConnectedAccounts
+  syncConnectedAccounts,
+  withTimeout
 } from "@/lib/composio/client";
 
 const USER_ID = "admin"; // single-operator app; one user_id per workspace
@@ -98,12 +100,24 @@ function buildToolkitView() {
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let syncNote: string | null = null;
   if (isComposioConfigured()) {
-    try { await syncConnectedAccounts(); } catch { /* keep the local snapshot if Composio is briefly unreachable */ }
+    try {
+      await syncConnectedAccounts();
+    } catch (e) {
+      // Keep the local snapshot if Composio is briefly unreachable. Surface
+      // a short note so the operator can tell "everything is fine but live
+      // sync timed out" from "everything is fine and live sync worked".
+      const msg = e instanceof ComposioTimeoutError
+        ? `Live sync timed out (${e.message}); showing last known snapshot.`
+        : (e instanceof Error ? e.message : String(e));
+      syncNote = `Live sync failed: ${msg}`;
+    }
   }
   return NextResponse.json({
     configured: isComposioConfigured(),
-    toolkits: buildToolkitView()
+    toolkits: buildToolkitView(),
+    ...(syncNote ? { syncNote } : {})
   });
 }
 
@@ -149,6 +163,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ redirectUrl, managed: true });
       } catch (e) {
         if (e instanceof ComposioAuthError) return NextResponse.json({ error: e.message }, { status: 400 });
+        if (e instanceof ComposioTimeoutError) return NextResponse.json({ error: `Composio did not respond in time. ${e.message}` }, { status: 504 });
         const msg = e instanceof Error ? e.message : String(e);
         return NextResponse.json({ error: `Composio authorize failed: ${msg}` }, { status: 502 });
       }
@@ -169,10 +184,14 @@ export async function POST(req: Request) {
     const callbackUrl = `${proto}://${host}/api/integrations/callback?toolkit=${encodeURIComponent(meta.id)}&state=${encodeURIComponent(state)}`;
 
     try {
-      const link = await client.connectedAccounts.link(USER_ID, authConfigId, {
-        callbackUrl,
-        ...(body.alias ? { alias: String(body.alias) } : {})
-      });
+      const link = await withTimeout(
+        client.connectedAccounts.link(USER_ID, authConfigId, {
+          callbackUrl,
+          ...(body.alias ? { alias: String(body.alias) } : {})
+        }),
+        12_000,
+        "connectedAccounts.link"
+      );
       // The link response shape (verified at runtime against the installed
       // package): { redirectUrl: string }.
       const redirectUrl = (link as { redirectUrl?: string }).redirectUrl
@@ -185,6 +204,9 @@ export async function POST(req: Request) {
       const msg = e instanceof Error ? e.message : String(e);
       if (e instanceof ComposioUpstreamError) {
         return NextResponse.json({ error: `Composio upstream: ${msg}` }, { status: e.status });
+      }
+      if (e instanceof ComposioTimeoutError) {
+        return NextResponse.json({ error: `Composio did not respond in time. ${msg}` }, { status: 504 });
       }
       return NextResponse.json({ error: `Composio call failed: ${msg}` }, { status: 502 });
     }
@@ -199,7 +221,7 @@ export async function POST(req: Request) {
       throw e;
     }
     try {
-      const r = await client.connectedAccounts.get(caId);
+      const r = await withTimeout(client.connectedAccounts.get(caId), 12_000, "connectedAccounts.get");
       const raw = JSON.stringify(r);
       const status = (r as { status?: string }).status ?? "ACTIVE";
       db.prepare(
@@ -208,6 +230,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, status, raw: r });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      if (e instanceof ComposioTimeoutError) {
+        return NextResponse.json({ error: `Composio did not respond in time. ${msg}` }, { status: 504 });
+      }
       return NextResponse.json({ error: `Composio get failed: ${msg}` }, { status: 502 });
     }
   }
@@ -227,7 +252,7 @@ export async function DELETE(req: Request) {
   let upstreamError: string | null = null;
   try {
     const client = getComposio();
-    await client.connectedAccounts.delete(caId);
+    await withTimeout(client.connectedAccounts.delete(caId), 12_000, "connectedAccounts.delete");
   } catch (e) {
     upstreamOk = false;
     upstreamError = e instanceof Error ? e.message : String(e);

@@ -13,6 +13,33 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto";
 export const COMPOSIO_SETTING_KEY = "composio_api_key";
 export const COMPOSIO_AUTH_CONFIG_KEY_PREFIX = "composio_auth_config_id_";
 
+// All Composio SDK network calls go through `withTimeout` so a slow or
+// stuck upstream cannot stall an API route until the platform gateway
+// 504s. The DO App Platform HTTP gateway returns 504 after a fixed
+// timeout (~30s on healthcheck routes, longer on data routes). Without
+// this race the `GET /api/integrations/composio` handler — which the
+// Integrations page polls on every load — would hang for the full
+// duration and surface as a 504 to the operator even though Composio
+// eventually responds. Default 12s gives us three retries in a 30s
+// budget if the operator needs to wait.
+const DEFAULT_TIMEOUT_MS = 12_000;
+
+export class ComposioTimeoutError extends Error {
+  constructor(ms: number) { super(`Composio call timed out after ${ms}ms`); this.name = "ComposioTimeoutError"; }
+}
+
+export async function withTimeout<T>(p: Promise<T>, ms = DEFAULT_TIMEOUT_MS, label = "composio"): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ComposioTimeoutError(ms)), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function getRaw(key: string): string | null {
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
 }
@@ -100,7 +127,7 @@ export function getActiveConnectedAccountId(toolkit: string, userId = "admin"): 
 export async function syncConnectedAccounts() {
   const USER_ID = "admin";
   const client: any = getComposio();
-  const listed = await client.connectedAccounts.list();
+  const listed: any = await withTimeout(client.connectedAccounts.list(), DEFAULT_TIMEOUT_MS, "connectedAccounts.list");
   const items: any[] = listed?.items ?? (Array.isArray(listed) ? listed : []);
   const best = new Map<string, { id: string; toolkit: string; status: string; raw: unknown; updated: string; authConfigId?: string }>();
   for (const it of items) {
@@ -234,7 +261,7 @@ export async function getComposioCatalog(force = false): Promise<CatalogToolkit[
   const client: any = getComposio();
   // The v3 SDK's toolkits.get({}) returns a (possibly paginated) list. We ask
   // for a generous page sorted by usage; the catalog is a few hundred apps.
-  const res = await client.toolkits.get({ sortBy: "usage", limit: 500 });
+  const res: any = await withTimeout(client.toolkits.get({ sortBy: "usage", limit: 500 }), DEFAULT_TIMEOUT_MS, "toolkits.get");
   const rawItems: any[] = Array.isArray(res) ? res : (res?.items ?? res?.data ?? []);
   const items = rawItems.map(normalizeCatalogItem).filter((x: CatalogToolkit | null): x is CatalogToolkit => Boolean(x));
   // De-dupe by slug, keep first (highest usage) occurrence.
@@ -311,7 +338,7 @@ export async function authorizeToolkit(slug: string, userId = "admin"): Promise<
   if (!clean) throw new Error("toolkit slug is required");
   const client: any = getComposio();
   const savedAuthConfigId = getAuthConfigId(clean) || undefined;
-  const conn = await client.toolkits.authorize(userId, clean, savedAuthConfigId);
+  const conn: any = await withTimeout(client.toolkits.authorize(userId, clean, savedAuthConfigId), DEFAULT_TIMEOUT_MS, "toolkits.authorize");
   const redirectUrl: string | undefined = conn?.redirectUrl ?? conn?.redirect_url;
   if (!redirectUrl) throw new Error(`Composio did not return a consent URL for "${clean}". It may need an auth config id set first.`);
   return { redirectUrl, connectionId: conn?.id ?? null };
