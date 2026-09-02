@@ -33,6 +33,14 @@ import { executeClawTool, toolsCatalog } from "@/lib/claw/tools";
 
 const TOOL_RE = /<tool_call\s+name="([a-zA-Z0-9_]+)">([\s\S]*?)<\/?tool_call>/gi;
 const MAX_ROUNDS = 6;
+// Whole-turn ceiling. Each individual NVIDIA call already has its own 60s
+// stream cap + 25s inactivity watchdog (see lib/nvidia/client.ts), but a
+// model that keeps emitting tool calls could otherwise chain up to
+// MAX_ROUNDS of those back-to-back and leave the operator staring at a
+// spinner for minutes until DigitalOcean's gateway returns a 504. This
+// bounds the entire turn: when it trips we stop cleanly and stream a plain
+// message instead of letting the request hang.
+const TURN_BUDGET_MS = 120_000;
 
 export type ClawEvent =
   | { type: "meta"; conversationId: string; model: string }
@@ -130,21 +138,37 @@ export async function runClawTurn(input: {
   const model = getClawModel();
   input.onEvent({ type: "meta", conversationId: input.conversationId, model });
 
+  // Bound the whole turn. A dedicated controller trips at TURN_BUDGET_MS and
+  // is combined with the caller's client-disconnect signal, so a stuck model
+  // can never hold the SSE open indefinitely.
+  const budget = new AbortController();
+  const budgetTimer = setTimeout(() => budget.abort(new Error("Turn budget exceeded")), TURN_BUDGET_MS);
+  const turnSignal: AbortSignal = input.signal
+    ? AbortSignal.any([input.signal, budget.signal])
+    : budget.signal;
+
   let finalText = "";
+  try {
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (input.signal?.aborted) throw new Error("Stopped");
+    if (budget.signal.aborted) {
+      finalText = finalText || "This turn ran long, so I stopped it before the connection timed out. Try a narrower request, or ask me one step at a time.";
+      break;
+    }
     const history = listMessages(input.conversationId, 40);
     let streamed = "";
     let pendingOutput = "";
     let suppressToolOutput = false;
     const marker = "<tool_call";
-    const result = await chatCompletionStream({
+    let result: Awaited<ReturnType<typeof chatCompletionStream>>;
+    try {
+      result = await chatCompletionStream({
       model,
       messages: toChat(history),
       temperature: 0.3,
       maxTokens: 1600,
       thinking: false,
-      signal: input.signal
+      signal: turnSignal
     }, (chunk) => {
       streamed += chunk;
       if (suppressToolOutput) return;
@@ -167,6 +191,16 @@ export async function runClawTurn(input: {
       if (safe) input.onEvent({ type: "token", text: safe });
       pendingOutput = pendingOutput.slice(pendingOutput.length - keep);
     });
+    } catch (streamError) {
+      // A budget or client-disconnect abort surfaced through the stream —
+      // stop the turn cleanly instead of leaking a raw abort error. Any
+      // other error is a real upstream failure and must propagate.
+      if (budget.signal.aborted || input.signal?.aborted) {
+        finalText = finalText || "This turn ran long, so I stopped it before the connection timed out. Try a narrower request, or ask me one step at a time.";
+        break;
+      }
+      throw streamError;
+    }
     const text = result.text || streamed;
     const calls = parseTools(text);
     if (!calls.length) {
@@ -212,6 +246,9 @@ export async function runClawTurn(input: {
         input.onEvent({ type: "tool_end", name: call.name, ok: false, preview: message });
       }
     }
+  }
+  } finally {
+    clearTimeout(budgetTimer);
   }
 
   if (!finalText) finalText = "Done. Check the tool results above.";

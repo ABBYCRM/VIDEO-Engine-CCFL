@@ -196,6 +196,73 @@ input, textarea, select { color-scheme: light; }
   }
 }
 
+/* ============================================================
+ * Claw console — "Claude"-style scoped theme
+ * ------------------------------------------------------------
+ * The Claw console sets html[data-claw-theme="light|dark"] while
+ * it is mounted (and removes it on unmount). We override the core
+ * design tokens on the <html> element — rather than on a wrapper —
+ * so the model-picker popup, which portals to document.body, also
+ * inherits the theme. Other pages (login / integrations) never set
+ * the attribute, so they keep the default "Soro" light tokens above.
+ *
+ * Palette: warm paper + clay accent in light, warm near-black +
+ * lighter clay in dark. Two neutrals, one accent — Claude's look.
+ * ============================================================ */
+html[data-claw-theme] body {
+  background-image: none;
+}
+
+html[data-claw-theme="light"] {
+  --background:         48 33% 97%;   /* warm paper */
+  --foreground:         40 8% 16%;    /* warm ink */
+  --muted:              47 25% 92%;   /* hover / rail surface */
+  --muted-foreground:   43 6% 43%;
+  --border:             44 22% 88%;
+  --border-strong:      44 16% 80%;
+  --popover:            48 33% 98%;
+  --popover-foreground: 40 8% 16%;
+  --primary:            14 55% 52%;   /* clay */
+  --primary-foreground: 0 0% 100%;
+  --ring:               14 55% 52%;
+  --accent:             47 25% 92%;
+
+  --claw-sidebar:       47 25% 93%;
+  --claw-elevated:      48 30% 99%;
+  --claw-bubble:        47 24% 90%;
+  --claw-accent:        14 55% 50%;
+  --claw-accent-hover:  14 55% 44%;
+  --claw-accent-fg:     0 0% 100%;
+}
+
+html[data-claw-theme="dark"] {
+  --background:         60 3% 15%;    /* warm near-black */
+  --foreground:         48 33% 95%;
+  --muted:              47 6% 20%;
+  --muted-foreground:   47 6% 62%;
+  --border:             47 6% 24%;
+  --border-strong:      47 6% 32%;
+  --popover:            60 3% 19%;
+  --popover-foreground: 48 33% 95%;
+  --primary:            16 61% 60%;   /* lighter clay */
+  --primary-foreground: 0 0% 100%;
+  --ring:               16 61% 60%;
+  --accent:             47 6% 22%;
+
+  --claw-sidebar:       48 3% 12%;
+  --claw-elevated:      47 6% 20%;
+  --claw-bubble:        47 6% 23%;
+  --claw-accent:        16 61% 60%;
+  --claw-accent-hover:  16 61% 66%;
+  --claw-accent-fg:     20 30% 12%;
+}
+
+html[data-claw-theme="dark"] input,
+html[data-claw-theme="dark"] textarea,
+html[data-claw-theme="dark"] select {
+  color-scheme: dark;
+}
+
 /* Smooth scrolling for in-page nav */
 html { scroll-behavior: smooth; }
 html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }
