@@ -933,27 +933,33 @@ const ModelSelectorContent = React.forwardRef<
       const trigger = triggerRef.current
       if (!trigger) return
       const rect = trigger.getBoundingClientRect()
-      if (sideProp === "bottom") {
-        setCoords({
-          top: rect.bottom + 8,
-          left: rect.left,
-        })
-      } else {
-        setCoords({
-          top: rect.top - 8,
-          left: rect.left,
-        })
-      }
+      const margin = 8
+      // Clamp horizontally so the portaled panel never spills off a narrow
+      // (mobile) viewport. Once the content has rendered we know its real
+      // width and can keep its right edge inside the screen; before that we
+      // fall back to the trigger's left edge and re-measure on the next frame.
+      const contentWidth = contentRef.current?.getBoundingClientRect().width ?? 0
+      const maxLeft = window.innerWidth - contentWidth - margin
+      const left = contentWidth
+        ? Math.max(margin, Math.min(rect.left, maxLeft))
+        : rect.left
+      setCoords({
+        top: sideProp === "bottom" ? rect.bottom + 8 : rect.top - 8,
+        left,
+      })
     }
 
     update()
+    // Re-run after the panel paints so the clamp uses its measured width.
+    const raf = requestAnimationFrame(update)
     window.addEventListener("resize", update)
     window.addEventListener("scroll", update, true)
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
     }
-  }, [open, triggerRef, sideProp])
+  }, [open, triggerRef, contentRef, sideProp])
 
   if (!mounted) return null
 
@@ -981,9 +987,10 @@ const ModelSelectorContent = React.forwardRef<
             left: coords.left,
             transform: sideProp === "top" ? "translateY(-100%)" : undefined,
             zIndex: 50,
+            maxWidth: "calc(100vw - 16px)",
             ...style,
           }}
-          className={cn("flex origin-top-left items-start gap-3", className)}
+          className={cn("flex origin-top-left flex-wrap items-start gap-3", className)}
           {...props}
         >
           <div
@@ -1029,7 +1036,7 @@ function ModelSelectorDefaultItems() {
         variants={listVariants}
         initial={reduceMotion ? false : "hidden"}
         animate="show"
-        className={cn(MENU_PANEL_CLASS, "flex min-w-64 flex-col gap-0.5")}
+        className={cn(MENU_PANEL_CLASS, "flex min-w-64 max-w-[calc(100vw-16px)] flex-col gap-0.5")}
         onMouseLeave={() => {
           if (!editingId) setPreviewId(null)
         }}
