@@ -35,7 +35,7 @@ import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
 import { takeScreenshot } from "@/lib/screenshotone";
 import { webSearch } from "@/lib/web-search";
 import { analyzeImage } from "@/lib/nvidia/vision";
-import { searchDevSkills, getDevSkill, listDevSkillCategories } from "@/lib/claw/dev-skills";
+import { searchDevSkills, searchDevSkillsReranked, getDevSkill, listDevSkillCategories } from "@/lib/claw/dev-skills";
 import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile
@@ -236,20 +236,23 @@ export const CLAW_TOOLS: ToolDef[] = [
   // by id.
   {
     name: "dev_search",
-    description: "Search the Claw dev-skills corpus (TypeScript, React, Next.js, SQL, Python, Go, Rust, Bash, Docker, Postgres, Redis, OAuth, monitoring, patterns). Returns up to 6 matching records, each with a code-anchored summary + body. Use this BEFORE answering any developer / coding / DevOps question so the LLM pulls the exact API/idiom from the curated corpus instead of hallucinating.",
+    description: "Search the Claw dev-skills corpus (TypeScript, React, Next.js, SQL, Python, Go, Rust, Bash, Docker, Postgres, Redis, OAuth, monitoring, patterns) with a two-stage RAG pipeline: a keyword prefilter pulls a wide candidate pool, then an NVIDIA reranking model reorders it semantically so the MOST relevant record is first — even when your wording doesn't lexically match it (e.g. 'make a POST safe to retry' → the idempotency record). Returns up to 6 records, each with a code-anchored summary + body, plus a `reranked` flag showing whether semantic reranking ran. Use this BEFORE answering any developer / coding / DevOps question so you pull the exact API/idiom from the curated corpus instead of hallucinating; trust the top result — it is the reranked best match.",
     args: "{\"query\":\"Next.js App Router caching\",\"category\":\"framework\",\"limit\":6}",
     handler: async (a) => {
       const query = str(a.query).trim();
       const category = (["language", "framework", "infra", "pattern"] as const).includes(str(a.category) as any) ? (str(a.category) as any) : undefined;
       const limit = num(a.limit, 6);
-      const matches = searchDevSkills(query, { category, limit });
+      const { matches, reranked, candidateCount, note } = await searchDevSkillsReranked(query, { category, limit });
       if (matches.length === 0) {
-        return { query, category, count: 0, matches: [], hint: "No matches. Try a broader query, drop the category filter, or call dev_skill_list to see what's available." };
+        return { query, category, count: 0, reranked, matches: [], hint: "No matches. Try a broader query, drop the category filter, or call dev_skill_list to see what's available." };
       }
       return {
         query,
         category: category || "any",
         count: matches.length,
+        reranked,
+        candidateCount,
+        ...(note ? { note } : {}),
         matches: matches.map((m) => ({ id: m.id, category: m.category, tags: m.tags, summary: m.summary, body: m.body }))
       };
     }

@@ -885,6 +885,103 @@ export function getDevSkill(id: string): DevSkill | undefined {
   return SKILL_BY_ID.get(id);
 }
 
+export type RerankedSkillSearch = {
+  matches: DevSkill[];
+  /** True when an NVIDIA reranker reordered the candidates; false when
+   *  we fell back to the keyword ranking (empty query, single candidate,
+   *  reranker not configured, or an upstream error). */
+  reranked: boolean;
+  /** How many candidates the stage-1 keyword pass produced. */
+  candidateCount: number;
+  /** Present only when reranking was skipped, explaining why. */
+  note?: string;
+};
+
+/**
+ * Two-stage retrieve-then-rerank search over the dev-skills corpus.
+ *
+ *   Stage 1 (retrieve): the cheap keyword/tag scorer (searchDevSkills)
+ *     pulls a WIDE candidate pool — ~4x the requested count — so recall
+ *     is high even when the operator's wording doesn't lexically match
+ *     the record that actually answers them.
+ *   Stage 2 (rerank): an NVIDIA reranking NIM (lib/nvidia/rerank.ts)
+ *     scores every candidate against the query semantically and reorders
+ *     them, so the record the operator MEANT ends up first — this is the
+ *     "what / when / where / how" quality the keyword pass alone can't
+ *     give.
+ *
+ * Reranking degrades gracefully: if NVIDIA isn't configured (e.g. local
+ * dev with no key) or the call fails, we return the stage-1 keyword order
+ * and set `reranked:false` with a `note`, so the caller and the operator
+ * always get an answer and can see which path ran.
+ */
+export async function searchDevSkillsReranked(
+  query: string,
+  opts: { category?: DevSkill["category"]; limit?: number; signal?: AbortSignal } = {}
+): Promise<RerankedSkillSearch> {
+  const limit = Math.max(1, Math.min(20, opts.limit ?? 6));
+  const q = query.trim();
+
+  // No query — nothing to rank against. Return the catalog slice as-is.
+  if (!q) {
+    return {
+      matches: searchDevSkills("", { category: opts.category, limit }),
+      reranked: false,
+      candidateCount: 0,
+      note: "empty query — returned catalog order"
+    };
+  }
+
+  // Stage 1: wide keyword prefilter for recall.
+  const poolSize = Math.min(24, Math.max(limit * 4, 12));
+  let pool = searchDevSkills(q, { category: opts.category, limit: poolSize });
+  // If a category filter starved the pool, widen by dropping the filter so
+  // the reranker still has real candidates to work with.
+  if (pool.length === 0 && opts.category) {
+    pool = searchDevSkills(q, { limit: poolSize });
+  }
+
+  if (pool.length <= 1) {
+    return { matches: pool.slice(0, limit), reranked: false, candidateCount: pool.length };
+  }
+
+  // Stage 2: semantic rerank. Everything here — the lazy import (kept out
+  // of the module graph for sync callers like the suggestions route), the
+  // config check, and the upstream call — is wrapped so ANY failure
+  // (module resolution, missing key, upstream error, timeout) degrades
+  // cleanly to the stage-1 keyword order instead of throwing.
+  try {
+    const { rerankPassages, isRerankConfigured } = await import("@/lib/nvidia/rerank");
+    if (!isRerankConfigured()) {
+      return {
+        matches: pool.slice(0, limit),
+        reranked: false,
+        candidateCount: pool.length,
+        note: "NVIDIA reranker not configured — used keyword ranking"
+      };
+    }
+    const passages = pool.map((s) => `${s.summary}\nTags: ${s.tags.join(", ")}\n${s.body}`);
+    const ranked = await rerankPassages({ query: q, passages, topN: limit, signal: opts.signal });
+    if (ranked.length === 0) {
+      return {
+        matches: pool.slice(0, limit),
+        reranked: false,
+        candidateCount: pool.length,
+        note: "reranker returned no rankings — used keyword ranking"
+      };
+    }
+    const reordered = ranked.map((r) => pool[r.index]).filter((s): s is DevSkill => Boolean(s));
+    return { matches: reordered.slice(0, limit), reranked: true, candidateCount: pool.length };
+  } catch (e) {
+    return {
+      matches: pool.slice(0, limit),
+      reranked: false,
+      candidateCount: pool.length,
+      note: `reranker error — used keyword ranking (${e instanceof Error ? e.message : String(e)})`
+    };
+  }
+}
+
 export function listDevSkillCategories(): Array<{ category: DevSkill["category"]; count: number }> {
   const counts: Record<string, number> = {};
   for (const s of DEV_SKILLS) counts[s.category] = (counts[s.category] || 0) + 1;

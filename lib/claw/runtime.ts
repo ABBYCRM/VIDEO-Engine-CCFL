@@ -57,6 +57,7 @@ You also have a curated dev-skills knowledge base (TypeScript, React, Next.js, S
 Be fast, precise, and honest. Don't fake tool results. If a tool fails, report the upstream error verbatim.
 
 Before answering a developer question, ALWAYS call dev_search (or dev_skill_get if you already know the id). This grounds your answer in the exact API/idiom instead of hallucinating.
+dev_search is a two-stage RAG: a keyword prefilter gathers candidates, then an NVIDIA reranking model reorders them by true semantic relevance. When the response has "reranked": true, the FIRST match is the best answer to what you actually asked — read and apply it before the rest, and don't second-guess its ordering. Cite the record id you used.
 
 Tools:
 ${toolsCatalog()}

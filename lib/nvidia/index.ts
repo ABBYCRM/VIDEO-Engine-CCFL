@@ -13,3 +13,13 @@ export {
 export type { NvidiaModelId } from "./models";
 export { NVIDIA_MODELS, DEFAULT_CLAW_NVIDIA_MODEL, isNvidiaModelId } from "./models";
 export { analyzeImage } from "./vision";
+export {
+  rerankPassages,
+  isRerankConfigured,
+  getClawRerankModel,
+  RERANK_MODELS,
+  DEFAULT_CLAW_RERANK_MODEL,
+  isRerankModelId,
+  type RerankModelId,
+  type RerankResult
+} from "./rerank";
