@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Honey Badger",
+  title: "Claw",
   description: "Claw + Composio + Steel + NVIDIA operator console",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Honey Badger"
+    title: "Claw"
   },
   formatDetection: {
     telephone: false
@@ -31,7 +31,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="bg-background">
       <body>{children}</body>
     </html>
   );

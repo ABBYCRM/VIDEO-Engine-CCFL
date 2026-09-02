@@ -8,10 +8,14 @@ export function ClawLogo({
   size = 32,
   className = "",
   rounded = "rounded-lg",
+  alt = "Claw",
 }: {
   size?: number;
   className?: string;
   rounded?: string;
+  // Pass alt="" where an adjacent text label already names the mark, so
+  // screen readers don't announce "Claw" twice.
+  alt?: string;
 }) {
   return (
     <span
@@ -20,7 +24,7 @@ export function ClawLogo({
     >
       <Image
         src="/claw-logo.jpeg"
-        alt="Claw"
+        alt={alt}
         fill
         sizes={`${size}px`}
         className="object-cover"

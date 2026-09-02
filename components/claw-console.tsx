@@ -1,12 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Bird, Copy, FilePlus2, FolderOpen, LogOut, Menu, Moon, PanelLeftClose,
+  Copy, FilePlus2, FolderOpen, Menu, Moon, PanelLeftClose,
   Paperclip, Pencil, Plug, Plus, Send, Sparkles, Square, Sun, Trash2, X
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
+import { ClawLogo } from "@/components/claw-logo";
 import AILoader from "@/components/ui/ai-loader";
 import { ModelSelectorKit, type AiModel } from "@/components/ui/ai-model-select";
 
@@ -50,7 +50,6 @@ function greeting() {
 }
 
 export function ClawConsole() {
-  const router = useRouter();
   const [convs, setConvs] = useState<Conv[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -232,11 +231,6 @@ export function ClawConsole() {
     else await loadConvs();
   }
 
-  async function logout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/login");
-  }
-
   async function send(overrideText?: string) {
     if (busy) return;
 
@@ -401,7 +395,7 @@ export function ClawConsole() {
         >
           <div className="flex items-center justify-between px-3 py-3">
             <Link href="/claw" className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-[hsl(var(--claw-accent))] text-[hsl(var(--claw-accent-fg))]"><Bird size={17} /></span>
+              <ClawLogo size={32} className="shrink-0" alt="" />
               <span className="text-[15px] font-semibold tracking-tight">Claw</span>
             </Link>
             <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted md:hidden" aria-label="Close sidebar">
@@ -436,19 +430,15 @@ export function ClawConsole() {
               <Plug size={16} />
               Integrations
             </Link>
-            <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[hsl(var(--claw-accent))] text-xs font-semibold text-[hsl(var(--claw-accent-fg))]">A</span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium">Admin</div>
-                <div className="truncate text-[11px] text-muted-foreground">Claw operator</div>
-              </div>
-              <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
-                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-              <button type="button" onClick={logout} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Sign out">
-                <LogOut size={15} />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            >
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </button>
           </div>
         </aside>
 
@@ -459,7 +449,7 @@ export function ClawConsole() {
               <Menu size={18} />
             </button>
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <Bird size={15} className="shrink-0 text-[hsl(var(--claw-accent))]" />
+              <ClawLogo size={24} className="shrink-0" />
               <span className="truncate text-sm font-medium">{activeTitle || "New chat"}</span>
             </div>
             <button
@@ -477,9 +467,9 @@ export function ClawConsole() {
               {empty ? (
                 <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
                   <div className="w-full max-w-3xl">
-                    <div className="mb-6 flex items-center justify-center gap-3">
-                      <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[hsl(var(--claw-accent))] text-[hsl(var(--claw-accent-fg))]"><Bird size={24} /></span>
-                      <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{greeting()}, operator</h1>
+                    <div className="mb-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                      <ClawLogo size={56} className="shrink-0" rounded="rounded-2xl" />
+                      <h1 className="text-center text-2xl font-semibold tracking-tight text-balance sm:text-left sm:text-3xl">{greeting()}, operator</h1>
                     </div>
                     {renderComposer("hero")}
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -516,8 +506,8 @@ export function ClawConsole() {
                         ) : (
                           <div key={m.id} className="group flex flex-col gap-1">
                             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                              <span className="grid h-6 w-6 place-items-center rounded-lg bg-[hsl(var(--claw-accent))]/15 text-[hsl(var(--claw-accent))]"><Bird size={13} /></span>
-                              Claw
+                    <ClawLogo size={24} className="shrink-0" alt="" />
+                    Claw
                             </div>
                             <div className="whitespace-pre-wrap break-words pl-8 text-[15px] leading-relaxed text-foreground">{m.content}</div>
                             <div className="flex gap-1 pl-8 opacity-0 transition-opacity group-hover:opacity-100">
@@ -554,7 +544,7 @@ export function ClawConsole() {
                       {streaming && (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <span className="grid h-6 w-6 place-items-center rounded-lg bg-[hsl(var(--claw-accent))]/15 text-[hsl(var(--claw-accent))]"><Bird size={13} /></span>
+                            <ClawLogo size={24} className="shrink-0" />
                             Claw
                           </div>
                           <div className="whitespace-pre-wrap break-words pl-8 text-[15px] leading-relaxed text-foreground">
@@ -565,7 +555,7 @@ export function ClawConsole() {
 
                       {busy && !streaming && (
                         <div className="flex items-center gap-2 pl-0">
-                          <span className="grid h-6 w-6 place-items-center rounded-lg bg-[hsl(var(--claw-accent))]/15 text-[hsl(var(--claw-accent))]"><Bird size={13} /></span>
+                          <ClawLogo size={24} className="shrink-0" />
                           <AILoader label="Thinking" showElapsed variant="dots" className="text-muted-foreground" />
                         </div>
                       )}

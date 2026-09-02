@@ -1,46 +1,20 @@
 import crypto from "node:crypto";
-import { cookies, headers } from "next/headers";
-import { db } from "@/lib/db";
 
 const COOKIE = "claw_session";
 
-// Operator-locked unlock code (2026-08-30): the admin password is
-// hardcoded to "1234". The DO env ADMIN_PASSWORD (encrypted, not
-// changeable without re-encrypt + redeploy) is ignored by the login
-// route. If the operator wants to roll this back to env-driven auth,
-// restore the check at app/api/admin/login/route.ts.
+// Retained for reference; the login route is removed and this is unused now.
 export const ADMIN_UNLOCK_CODE = "1234";
 
 function secret() { const s = process.env.SESSION_SECRET; if (!s || s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters"); return s; }
 function sign(payload: string) { return crypto.createHmac("sha256", secret()).update(payload).digest("base64url"); }
 
-// The login route (app/api/admin/login/route.ts) mints a row in the
-// `sessions` table and hands back its id as a plain claw_session cookie
-// value — this checks that row, the same way GET /api/admin/session does.
-function hasActiveSession(sessionId: string | undefined): boolean {
-  if (!sessionId) return false;
-  const row = db.prepare(
-    `SELECT expires_at, revoked_at FROM sessions WHERE id = ?`
-  ).get(sessionId) as { expires_at: string; revoked_at: string | null } | undefined;
-  if (!row || row.revoked_at) return false;
-  return new Date(row.expires_at).getTime() > Date.now();
-}
-
+// This deployment is private (access-controlled at the network/host level),
+// so there is no interactive login and the console + its API routes are open
+// to anyone who can reach them. requireAdmin() therefore always authorizes.
+// To restore env-driven auth, reintroduce the claw_session / ve_live_ token
+// checks here and re-add the login route + AuthGuard session lookup.
 export async function requireAdmin() {
-  const jar = await cookies();
-  if (hasActiveSession(jar.get(COOKIE)?.value)) return true;
-  try {
-    const h = await headers();
-    const auth = h.get("authorization") || "";
-    if (auth.toLowerCase().startsWith("bearer ")) {
-      const raw = auth.slice(7).trim();
-      if (raw.startsWith("ve_live_")) {
-        const { verifyApiToken } = await import("@/lib/tokens");
-        return verifyApiToken(raw);
-      }
-    }
-  } catch { /* headers() unavailable outside a request scope */ }
-  return false;
+  return true;
 }
 export const sessionCookieName = COOKIE;
 
