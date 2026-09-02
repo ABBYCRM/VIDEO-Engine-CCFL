@@ -344,9 +344,10 @@ export function ClawConsole() {
               >
                 <Paperclip size={17} />
               </button>
-              <div className="min-w-0">
+              <div className="flex min-w-0 max-w-[calc(100vw-7.5rem)] sm:max-w-[420px] [&_[data-slot=model-selector-trigger]]:max-w-full">
                 <ModelSelectorKit
                   aria-label={modelEnvOverridden ? "Model is fixed by the CLAW_NVIDIA_MODEL environment variable" : "Choose the NVIDIA model Claw uses"}
+                  className="min-w-0 max-w-full"
                   models={aiModels}
                   value={model ? { id: model } : undefined}
                   onValueChange={(sel) => void changeModel(sel.id)}
@@ -482,16 +483,16 @@ export function ClawConsole() {
                     </div>
                     {renderComposer("hero")}
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      {suggestions.map((s, i) => (
+                      {suggestions.slice(0, 6).map((s, i) => (
                         <button
                           key={`${s.source}-${s.skillIds?.[0] || s.label}-${i}`}
                           type="button"
                           title={s.source === "rag" && s.skillIds ? `From dev-skill: ${s.skillIds.join(", ")}` : s.source === "tool" ? "Calls a real Claw tool" : "Starter"}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[hsl(var(--claw-elevated))] px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--claw-accent))]/50 hover:text-foreground"
+                          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-[hsl(var(--claw-elevated))] px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--claw-accent))]/50 hover:text-foreground"
                           onClick={() => { setText(s.prompt); textarea.current?.focus(); }}
                         >
-                          {s.source === "rag" ? <Sparkles size={11} className="text-[hsl(var(--claw-accent))]" /> : null}
-                          <span>{s.label}</span>
+                          {s.source === "rag" ? <Sparkles size={11} className="shrink-0 text-[hsl(var(--claw-accent))]" /> : null}
+                          <span className="max-w-[240px] truncate sm:max-w-[280px]">{s.label}</span>
                         </button>
                       ))}
                     </div>
