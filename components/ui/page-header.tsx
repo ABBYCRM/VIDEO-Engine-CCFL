@@ -19,13 +19,13 @@ export function PageHeader({ eyebrow, eyebrowIcon, title, description, actions, 
     <div className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", className)}>
       <div>
         {eyebrow && (
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-violet-700">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[hsl(var(--claw-accent))]">
             {eyebrowIcon}
             {eyebrow}
           </div>
         )}
-        <h1 className="text-[34px] font-semibold leading-tight tracking-tight text-slate-900">{title}</h1>
-        {description && <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>}
+        <h1 className="text-[34px] font-semibold leading-tight tracking-tight text-foreground">{title}</h1>
+        {description && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>

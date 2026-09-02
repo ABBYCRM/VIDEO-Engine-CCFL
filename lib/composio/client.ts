@@ -178,6 +178,145 @@ export function getToolkitMeta(id: string) {
   return COMPOSIO_TOOLKITS.find(t => t.id === id) ?? { id, label: id, requiresBusiness: false, publishable: false };
 }
 
+// ---------------------------------------------------------------------------
+// Composio app catalog + operator-chosen ("custom") toolkits.
+//
+// The fixed COMPOSIO_TOOLKITS list above is the curated set the old build
+// shipped. The operator now wants to browse Composio's *entire* catalog,
+// search it, add any app to their workspace, and connect it — all from the
+// Settings UI. These helpers back that flow:
+//   - getComposioCatalog()  : fetch + cache the full app catalog from Composio
+//   - searchComposioCatalog(): case-insensitive filter over the catalog
+//   - {list,add,remove}CustomToolkits(): persist the operator's chosen apps
+//   - authorizeToolkit()    : start an OAuth connection for ANY slug, creating
+//                             a Composio-managed auth config on the fly when
+//                             the operator hasn't pinned one.
+// ---------------------------------------------------------------------------
+
+const COMPOSIO_CUSTOM_TOOLKITS_KEY = "composio_custom_toolkits";
+
+export type CatalogToolkit = {
+  slug: string;
+  name: string;
+  logo: string | null;
+  description: string | null;
+  categories: string[];
+  toolsCount: number | null;
+};
+
+export type CustomToolkit = { slug: string; label: string; logo: string | null };
+
+let _catalogCache: { at: number; items: CatalogToolkit[] } | null = null;
+const CATALOG_TTL_MS = 10 * 60 * 1000;
+
+function normalizeCatalogItem(it: any): CatalogToolkit | null {
+  const slug = String(it?.slug ?? it?.name ?? "").trim().toLowerCase();
+  if (!slug) return null;
+  const meta = it?.meta ?? {};
+  const cats = Array.isArray(meta?.categories)
+    ? meta.categories.map((c: any) => String(c?.name ?? c?.slug ?? c)).filter(Boolean)
+    : [];
+  return {
+    slug,
+    name: String(it?.name ?? slug),
+    logo: meta?.logo ? String(meta.logo) : (it?.logo ? String(it.logo) : null),
+    description: meta?.description ? String(meta.description) : null,
+    categories: cats,
+    toolsCount: typeof meta?.toolsCount === "number" ? meta.toolsCount : null
+  };
+}
+
+/** Fetch the full Composio app catalog (cached in-memory for 10 min). */
+export async function getComposioCatalog(force = false): Promise<CatalogToolkit[]> {
+  if (!force && _catalogCache && Date.now() - _catalogCache.at < CATALOG_TTL_MS) {
+    return _catalogCache.items;
+  }
+  const client: any = getComposio();
+  // The v3 SDK's toolkits.get({}) returns a (possibly paginated) list. We ask
+  // for a generous page sorted by usage; the catalog is a few hundred apps.
+  const res = await client.toolkits.get({ sortBy: "usage", limit: 500 });
+  const rawItems: any[] = Array.isArray(res) ? res : (res?.items ?? res?.data ?? []);
+  const items = rawItems.map(normalizeCatalogItem).filter((x: CatalogToolkit | null): x is CatalogToolkit => Boolean(x));
+  // De-dupe by slug, keep first (highest usage) occurrence.
+  const seen = new Set<string>();
+  const deduped = items.filter((i) => (seen.has(i.slug) ? false : (seen.add(i.slug), true)));
+  _catalogCache = { at: Date.now(), items: deduped };
+  return deduped;
+}
+
+/** Case-insensitive search over the cached catalog by name / slug / category. */
+export async function searchComposioCatalog(query: string, limit = 40): Promise<CatalogToolkit[]> {
+  const all = await getComposioCatalog();
+  const q = query.trim().toLowerCase();
+  if (!q) return all.slice(0, limit);
+  const scored = all
+    .map((t) => {
+      const name = t.name.toLowerCase();
+      const slug = t.slug.toLowerCase();
+      let score = -1;
+      if (slug === q || name === q) score = 100;
+      else if (name.startsWith(q) || slug.startsWith(q)) score = 80;
+      else if (name.includes(q) || slug.includes(q)) score = 60;
+      else if (t.categories.some((c) => c.toLowerCase().includes(q))) score = 40;
+      return { t, score };
+    })
+    .filter((s) => s.score >= 0)
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((s) => s.t);
+}
+
+export function listCustomToolkits(): CustomToolkit[] {
+  const raw = getRaw(COMPOSIO_CUSTOM_TOOLKITS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((p): CustomToolkit | null => {
+        const slug = String(p?.slug ?? "").trim().toLowerCase();
+        if (!slug) return null;
+        return { slug, label: String(p?.label ?? slug), logo: p?.logo ? String(p.logo) : null };
+      })
+      .filter((x: CustomToolkit | null): x is CustomToolkit => Boolean(x));
+  } catch {
+    return [];
+  }
+}
+
+export function addCustomToolkit(slug: string, label?: string, logo?: string | null) {
+  const clean = slug.trim().toLowerCase();
+  if (!clean) throw new Error("toolkit slug is required");
+  const list = listCustomToolkits();
+  if (list.some((t) => t.slug === clean)) return list; // already present
+  list.push({ slug: clean, label: label?.trim() || clean, logo: logo ?? null });
+  setRaw(COMPOSIO_CUSTOM_TOOLKITS_KEY, JSON.stringify(list));
+  return list;
+}
+
+export function removeCustomToolkit(slug: string) {
+  const clean = slug.trim().toLowerCase();
+  const list = listCustomToolkits().filter((t) => t.slug !== clean);
+  setRaw(COMPOSIO_CUSTOM_TOOLKITS_KEY, JSON.stringify(list));
+  return list;
+}
+
+/**
+ * Start an OAuth connection for any toolkit slug. When the operator has
+ * pinned an auth config id (Settings → advanced), we use it; otherwise we
+ * let Composio create/attach a managed auth config on the fly via
+ * `toolkits.authorize`. Returns the provider consent URL to open.
+ */
+export async function authorizeToolkit(slug: string, userId = "admin"): Promise<{ redirectUrl: string; connectionId: string | null }> {
+  const clean = slug.trim().toLowerCase();
+  if (!clean) throw new Error("toolkit slug is required");
+  const client: any = getComposio();
+  const savedAuthConfigId = getAuthConfigId(clean) || undefined;
+  const conn = await client.toolkits.authorize(userId, clean, savedAuthConfigId);
+  const redirectUrl: string | undefined = conn?.redirectUrl ?? conn?.redirect_url;
+  if (!redirectUrl) throw new Error(`Composio did not return a consent URL for "${clean}". It may need an auth config id set first.`);
+  return { redirectUrl, connectionId: conn?.id ?? null };
+}
+
 /** Generic Composio tool execution against one toolkit's active connected
  *  account, shared by every per-network adapter (x-composio.ts,
  *  linkedin-composio.ts, reddit-composio.ts, instagram-composio.ts). */

@@ -5,7 +5,7 @@
 // no login/logout here.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, MessageSquare, Menu, Plug } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
 
@@ -19,6 +19,20 @@ const NAV: NavItem[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Share the Claw console's theme so the warm --claw-* tokens resolve on the
+  // secondary pages too (Integrations). Mirrors the hydration in
+  // components/claw-console.tsx: read the saved / system preference and set
+  // html[data-claw-theme]. We don't own a toggle here — we just follow it.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (root.dataset.clawTheme) return; // Claw console already set it
+    const saved = (typeof localStorage !== "undefined" && localStorage.getItem("claw-theme")) as "light" | "dark" | null;
+    const initial = saved === "light" || saved === "dark"
+      ? saved
+      : (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    root.dataset.clawTheme = initial;
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">

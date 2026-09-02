@@ -26,10 +26,14 @@ import {
   COMPOSIO_TOOLKITS,
   ComposioAuthError,
   ComposioUpstreamError,
+  addCustomToolkit,
+  authorizeToolkit,
   getAuthConfigId,
   getComposio,
   getToolkitMeta,
   isComposioConfigured,
+  listCustomToolkits,
+  removeCustomToolkit,
   saveComposioApiKey,
   setAuthConfigId,
   syncConnectedAccounts
@@ -49,12 +53,37 @@ function readRows() {
 
 function buildToolkitView() {
   const rows = readRows();
-  return COMPOSIO_TOOLKITS.map(t => {
+  const custom = listCustomToolkits();
+
+  // Union of every toolkit slug we should show: the curated catalog, the
+  // operator's added ("custom") toolkits, and anything with a connected
+  // account row (so a synced connection never disappears from the list).
+  type Entry = { id: string; label: string; custom: boolean; requiresBusiness: boolean; publishable: boolean };
+  const entries = new Map<string, Entry>();
+  for (const t of COMPOSIO_TOOLKITS) {
+    entries.set(t.id, { id: t.id, label: t.label, custom: false, requiresBusiness: t.requiresBusiness, publishable: t.publishable });
+  }
+  for (const c of custom) {
+    if (!entries.has(c.slug)) {
+      entries.set(c.slug, { id: c.slug, label: c.label, custom: true, requiresBusiness: false, publishable: false });
+    }
+  }
+  for (const r of rows) {
+    if (!entries.has(r.toolkit)) {
+      const meta = getToolkitMeta(r.toolkit);
+      entries.set(r.toolkit, { id: r.toolkit, label: meta.label, custom: true, requiresBusiness: false, publishable: false });
+    }
+  }
+
+  return [...entries.values()].map(t => {
     const row = rows.find(r => r.toolkit === t.id);
     const authConfigId = getAuthConfigId(t.id);
+    const logo = custom.find(c => c.slug === t.id)?.logo ?? null;
     return {
       id: t.id,
       label: t.label,
+      custom: t.custom,
+      logo,
       requiresBusiness: t.requiresBusiness,
       publishable: t.publishable,
       authConfigConfigured: Boolean(authConfigId),
@@ -88,6 +117,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  // Add an operator-chosen toolkit from the catalog to the workspace.
+  if (body.action === "addToolkit" && body.toolkit) {
+    const list = addCustomToolkit(String(body.toolkit), body.label ? String(body.label) : undefined, body.logo ? String(body.logo) : null);
+    return NextResponse.json({ ok: true, customToolkits: list });
+  }
+
+  // Remove an operator-chosen toolkit from the workspace.
+  if (body.action === "removeToolkit" && body.toolkit) {
+    const list = removeCustomToolkit(String(body.toolkit));
+    return NextResponse.json({ ok: true, customToolkits: list });
+  }
+
   // Save a per-toolkit auth config id.
   if (body.authConfigId && body.toolkit) {
     const meta = getToolkitMeta(String(body.toolkit));
@@ -99,10 +140,18 @@ export async function POST(req: Request) {
   if (body.toolkit && body.action === "connect") {
     const meta = getToolkitMeta(String(body.toolkit));
     const authConfigId = getAuthConfigId(meta.id);
+    // No pinned auth config id → let Composio create/attach a managed one on
+    // the fly via toolkits.authorize(). This is what makes "connect any app
+    // you searched for" work without the operator hand-entering an id.
     if (!authConfigId) {
-      return NextResponse.json({
-        error: `No auth config id set for toolkit "${meta.id}". Set one via the Settings card or POST { toolkit, authConfigId } first.`
-      }, { status: 400 });
+      try {
+        const { redirectUrl } = await authorizeToolkit(meta.id);
+        return NextResponse.json({ redirectUrl, managed: true });
+      } catch (e) {
+        if (e instanceof ComposioAuthError) return NextResponse.json({ error: e.message }, { status: 400 });
+        const msg = e instanceof Error ? e.message : String(e);
+        return NextResponse.json({ error: `Composio authorize failed: ${msg}` }, { status: 502 });
+      }
     }
     let client;
     try { client = getComposio(); } catch (e) {

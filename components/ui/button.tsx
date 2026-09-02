@@ -4,13 +4,13 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex max-w-full min-w-0 items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-xl text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2",
+  "inline-flex max-w-full min-w-0 items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-xl text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--claw-accent))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--claw-elevated))]",
   { variants: { variant: {
-    default: "bg-violet-600 text-white shadow-sm hover:bg-violet-700 active:bg-violet-800",
-    secondary: "border border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-100 hover:text-slate-950 active:bg-slate-200",
-    outline: "border border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-950",
-    danger: "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800",
-    ghost: "bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+    default: "bg-[hsl(var(--claw-accent))] text-[hsl(var(--claw-accent-fg))] shadow-sm hover:bg-[hsl(var(--claw-accent-hover))]",
+    secondary: "border border-border bg-[hsl(var(--claw-elevated))] text-foreground shadow-sm hover:bg-muted",
+    outline: "border border-border bg-transparent text-foreground hover:border-[hsl(var(--border-strong))] hover:bg-muted",
+    danger: "border border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger))]/10 text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))]/20",
+    ghost: "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
   }, size: { default: "h-10 px-4", sm: "h-9 px-3", lg: "h-12 px-6" } }, defaultVariants: { variant: "default", size: "default" } }
 );
 
