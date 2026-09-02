@@ -21,6 +21,9 @@ test("reranked search returns matches and never throws when the reranker can't r
   assert.ok(res.matches.length <= 3, "must respect the limit");
   // Reranker unreachable here, so we expect the keyword fallback + a note.
   assert.equal(res.reranked, false);
+  // With no vector DB reachable under `node --test`, stage-1 must fall back
+  // to keyword retrieval rather than reporting a vector path.
+  assert.equal(res.retrieval, "keyword");
   assert.ok(typeof res.note === "string" && res.note.length > 0, "fallback should explain itself");
 });
 

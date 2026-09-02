@@ -1,0 +1,91 @@
+# DigitalOcean App Platform spec for VIDEO-Engine (Claw console).
+# ---------------------------------------------------------------------------
+# Apply / update:
+#   doctl apps create   --spec .do/app.yaml          # first time
+#   doctl apps update <APP_ID> --spec .do/app.yaml    # subsequent changes
+# Inspect a deploy:
+#   doctl apps list
+#   doctl apps get <APP_ID>
+#   doctl apps logs <APP_ID> --type build   --follow
+#   doctl apps logs <APP_ID> --type deploy  --follow
+#   doctl apps logs <APP_ID> --type run     --follow
+#
+# This app builds from the repo Dockerfile (Next.js `output: "standalone"`,
+# server.js on $PORT). It runs SQLite for the Claw console tables (settings,
+# api_tokens, conversations) — note that App Platform's filesystem is
+# EPHEMERAL, so those reset on every deploy/restart. Persist provider keys
+# by setting them as SECRET envs below (NVIDIA_API_KEY etc.) rather than only
+# in the in-app Settings, or they will not survive a redeploy.
+#
+# The dev-skills RAG vector store (pgvector) lives in the bound Managed
+# Postgres component `db`; DATABASE_URL is injected from it automatically.
+# After the FIRST successful deploy, build the vector index once:
+#   curl -X POST https://<your-app-url>/api/claw/skills/index
+# (idempotent — it creates the pgvector extension/table via
+# ensureVectorSchema() and embeds the corpus; re-run after corpus changes,
+# or add {"force":true} to re-embed everything). Check status with GET.
+# ---------------------------------------------------------------------------
+name: video-engine-ccfl
+region: nyc
+
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    github:
+      repo: ABBYCRM/VIDEO-Engine-CCFL
+      branch: main
+      deploy_on_push: true
+    http_port: 3000
+    instance_count: 1
+    # Bump to professional-* if builds/generation are memory-hungry.
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 20
+      period_seconds: 15
+      timeout_seconds: 5
+      failure_threshold: 5
+    envs:
+      - key: NODE_ENV
+        scope: RUN_AND_BUILD_TIME
+        value: production
+      - key: PORT
+        scope: RUN_TIME
+        value: "3000"
+
+      # DATABASE_URL is injected from the bound `db` component below. The
+      # dev-skills vector store (lib/claw/vector-store.ts) reads it; the app
+      # core stays SQLite (lib/db.ts deliberately ignores DATABASE_URL).
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${db.DATABASE_URL}
+
+      # ── Provider secrets — set real values in the App Platform dashboard
+      #    (App → Settings → App-Level Environment Variables) or via
+      #    `doctl apps update`. type: SECRET encrypts them at rest. ──
+      - key: NVIDIA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SESSION_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: APP_ENCRYPTION_KEY
+        scope: RUN_TIME
+        type: SECRET
+
+      # Optional model overrides (safe defaults exist in code).
+      - key: CLAW_EMBED_MODEL
+        scope: RUN_TIME
+        value: nvidia/nv-embedqa-e5-v5
+      - key: CLAW_RERANK_MODEL
+        scope: RUN_TIME
+        value: nvidia/llama-3.2-nv-rerankqa-1b-v2
+
+databases:
+  # DO Managed Postgres with pgvector. `vector` is in DO's supported
+  # extension list on PG 14+, and the default doadmin user can
+  # `CREATE EXTENSION vector` — which ensureVectorSchema()/migration 006 do.
+  - name: db
+    engine: PG
+    version: "16"
+    production: true

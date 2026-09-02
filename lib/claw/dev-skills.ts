@@ -891,29 +891,39 @@ export type RerankedSkillSearch = {
    *  we fell back to the keyword ranking (empty query, single candidate,
    *  reranker not configured, or an upstream error). */
   reranked: boolean;
-  /** How many candidates the stage-1 keyword pass produced. */
+  /** How stage-1 candidate retrieval ran:
+   *   "vector"  — pgvector semantic search (DO Managed Postgres) drove
+   *               the candidate pool (optionally unioned with keyword hits).
+   *   "keyword" — the in-process keyword/tag scorer (no vector DB, empty
+   *               index, or vector search errored). */
+  retrieval: "vector" | "keyword";
+  /** How many candidates stage-1 produced (the pool the reranker saw). */
   candidateCount: number;
-  /** Present only when reranking was skipped, explaining why. */
+  /** Present when reranking or vector retrieval was skipped, explaining why. */
   note?: string;
 };
 
 /**
- * Two-stage retrieve-then-rerank search over the dev-skills corpus.
+ * Full retrieve-then-rerank RAG over the dev-skills corpus.
  *
- *   Stage 1 (retrieve): the cheap keyword/tag scorer (searchDevSkills)
- *     pulls a WIDE candidate pool — ~4x the requested count — so recall
- *     is high even when the operator's wording doesn't lexically match
- *     the record that actually answers them.
+ *   Stage 1a (vector): if a pgvector store is configured (DO Managed
+ *     Postgres, VECTOR_DATABASE_URL/DATABASE_URL) and indexed, embed the
+ *     query with an NVIDIA embedding NIM and pull the nearest skills by
+ *     cosine distance. This catches semantic matches with zero lexical
+ *     overlap — "make a POST safe to retry" → the idempotency record.
+ *   Stage 1b (keyword union): always also run the in-process keyword/tag
+ *     scorer and union its hits into the pool. Keyword recall backstops
+ *     the vector pass (exact tag/id hits it might rank lower), so the
+ *     reranker never misses an obviously-relevant record.
  *   Stage 2 (rerank): an NVIDIA reranking NIM (lib/nvidia/rerank.ts)
  *     scores every candidate against the query semantically and reorders
- *     them, so the record the operator MEANT ends up first — this is the
- *     "what / when / where / how" quality the keyword pass alone can't
- *     give.
+ *     them, so the record the operator MEANT ends up first.
  *
- * Reranking degrades gracefully: if NVIDIA isn't configured (e.g. local
- * dev with no key) or the call fails, we return the stage-1 keyword order
- * and set `reranked:false` with a `note`, so the caller and the operator
- * always get an answer and can see which path ran.
+ * Every external dependency degrades gracefully and independently: no
+ * vector DB → keyword-only pool (retrieval:"keyword"); no NVIDIA key →
+ * no embeddings and no rerank (keyword order, reranked:false). The caller
+ * and operator always get an answer, and the `retrieval`/`reranked`/`note`
+ * fields report exactly which path ran.
  */
 export async function searchDevSkillsReranked(
   query: string,
@@ -927,37 +937,66 @@ export async function searchDevSkillsReranked(
     return {
       matches: searchDevSkills("", { category: opts.category, limit }),
       reranked: false,
+      retrieval: "keyword",
       candidateCount: 0,
       note: "empty query — returned catalog order"
     };
   }
 
-  // Stage 1: wide keyword prefilter for recall.
   const poolSize = Math.min(24, Math.max(limit * 4, 12));
-  let pool = searchDevSkills(q, { category: opts.category, limit: poolSize });
-  // If a category filter starved the pool, widen by dropping the filter so
-  // the reranker still has real candidates to work with.
-  if (pool.length === 0 && opts.category) {
-    pool = searchDevSkills(q, { limit: poolSize });
+
+  // Stage 1b: keyword pool (always computed — it's cheap and backstops
+  // the vector pass). Widen past a starved category filter.
+  let keywordPool = searchDevSkills(q, { category: opts.category, limit: poolSize });
+  if (keywordPool.length === 0 && opts.category) {
+    keywordPool = searchDevSkills(q, { limit: poolSize });
   }
 
-  if (pool.length <= 1) {
-    return { matches: pool.slice(0, limit), reranked: false, candidateCount: pool.length };
+  // Stage 1a: vector pool. Wrapped so a missing DB, empty index, missing
+  // NVIDIA key, or any error just yields [] and we fall back to keyword.
+  let vectorSkills: DevSkill[] = [];
+  let vectorNote: string | undefined;
+  try {
+    const { isVectorStoreConfigured, vectorSearch } = await import("@/lib/claw/vector-store");
+    if (isVectorStoreConfigured()) {
+      const hits = await vectorSearch(q, { category: opts.category, limit: poolSize, signal: opts.signal });
+      vectorSkills = hits.map((h) => SKILL_BY_ID.get(h.id)).filter((s): s is DevSkill => Boolean(s));
+      if (vectorSkills.length === 0) vectorNote = "vector store configured but returned no hits (unindexed?) — used keyword ranking";
+    }
+  } catch (e) {
+    vectorNote = `vector search error — used keyword ranking (${e instanceof Error ? e.message : String(e)})`;
   }
 
-  // Stage 2: semantic rerank. Everything here — the lazy import (kept out
-  // of the module graph for sync callers like the suggestions route), the
-  // config check, and the upstream call — is wrapped so ANY failure
-  // (module resolution, missing key, upstream error, timeout) degrades
-  // cleanly to the stage-1 keyword order instead of throwing.
+  const retrieval: "vector" | "keyword" = vectorSkills.length > 0 ? "vector" : "keyword";
+
+  // Union vector + keyword pools, dedup by id, vector-first for order.
+  const seen = new Set<string>();
+  const pool: DevSkill[] = [];
+  for (const s of [...vectorSkills, ...keywordPool]) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    pool.push(s);
+    if (pool.length >= poolSize) break;
+  }
+
+  if (pool.length === 0) {
+    return { matches: [], reranked: false, retrieval, candidateCount: 0, note: vectorNote };
+  }
+  if (pool.length === 1) {
+    return { matches: pool.slice(0, limit), reranked: false, retrieval, candidateCount: pool.length, note: vectorNote };
+  }
+
+  // Stage 2: semantic rerank. Wrapped so ANY failure (module resolution,
+  // missing key, upstream error, timeout) degrades to the stage-1 order.
   try {
     const { rerankPassages, isRerankConfigured } = await import("@/lib/nvidia/rerank");
     if (!isRerankConfigured()) {
       return {
         matches: pool.slice(0, limit),
         reranked: false,
+        retrieval,
         candidateCount: pool.length,
-        note: "NVIDIA reranker not configured — used keyword ranking"
+        note: vectorNote ?? "NVIDIA reranker not configured — used stage-1 ranking"
       };
     }
     const passages = pool.map((s) => `${s.summary}\nTags: ${s.tags.join(", ")}\n${s.body}`);
@@ -966,18 +1005,20 @@ export async function searchDevSkillsReranked(
       return {
         matches: pool.slice(0, limit),
         reranked: false,
+        retrieval,
         candidateCount: pool.length,
-        note: "reranker returned no rankings — used keyword ranking"
+        note: vectorNote ?? "reranker returned no rankings — used stage-1 ranking"
       };
     }
     const reordered = ranked.map((r) => pool[r.index]).filter((s): s is DevSkill => Boolean(s));
-    return { matches: reordered.slice(0, limit), reranked: true, candidateCount: pool.length };
+    return { matches: reordered.slice(0, limit), reranked: true, retrieval, candidateCount: pool.length, note: vectorNote };
   } catch (e) {
     return {
       matches: pool.slice(0, limit),
       reranked: false,
+      retrieval,
       candidateCount: pool.length,
-      note: `reranker error — used keyword ranking (${e instanceof Error ? e.message : String(e)})`
+      note: vectorNote ?? `reranker error — used stage-1 ranking (${e instanceof Error ? e.message : String(e)})`
     };
   }
 }
