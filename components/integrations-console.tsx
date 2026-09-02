@@ -387,7 +387,7 @@ function ToolkitRow({ t, busy, onConnect, onDisconnect, onRefresh, onRemove, onS
 }) {
   const active = t.status === "ACTIVE" && t.connectedAccountId;
   return (
-    <div className="rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-3">
+    <div className="min-w-0 rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <ToolkitIcon logo={t.logo ?? null} name={t.label} />
