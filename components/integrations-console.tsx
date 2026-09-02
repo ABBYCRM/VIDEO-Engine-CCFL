@@ -30,7 +30,9 @@ type Toolkit = {
   alias: string | null;
   connectedAt: string | null;
   lastSyncAt: string | null;
-  authConfigId: string | null;
+  // The API reports whether an auth config id is pinned, not the id itself
+  // (ids are server-only). Optional so older cached responses don't break.
+  authConfigConfigured?: boolean;
 };
 
 type Overview = { configured: boolean; toolkits: Toolkit[] };
@@ -224,7 +226,7 @@ export function IntegrationsConsole() {
   const addedSlugs = new Set((overview?.toolkits ?? []).map((t) => t.id));
 
   return (
-    <div className="grid gap-4 px-4 py-4">
+    <div className="grid gap-4">
       {flash && (
         <div className={`rounded-xl border p-3 text-sm ${
           flash.level === "success" ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]" :
@@ -424,7 +426,9 @@ function ToolkitRow({ t, busy, onConnect, onDisconnect, onRefresh, onRemove, onS
           </Button>
         )}
         <details className="w-full">
-          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Advanced: pin a custom auth config id</summary>
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+            Advanced: pin a custom auth config id{t.authConfigConfigured ? " · pinned" : ""}
+          </summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
             <Input value={authConfigId} onChange={e => setAuthConfigId(e.target.value)} placeholder="auth_config_id" />
             <Button variant="secondary" size="sm" onClick={() => onSaveAuthConfig(t.id)} disabled={busy[`auth_${t.id}`] || !authConfigId.trim()}>

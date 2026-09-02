@@ -31,6 +31,28 @@ export class ComposioUpstreamError extends Error {
   constructor(message: string, status: number) { super(message); this.name = "ComposioUpstreamError"; this.status = status; }
 }
 
+/**
+ * Bound a Composio SDK network call so a slow or hanging upstream can't stall
+ * the request until DigitalOcean's gateway gives up and returns HTTP 504.
+ * The @composio/core SDK calls don't take an AbortSignal, so we race the
+ * promise against a timer and reject with a ComposioUpstreamError(504). Every
+ * call site is wrapped in try/catch that falls back to cached data (catalog)
+ * or the local DB snapshot (connected accounts), so a timeout degrades to a
+ * fast, useful response instead of a gateway timeout. The underlying request
+ * isn't cancelled (the SDK gives us no handle), but we stop waiting on it.
+ */
+export async function withComposioTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ComposioUpstreamError(`${label} timed out after ${ms}ms`, 504)), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function getComposioApiKey(): string {
   const encrypted = getRaw(COMPOSIO_SETTING_KEY);
   if (encrypted) return decryptSecret(encrypted);
@@ -100,7 +122,7 @@ export function getActiveConnectedAccountId(toolkit: string, userId = "admin"): 
 export async function syncConnectedAccounts() {
   const USER_ID = "admin";
   const client: any = getComposio();
-  const listed = await client.connectedAccounts.list();
+  const listed = await withComposioTimeout(client.connectedAccounts.list(), 12_000, "connectedAccounts.list");
   const items: any[] = listed?.items ?? (Array.isArray(listed) ? listed : []);
   const best = new Map<string, { id: string; toolkit: string; status: string; raw: unknown; updated: string; authConfigId?: string }>();
   for (const it of items) {
