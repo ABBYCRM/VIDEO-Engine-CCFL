@@ -1,23 +1,17 @@
 // lib/nvidia/rerank.ts — NVIDIA NIM reranking for Claw's dev-skills RAG.
 //
-// The dev-skills "RAG" (lib/claw/dev-skills.ts) was, until this module,
-// a single-stage keyword/tag substring scorer. Keyword scoring is fast
-// and cheap but shallow: it can't tell that "make a POST safe to retry"
-// should surface the `idempotency` record, or that "stop one user
-// hammering my login" is the `ratelimit` record — there's no lexical
-// overlap. That's exactly the "what / when / where / how" gap the
-// operator called out.
+// AUDIT 2026-09-03: NVIDIA reranking endpoint:
+//   nvidia/llama-3.2-nv-rerankqa-1b-v2 → 404 Not Found for this account
+//   nvidia/nv-rerankqa-mistral-4b-v3    → untested (assume unavailable)
 //
-// The fix is a real two-stage retrieve-then-rerank pipeline, which is
-// the standard production RAG shape:
-//   1. RETRIEVE  — the cheap keyword scorer pulls a wide candidate pool
-//                  (~4x the requested count) so recall is high.
-//   2. RERANK    — an NVIDIA reranking NIM scores each candidate against
-//                  the query semantically and reorders them, so the
-//                  record the operator actually meant lands at the top.
+// The dev-skills RAG falls back to keyword ordering automatically when
+// reranking is unavailable (lib/claw/dev-skills.ts). Reranking is not
+// required for MVP operation.
 //
-// NVIDIA's hosted reranking endpoint is OpenAI-adjacent but its own
-// shape (verified against NVIDIA's build.nvidia.com docs, 2026-09):
+// When NVIDIA hosts a reranker on this key's account, re-enable by
+// removing the "[key: unavailable]" annotation from RERANK_MODELS notes.
+//
+// NVIDIA's reranking endpoint (when re-enabled):
 //   POST https://integrate.api.nvidia.com/v1/ranking
 //   Authorization: Bearer $NVIDIA_API_KEY
 //   { "model": "nvidia/llama-3.2-nv-rerankqa-1b-v2",
@@ -47,13 +41,13 @@ export type RerankModelId =
 export const RERANK_MODELS: Record<RerankModelId, { id: RerankModelId; label: string; notes: string }> = {
   "nvidia/llama-3.2-nv-rerankqa-1b-v2": {
     id: "nvidia/llama-3.2-nv-rerankqa-1b-v2",
-    label: "Llama 3.2 NV-RerankQA 1B v2 (default)",
-    notes: "Fast, cheap question-answer reranker. Default for the dev-skills RAG second stage."
+    label: "Llama 3.2 NV-RerankQA 1B v2 (default) ⚠️",
+    notes: "[key: unavailable] Fast, cheap question-answer reranker. Not accessible with the current NVIDIA_API_KEY (HTTP 404). RAG falls back to keyword order."
   },
   "nvidia/nv-rerankqa-mistral-4b-v3": {
     id: "nvidia/nv-rerankqa-mistral-4b-v3",
-    label: "NV-RerankQA Mistral 4B v3",
-    notes: "Larger, stronger reranker. Higher latency; use when the 1B model's ordering isn't sharp enough."
+    label: "NV-RerankQA Mistral 4B v3 ⚠️",
+    notes: "[key: unavailable] Larger, stronger reranker. Higher latency; not accessible with the current NVIDIA_API_KEY. RAG falls back to keyword order."
   }
 };
 

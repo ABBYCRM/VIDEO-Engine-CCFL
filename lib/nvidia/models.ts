@@ -4,14 +4,22 @@
 // https://integrate.api.nvidia.com/v1/chat/completions with
 //   Authorization: Bearer $NVIDIA_API_KEY
 //
-// The catalog below was rebuilt on 2026-08-27 after a large portion of the
-// previously supported models (Llama 3.1 70B, Llama 3.3 70B, Nemotron 3.5
-// Lightning, Nemotron Mini 4B) all reached end-of-life on 2026-08-26
-// (HTTP 410 Gone from the build endpoint, returns no body for streaming).
+// AUDIT 2026-09-03: live key curl tests against integrate.api.nvidia.com:
+//   ✅ meta/llama-3.2-11b-vision-instruct   → 200 OK (default, confirmed 2026-09-03)
+//   ✅ deepseek-ai/deepseek-v4-flash-0731     → 200 OK (confirmed 2026-09-03)
+//   ✅ deepseek-ai/deepseek-v4-pro-0813       → 200 OK (confirmed 2026-09-03)
+//   ❌ ai21labs/jamba-1.5-large-instruct     → 404 Not Found for this account
+//   ❌ nvidia/llama-3.1-nemotron-ultra-253b-v1 → 404 Not Found for this account
+//   ❌ mistralai/mistral-large                → 404 Not Found for this account
+//   ❌ meta/llama-3.2-90b-vision-instruct     → timeout / unreachable (treat as unavailable)
+//   ❌ EMBEDDINGS — both nv-embedqa-e5-v5 AND llama-3.2-nv-embedqa-1b-v2
+//                     → 410 Gone (EOL 2026-08-25). Dev-skills RAG falls back to
+//                     keyword search; no embeddings required for MVP operation.
+//   ❌ RERANKER — nvidia/llama-3.2-nv-rerankqa-1b-v2
+//                   → 404 Not Found. Falls back to keyword order.
 //
-// The new default — meta/llama-3.2-11b-vision-instruct — was confirmed working
-// from the sandbox at 2026-08-27 14:25 ET (non-stream 30ms, stream 250ms,
-// clean text-only deltas, no `reasoning_content`).
+// When the operator has a different key that includes more models, re-enable
+// entries by removing the "(key: unavailable)" annotation from notes.
 //
 // We deliberately do NOT hard-code model behavior in routes — every call site
 // asks the registry for a configured model id, validates it, and only then
@@ -46,7 +54,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "vision", "json-mode"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "Default for Claw + content intelligence. Confirmed working 2026-08-27. Text-only deltas, no reasoning trace.",
+    notes: "Default for Claw + content intelligence. Confirmed working 2026-08-27 + 2026-09-03. Text-only deltas, no reasoning trace.",
     emitsReasoning: false
   },
   "meta/llama-3.2-90b-vision-instruct": {
@@ -55,7 +63,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "vision", "json-mode"],
     contextWindow: 131072,
     costTier: "high",
-    notes: "Larger Llama 3.2 — same simple delta format, slower but stronger. Good for the most complex structured-JSON generation.",
+    notes: "[key: unavailable] Larger Llama 3.2 — same simple delta format, slower but stronger. Not accessible with the current NVIDIA_API_KEY (request times out).",
     emitsReasoning: false
   },
   "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
@@ -64,7 +72,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "high",
-    notes: "NVIDIA's largest Nemotron for top-quality reasoning. Use for long-form strategy / audit synthesis.",
+    notes: "[key: unavailable] NVIDIA's largest Nemotron for top-quality reasoning. Not accessible with the current NVIDIA_API_KEY (HTTP 404).",
     emitsReasoning: false
   },
   "deepseek-ai/deepseek-v4-flash-0731": {
@@ -73,7 +81,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "Cheap + fast. Emits a `reasoning_content` thinking trace that the streaming client strips automatically. Good for monitoring.",
+    notes: "Cheap + fast. Emits a `reasoning_content` thinking trace that the streaming client strips automatically. Good for monitoring. Confirmed working 2026-09-03.",
     emitsReasoning: true
   },
   "deepseek-ai/deepseek-v4-pro-0813": {
@@ -82,7 +90,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "mid",
-    notes: "Larger DeepSeek — stronger reasoning, slightly higher latency. Same reasoning-trace handling as the Flash variant.",
+    notes: "Larger DeepSeek — stronger reasoning, slightly higher latency. Same reasoning-trace handling as the Flash variant. Confirmed working 2026-09-03.",
     emitsReasoning: true
   },
   "mistralai/mistral-large": {
@@ -91,7 +99,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "mid",
-    notes: "Strong European-multilingual support. Useful for non-English copy variants.",
+    notes: "[key: unavailable] Strong European-multilingual support. Not accessible with the current NVIDIA_API_KEY (HTTP 404).",
     emitsReasoning: false
   },
   "ai21labs/jamba-1.5-large-instruct": {
@@ -100,7 +108,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode"],
     contextWindow: 256000,
     costTier: "mid",
-    notes: "Hybrid SSM-Transformer with 256K context. Best when the conversation history is long (Claw with many tool turns).",
+    notes: "[key: unavailable] Hybrid SSM-Transformer with 256K context. Not accessible with the current NVIDIA_API_KEY (HTTP 404).",
     emitsReasoning: false
   },
   "disabled": {

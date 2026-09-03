@@ -1,31 +1,25 @@
 // lib/nvidia/embed.ts — NVIDIA NIM text embeddings for Claw's dev-skills RAG.
 //
-// This is the FIRST stage of the vectorized dev-skills RAG. The keyword
-// prefilter (lib/claw/dev-skills.ts::searchDevSkills) is lexical only —
-// it can't tell that "make a POST safe to retry" means the `idempotency`
-// record when there's no shared word. Real vector retrieval fixes that:
-// we embed every skill once (as a "passage") into a pgvector column
-// (lib/claw/vector-store.ts), embed the operator's query at search time
-// (as a "query"), and rank by cosine distance. The NVIDIA reranker
-// (lib/nvidia/rerank.ts) then sharpens the top of that pool.
+// AUDIT 2026-09-03: both NVIDIA embed models are EOL:
+//   nv-embedqa-e5-v5        → 410 Gone (EOL 2026-08-25)
+//   llama-3.2-nv-embedqa-1b-v2 → 410 Gone (EOL 2026-05-18)
 //
-// NVIDIA's hosted embedding endpoint is OpenAI-adjacent but requires an
-// extra `input_type` field (verified against build.nvidia.com docs,
-// 2026-09):
+// The dev-skills RAG falls back to keyword-only search automatically
+// (lib/claw/dev-skills.ts). Embedding is not required for MVP operation.
+// When NVIDIA hosts a new embed model on this endpoint, re-enable here
+// and recreate the vector index.
+//
+// NVIDIA's hosted embedding endpoint (when re-enabled):
 //   POST https://integrate.api.nvidia.com/v1/embeddings
 //   Authorization: Bearer $NVIDIA_API_KEY
-//   { "model": "nvidia/nv-embedqa-e5-v5",
+//   { "model": "<model>",
 //     "input": ["passage 1", "passage 2", ...],
 //     "input_type": "passage" | "query",
 //     "truncate": "END" }
-// → { "data": [ { "index": 0, "embedding": [ ...1024 floats ] }, ... ] }
+// → { "data": [ { "index": 0, "embedding": [ ...dim floats ] }, ... ] }
 //
-// nv-embedqa-e5-v5 emits 1024-dimensional vectors — that dimension is
-// hard-wired into migrations/006_dev_skill_vectors.sql (vector(1024)),
-// so if you switch models here you must switch the column type there.
-//
-// Same auth key, base URL, optional Helicone routing, timeout ceiling
-// and "never log input content" discipline as lib/nvidia/client.ts.
+// When switching models, update the pgvector column dimension in
+// migrations/006_dev_skill_vectors.sql to match the new model's output dim.
 
 import { NVIDIA_BASE } from "./models";
 import { getNvidiaApiKey, NvidiaAuthError, NvidiaUpstreamError } from "./client";
@@ -39,15 +33,15 @@ export type EmbedModelId =
 export const EMBED_MODELS: Record<EmbedModelId, { id: EmbedModelId; label: string; dim: number; notes: string }> = {
   "nvidia/nv-embedqa-e5-v5": {
     id: "nvidia/nv-embedqa-e5-v5",
-    label: "NV-EmbedQA E5 v5 (default)",
+    label: "NV-EmbedQA E5 v5 (default) ⚠️",
     dim: 1024,
-    notes: "1024-dim QA retrieval embedding. Default for the dev-skills vector store; matches migrations/006 vector(1024)."
+    notes: "[EOL 2026-08-25] 1024-dim QA retrieval embedding. Currently unavailable — dev-skills RAG uses keyword fallback."
   },
   "nvidia/llama-3.2-nv-embedqa-1b-v2": {
     id: "nvidia/llama-3.2-nv-embedqa-1b-v2",
-    label: "Llama 3.2 NV-EmbedQA 1B v2",
+    label: "Llama 3.2 NV-EmbedQA 1B v2 ⚠️",
     dim: 2048,
-    notes: "2048-dim. Stronger but requires changing the pgvector column dimension to 2048 before use."
+    notes: "[EOL 2026-05-18] 2048-dim. Currently unavailable — dev-skills RAG uses keyword fallback."
   }
 };
 
