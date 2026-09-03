@@ -1,27 +1,25 @@
 // NVIDIA NIM model registry for the Content Intelligence and Monitor subsystems.
 //
 // NVIDIA's build endpoint is OpenAI-compatible: POST /v1/chat/completions on
-// https://integrate.api.nvidia.com/v1/chat/completions with
-//   Authorization: Bearer $NVIDIA_API_KEY
+// https://integrate.api.nvidia.com/v1/chat/completions.
 //
-// AUDIT 2026-09-03 SPEED TEST (3 trials each, "Say PONG" prompt):
-//   ✅ meta/llama-3.2-11b-vision-instruct       262–460ms   FASTEST — default for Claw
-//   ✅ nvidia/nemotron-3-super-120b-a12b         384–606ms   FAST — 120B param blend, sometimes verbose
-//   ✅ nvidia/nemotron-3-nano-omni-30b-a3b       421–1346ms  FAST — reasoning model, compact
-//   ⚠️  deepseek-ai/deepseek-v4-pro-0813          2154–7930ms WORKS — wildly variable (2–8s), use for non-latency-sensitive tasks
-//   ⛔  deepseek-ai/deepseek-v4-flash-0731         ALL FAIL   Unreliable — 529 errors + timeouts + TypeError
-//   ⛔  nvidia/nemotron-3-ultra-550b-a55b          18184–19980ms Works but 18–20s — too slow for interactive use
-//   ❌  ALL OTHER MODELS TESTED                     HTTP 404      Not accessible with this NVIDIA_API_KEY:
-//       mistralai/mistral-large, mistralai/mistral-7b-instruct-v0.3,
-//       mistralai/codestral-22b-instruct-v0.1, mistralai/mistral-large-2-instruct,
-//       google/gemma-2b, google/gemma-3-4b-it, google/gemma-3-12b-it, google/gemma-4-31b-it,
-//       ibm/granite-3.0-8b-instruct, meta/codellama-70b, meta/llama2-70b,
-//       nvidia/llama-3.1-nemotron-51b-instruct, nvidia/llama-3.1-nemotron-70b-instruct,
-//       nvidia/llama-3.1-nemotron-ultra-253b-v1, nvidia/nemotron-4-340b-instruct,
-//       nvidia/nemotron-4-340b-reward, nvidia/llama3-chatqa-1.5-70b, deepseek-ai/deepseek-coder-6.7b-instruct,
-//       microsoft/phi-3.5-moe-instruct, nvidia/mistral-nemo-minitron-8b-8k-instruct
+// MULTI-KEY POOL (2026-09-03):
+//   All 11 operator keys are stored as an encrypted JSON array in settings DB
+//   (key: nvidia_api_keys). The client cycles through keys on retryable errors
+//   (HTTP 429 rate limit, 529/503/504 server errors, network timeout, TypeError).
+//   HTTP 401/403 = bad key (skip); HTTP 404 = model not on this key (fail fast).
+//   Seed the pool: POST /api/admin/nvidia/keys with { keys: [...] }
 //
-// AUDIT 2026-09-03: EMBEDDINGS & RERANKER:
+// SPEED TEST 2026-09-03 (3 trials each, "Say PONG"):
+//   ✅ meta/llama-3.2-11b-vision-instruct     262–460ms  FASTEST — default
+//   ✅ nvidia/nemotron-3-super-120b-a12b       384–606ms  FAST — 120B blend
+//   ✅ nvidia/nemotron-3-nano-omni-30b-a3b    421–1346ms FAST — reasoning model
+//   ⚠️  deepseek-ai/deepseek-v4-pro-0813        2154–7930ms Works but 2–8s variable
+//   ⛔  deepseek-ai/deepseek-v4-flash-0731        ALL 503  NVIDIA service-level outage
+//   ⛔  nvidia/nemotron-3-ultra-550b-a55b     18184–19980ms Too slow for interactive use
+//   ❌  ALL other models (20+ tested)           HTTP 404/503 Not on this key pool
+//
+// EMBEDDINGS & RERANKER AUDIT 2026-09-03:
 //   ❌ EMBEDDINGS — both nv-embedqa-e5-v5 AND llama-3.2-nv-embedqa-1b-v2
 //                     → 410 Gone (EOL 2026-08-25). Dev-skills RAG falls back to
 //                     keyword search; no embeddings required for MVP operation.
@@ -102,7 +100,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "[⚠️ unreliable] Cheap + fast when it works, but the current NVIDIA_API_KEY returns 529 errors and timeouts on this model. Avoid for production use until the key is updated.",
+    notes: "[⚠️ NVIDIA 503 service down] All 11 pooled keys return HTTP 503 (Service Unavailable) for this model — NVIDIA's DeepSeek Flash deployment is temporarily overloaded across all keys. Key cycling won't help; this is a service-level outage. Re-test in 30 min. DeepSeek V4 Pro and Nemotron models are working alternatives.",
     emitsReasoning: true
   },
   "meta/llama-3.2-90b-vision-instruct": {
