@@ -390,11 +390,19 @@ export async function composioHealth(): Promise<ComposioHealth> {
       note: "Composio is not configured. Set COMPOSIO_API_KEY in the app env, or save it under the composio_api_key setting."
     };
   }
-  // Pull the latest connected-account snapshot from the local DB; the
-  // Claw health endpoint is supposed to be fast, so we don't ping
-  // Composio's server here. If you want a live reachability probe,
-  // hit /api/integrations/composio instead (admin-only), which already
-  // awaits syncConnectedAccounts() itself.
+  // ALWAYS sync before reading. The Integrations page calls sync on every load
+  // and is served by the primary worker; Claw's app_status and composio_health
+  // tools run on any worker, and without a sync their SQLite cache may be stale
+  // (showing 0 toolkits even when Instagram and YouTube are connected). A sync
+  // is a fast API call; the 12s timeout on connectedAccounts.list keeps it bounded.
+  let syncNote: string | undefined;
+  try {
+    await syncConnectedAccounts();
+  } catch (e) {
+    syncNote = e instanceof ComposioTimeoutError
+      ? `Live sync timed out (${e.message}); showing last known snapshot.`
+      : (e instanceof Error ? e.message : String(e));
+  }
   const rows = db.prepare(
     `SELECT toolkit, status, last_sync_at FROM connected_accounts WHERE UPPER(status)='ACTIVE' ORDER BY toolkit ASC`
   ).all() as Array<{ toolkit: string; status: string; last_sync_at: string | null }>;
@@ -404,7 +412,8 @@ export async function composioHealth(): Promise<ComposioHealth> {
     toolkits: rows.map((r) => {
       const meta = getToolkitMeta(r.toolkit);
       return { id: r.toolkit, label: meta.label, status: r.status, lastSyncAt: r.last_sync_at };
-    })
+    }),
+    ...(syncNote ? { note: syncNote } : {})
   };
 }
 
@@ -450,7 +459,16 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
     if (toolkit) {
       connectedAccountId = getActiveConnectedAccountId(toolkit, userId) || undefined;
       if (!connectedAccountId) {
-        return { ok: false, slug, toolkit, error: `${toolkit} is not connected. Connect it in /integrations first.` };
+        // Surface the list of actually connected toolkits so the operator
+        // can self-diagnose: "I said instagram but it returned 'your_toolkit'".
+        const rows = db.prepare(
+          `SELECT toolkit FROM connected_accounts WHERE UPPER(status)='ACTIVE' ORDER BY toolkit ASC`
+        ).all() as Array<{ toolkit: string }>;
+        const connected = rows.map(r => r.toolkit);
+        const hint = connected.length
+          ? ` Connected toolkits: ${connected.join(", ")}.`
+          : ` No toolkits are connected — go to /integrations to connect one first.`;
+        return { ok: false, slug, toolkit, error: `${toolkit} is not connected.${hint}` };
       }
     }
     const result = await composio.tools.execute(slug, {
