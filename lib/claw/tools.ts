@@ -35,6 +35,8 @@ import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
 import { takeScreenshot } from "@/lib/screenshotone";
 import { webSearch } from "@/lib/web-search";
 import { analyzeImage } from "@/lib/nvidia/vision";
+import { buildMarketingPlan } from "@/lib/mktn/engine";
+import { explainTerm, findTerms } from "@/lib/mktn/usage";
 import { searchDevSkills, searchDevSkillsReranked, getDevSkill, listDevSkillCategories } from "@/lib/claw/dev-skills";
 import {
   deleteClawFile, getFile as getClawFile,
@@ -103,6 +105,25 @@ export const CLAW_TOOLS: ToolDef[] = [
         }
       };
     }
+  },
+
+  // ─── MKTN (shared marketing intelligence) ────────────────────────
+  {
+    name: "mktn_term_guide",
+    description: "Look up marketing terminology and return its definition plus when, where, how, and why to use it. Accepts names or acronyms such as VSL, CAC, JTBD, CRO, and ROAS.",
+    args: "{\"query\":\"VSL\"}",
+    handler: async (a) => {
+      const query = str(a.query).trim();
+      if (!query) return { error: "query is required" };
+      const matches = findTerms(query).slice(0, 12).map(explainTerm);
+      return { query, count: matches.length, terms: matches };
+    }
+  },
+  {
+    name: "mktn_plan",
+    description: "Build the same evidence-led, ethically guarded marketing plan used by the MKTN tab. Required fields: product, audience, goal, funnelStage, channels.",
+    args: "{\"product\":\"...\",\"audience\":\"...\",\"goal\":\"sales\",\"funnelStage\":\"conversion\",\"channels\":[\"Meta Ads\"]}",
+    handler: async (a) => buildMarketingPlan(a)
   },
 
   // ─── Composio (granular in/out passthrough) ──────────────────────

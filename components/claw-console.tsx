@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Copy, FilePlus2, Film, FolderOpen, Menu, Moon, PanelLeftClose,
+  Copy, FilePlus2, Film, FolderOpen, Menu, Megaphone, Moon, PanelLeftClose,
   Paperclip, Pencil, Plug, Plus, Send, Sparkles, Square, Sun, Trash2, X
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
@@ -471,6 +471,10 @@ Apply the full direct-response advertising framework (13 techniques: open loops,
           </div>
 
           <div className="border-t border-border p-2">
+            <Link href="/mktn" className="mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
+              <Megaphone size={16} />
+              MKTN
+            </Link>
             <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
               <Plug size={16} />
               Integrations
