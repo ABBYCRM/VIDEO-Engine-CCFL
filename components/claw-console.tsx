@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Copy, FilePlus2, FolderOpen, Menu, Moon, PanelLeftClose,
+  Copy, FilePlus2, Film, FolderOpen, Menu, Moon, PanelLeftClose,
   Paperclip, Pencil, Plug, Plus, Send, Sparkles, Square, Sun, Trash2, X
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
@@ -16,7 +16,7 @@ type ClawFile = { id: string; name: string; mime: string; size: number; url: str
 type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
 type Theme = "light" | "dark";
 
-type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category"; category?: string; skillIds?: string[] };
+type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] };
 
 // The Claw "starter" prompts are RAG-driven: a /api/claw/suggestions
 // endpoint walks the dev-skills corpus and returns both tool-driven
@@ -69,6 +69,9 @@ export function ClawConsole() {
   const [model, setModel] = useState<string | null>(null);
   const [modelEnvOverridden, setModelEnvOverridden] = useState(false);
   const [modelSaving, setModelSaving] = useState(false);
+  // Creative ads URL modal
+  const [creativeModalOpen, setCreativeModalOpen] = useState(false);
+  const [creativeUrl, setCreativeUrl] = useState("");
   const [theme, setTheme] = useState<Theme>("dark");
   const scroller = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -290,6 +293,48 @@ export function ClawConsole() {
 
   function stop() { abortRef.current?.abort(); setBusy(false); }
 
+  async function launchCreativeAds() {
+    const url = creativeUrl.trim();
+    if (!url) return;
+    setCreativeModalOpen(false);
+    setBusy(true);
+    // Create a new conversation and inject the full creative brief.
+    let convId: string | null = null;
+    try {
+      const cr = await fetch("/api/claw/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: `Ad scripts: ${url}` })
+      });
+      if (cr.ok) {
+        const cd = await cr.json();
+        convId = cd.conversation?.id ?? null;
+      }
+    } catch { /* continue without a named conversation */ }
+    setActive(convId);
+    setMessages([]);
+    setStreaming("");
+    setTools([]);
+    setSidebarOpen(false);
+    await loadConvs();
+    // Build the full brief — the URL is researched first via steel_scrape,
+    // then the 13-step creative framework is applied.
+    const fullPrompt = `Research this URL with steel_scrape first, then use everything you find to create a complete ad/video script:
+
+${url}
+
+---
+
+Apply the full direct-response advertising framework (13 techniques: open loops, big question, stakes, contrast, information gaps, question chains, pattern interrupts, escalation, headfake, visual storytelling, hook, payoff, CTA) and output:
+
+1. BIG QUESTION / CHARACTER / STAKES / URGENCY / CORE CONTRAST / HEADFAKE / OPEN LOOPS
+2. Beat-by-beat script table: TIME | VOICEOVER | ON-SCREEN TEXT | VISUAL | EDIT | QUESTION CREATED
+3. 3 ALTERNATIVE HOOKS (curiosity / stakes / contrarian)
+4. RETENTION MAP
+5. CTA + THUMBNAIL / FIRST-FRAME CONCEPT + CAPTION`;
+    await send(fullPrompt);
+  }
+
   const visible = messages.filter((m) => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && m.toolJson));
   const empty = !visible.length && !streaming && !busy;
   const activeTitle = convs.find((c) => c.id === active)?.title;
@@ -477,11 +522,31 @@ export function ClawConsole() {
                         <button
                           key={`${s.source}-${s.skillIds?.[0] || s.label}-${i}`}
                           type="button"
-                          title={s.source === "rag" && s.skillIds ? `From dev-skill: ${s.skillIds.join(", ")}` : s.source === "tool" ? "Calls a real Claw tool" : "Starter"}
-                          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-[hsl(var(--claw-elevated))] px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--claw-accent))]/50 hover:text-foreground"
-                          onClick={() => { setText(s.prompt); textarea.current?.focus(); }}
+                          title={
+                            s.source === "creative"
+                              ? "Enter a URL to generate ad scripts"
+                              : s.source === "rag" && s.skillIds
+                              ? `From dev-skill: ${s.skillIds.join(", ")}`
+                              : s.source === "tool"
+                              ? "Calls a real Claw tool"
+                              : "Starter"
+                          }
+                          className={
+                            s.source === "creative"
+                              ? "inline-flex max-w-full items-center gap-1.5 rounded-full border border-[hsl(var(--claw-accent))]/40 bg-[hsl(var(--claw-accent))]/10 px-3.5 py-1.5 text-xs text-[hsl(var(--claw-accent))] transition-colors hover:border-[hsl(var(--claw-accent))]/70 hover:bg-[hsl(var(--claw-accent))]/20"
+                              : "inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-[hsl(var(--claw-elevated))] px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--claw-accent))]/50 hover:text-foreground"
+                          }
+                          onClick={() => {
+                            if (s.source === "creative") {
+                              setCreativeModalOpen(true);
+                              setCreativeUrl("");
+                              return;
+                            }
+                            setText(s.prompt); textarea.current?.focus();
+                          }}
                         >
                           {s.source === "rag" ? <Sparkles size={11} className="shrink-0 text-[hsl(var(--claw-accent))]" /> : null}
+                          {s.source === "creative" ? <Film size={11} className="shrink-0" /> : null}
                           <span className="max-w-[240px] truncate sm:max-w-[280px]">{s.label}</span>
                         </button>
                       ))}
@@ -613,6 +678,58 @@ export function ClawConsole() {
           </div>
         </main>
       </div>
+
+      {/* Creative ads URL input modal */}
+      {creativeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <button type="button" aria-label="Close" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCreativeModalOpen(false)} />
+          {/* Dialog */}
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-[hsl(var(--claw-elevated))] p-6 shadow-2xl">
+            <div className="mb-1 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[hsl(var(--claw-accent))]/15">
+                  <Film size={16} className="text-[hsl(var(--claw-accent))]" />
+                </div>
+                <h2 className="text-[15px] font-semibold">Create Ad Scripts</h2>
+              </div>
+              <button type="button" onClick={() => setCreativeModalOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
+                <X size={15} />
+              </button>
+            </div>
+            <p className="mb-4 text-xs text-muted-foreground">
+              Claw will scrape your site and generate a complete short-form video ad script using a 13-step direct-response framework. Paste the URL below:
+            </p>
+            <input
+              type="url"
+              placeholder="https://yoursite.com"
+              value={creativeUrl}
+              onChange={(e) => setCreativeUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && creativeUrl.trim()) void launchCreativeAds(); }}
+              className="mb-4 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[hsl(var(--claw-accent))]/60 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/20"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCreativeModalOpen(false)}
+                className="flex-1 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void launchCreativeAds()}
+                disabled={!creativeUrl.trim()}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[hsl(var(--claw-accent))] px-4 py-2 text-sm font-medium text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
+              >
+                <Film size={13} />
+                Generate Scripts
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthGuard>
   );
 }
