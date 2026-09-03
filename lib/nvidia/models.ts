@@ -4,14 +4,24 @@
 // https://integrate.api.nvidia.com/v1/chat/completions with
 //   Authorization: Bearer $NVIDIA_API_KEY
 //
-// AUDIT 2026-09-03: live key curl tests against integrate.api.nvidia.com:
-//   ✅ meta/llama-3.2-11b-vision-instruct   → 200 OK (default, confirmed 2026-09-03)
-//   ✅ deepseek-ai/deepseek-v4-flash-0731     → 200 OK (confirmed 2026-09-03)
-//   ✅ deepseek-ai/deepseek-v4-pro-0813       → 200 OK (confirmed 2026-09-03)
-//   ❌ ai21labs/jamba-1.5-large-instruct     → 404 Not Found for this account
-//   ❌ nvidia/llama-3.1-nemotron-ultra-253b-v1 → 404 Not Found for this account
-//   ❌ mistralai/mistral-large                → 404 Not Found for this account
-//   ❌ meta/llama-3.2-90b-vision-instruct     → timeout / unreachable (treat as unavailable)
+// AUDIT 2026-09-03 SPEED TEST (3 trials each, "Say PONG" prompt):
+//   ✅ meta/llama-3.2-11b-vision-instruct       262–460ms   FASTEST — default for Claw
+//   ✅ nvidia/nemotron-3-super-120b-a12b         384–606ms   FAST — 120B param blend, sometimes verbose
+//   ✅ nvidia/nemotron-3-nano-omni-30b-a3b       421–1346ms  FAST — reasoning model, compact
+//   ⚠️  deepseek-ai/deepseek-v4-pro-0813          2154–7930ms WORKS — wildly variable (2–8s), use for non-latency-sensitive tasks
+//   ⛔  deepseek-ai/deepseek-v4-flash-0731         ALL FAIL   Unreliable — 529 errors + timeouts + TypeError
+//   ⛔  nvidia/nemotron-3-ultra-550b-a55b          18184–19980ms Works but 18–20s — too slow for interactive use
+//   ❌  ALL OTHER MODELS TESTED                     HTTP 404      Not accessible with this NVIDIA_API_KEY:
+//       mistralai/mistral-large, mistralai/mistral-7b-instruct-v0.3,
+//       mistralai/codestral-22b-instruct-v0.1, mistralai/mistral-large-2-instruct,
+//       google/gemma-2b, google/gemma-3-4b-it, google/gemma-3-12b-it, google/gemma-4-31b-it,
+//       ibm/granite-3.0-8b-instruct, meta/codellama-70b, meta/llama2-70b,
+//       nvidia/llama-3.1-nemotron-51b-instruct, nvidia/llama-3.1-nemotron-70b-instruct,
+//       nvidia/llama-3.1-nemotron-ultra-253b-v1, nvidia/nemotron-4-340b-instruct,
+//       nvidia/nemotron-4-340b-reward, nvidia/llama3-chatqa-1.5-70b, deepseek-ai/deepseek-coder-6.7b-instruct,
+//       microsoft/phi-3.5-moe-instruct, nvidia/mistral-nemo-minitron-8b-8k-instruct
+//
+// AUDIT 2026-09-03: EMBEDDINGS & RERANKER:
 //   ❌ EMBEDDINGS — both nv-embedqa-e5-v5 AND llama-3.2-nv-embedqa-1b-v2
 //                     → 410 Gone (EOL 2026-08-25). Dev-skills RAG falls back to
 //                     keyword search; no embeddings required for MVP operation.
@@ -29,10 +39,12 @@ export type NvidiaCapability = "chat" | "vision" | "json-mode";
 
 export type NvidiaModelId =
   | "meta/llama-3.2-11b-vision-instruct"
+  | "nvidia/nemotron-3-super-120b-a12b"
+  | "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+  | "deepseek-ai/deepseek-v4-pro-0813"
+  | "deepseek-ai/deepseek-v4-flash-0731"
   | "meta/llama-3.2-90b-vision-instruct"
   | "nvidia/llama-3.1-nemotron-ultra-253b-v1"
-  | "deepseek-ai/deepseek-v4-flash-0731"
-  | "deepseek-ai/deepseek-v4-pro-0813"
   | "mistralai/mistral-large"
   | "ai21labs/jamba-1.5-large-instruct"
   | "disabled";
@@ -50,12 +62,48 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
 }> = {
   "meta/llama-3.2-11b-vision-instruct": {
     id: "meta/llama-3.2-11b-vision-instruct",
-    label: "Llama 3.2 11B Vision Instruct (default)",
+    label: "Llama 3.2 11B Vision Instruct ★ default",
     capabilities: ["chat", "vision", "json-mode"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "Default for Claw + content intelligence. Confirmed working 2026-08-27 + 2026-09-03. Text-only deltas, no reasoning trace.",
+    notes: "DEFAULT — fastest + most reliable at 262–460ms. Vision-capable. Text-only deltas, no reasoning trace.",
     emitsReasoning: false
+  },
+  "nvidia/nemotron-3-super-120b-a12b": {
+    id: "nvidia/nemotron-3-super-120b-a12b",
+    label: "Nemotron 3 Super 120B",
+    capabilities: ["chat", "json-mode"],
+    contextWindow: 131072,
+    costTier: "mid",
+    notes: "FAST at 384–606ms. 120B param blend model. Can be verbose — worth it for speed. Confirmed working 2026-09-03.",
+    emitsReasoning: false
+  },
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+    id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    label: "Nemotron 3 Nano Omni 30B (reasoning)",
+    capabilities: ["chat", "json-mode"],
+    contextWindow: 131072,
+    costTier: "low",
+    notes: "FAST at 421–1346ms. Reasoning model — thinks before responding. Compact and reliable. Confirmed working 2026-09-03.",
+    emitsReasoning: false
+  },
+  "deepseek-ai/deepseek-v4-pro-0813": {
+    id: "deepseek-ai/deepseek-v4-pro-0813",
+    label: "DeepSeek V4 Pro (0813)",
+    capabilities: ["chat", "json-mode"],
+    contextWindow: 131072,
+    costTier: "mid",
+    notes: "SLOWER — 2–8s latency (highly variable). Emits reasoning_content trace. Use for non-interactive tasks where quality > speed. Confirmed working 2026-09-03.",
+    emitsReasoning: true
+  },
+  "deepseek-ai/deepseek-v4-flash-0731": {
+    id: "deepseek-ai/deepseek-v4-flash-0731",
+    label: "DeepSeek V4 Flash (0731) ⚠️",
+    capabilities: ["chat", "json-mode"],
+    contextWindow: 131072,
+    costTier: "low",
+    notes: "[⚠️ unreliable] Cheap + fast when it works, but the current NVIDIA_API_KEY returns 529 errors and timeouts on this model. Avoid for production use until the key is updated.",
+    emitsReasoning: true
   },
   "meta/llama-3.2-90b-vision-instruct": {
     id: "meta/llama-3.2-90b-vision-instruct",
@@ -74,24 +122,6 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     costTier: "high",
     notes: "[key: unavailable] NVIDIA's largest Nemotron for top-quality reasoning. Not accessible with the current NVIDIA_API_KEY (HTTP 404).",
     emitsReasoning: false
-  },
-  "deepseek-ai/deepseek-v4-flash-0731": {
-    id: "deepseek-ai/deepseek-v4-flash-0731",
-    label: "DeepSeek V4 Flash (0731)",
-    capabilities: ["chat", "json-mode"],
-    contextWindow: 131072,
-    costTier: "low",
-    notes: "Cheap + fast. Emits a `reasoning_content` thinking trace that the streaming client strips automatically. Good for monitoring. Confirmed working 2026-09-03.",
-    emitsReasoning: true
-  },
-  "deepseek-ai/deepseek-v4-pro-0813": {
-    id: "deepseek-ai/deepseek-v4-pro-0813",
-    label: "DeepSeek V4 Pro (0813)",
-    capabilities: ["chat", "json-mode"],
-    contextWindow: 131072,
-    costTier: "mid",
-    notes: "Larger DeepSeek — stronger reasoning, slightly higher latency. Same reasoning-trace handling as the Flash variant. Confirmed working 2026-09-03.",
-    emitsReasoning: true
   },
   "mistralai/mistral-large": {
     id: "mistralai/mistral-large",
