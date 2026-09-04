@@ -52,7 +52,7 @@ export function MktnConsole() {
           </div>
           <div className="flex flex-wrap items-center gap-2.5" aria-label="Image provider failover order">
             {["Hedra", "Gemini", "A2E"].map((name, index) => <div className="contents" key={name}>
-              <div className={`rounded-md border px-3 py-2 ${index === 0 ? "border-[hsl(var(--claw-accent))]/45 bg-[hsl(var(--claw-accent))]/10" : "border-border bg-background/65"}`}>
+              <div className={`rounded-md border px-3 py-2 ${index === 0 ? "border-[hsl(var(--claw-accent))]/40 bg-[hsl(var(--claw-accent))]/10" : "border-border bg-background/60"}`}>
                 <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">{index === 0 ? "primary" : `fallback 0${index}`}</div>
                 <div className="mt-1 text-xs font-semibold">{name}</div>
               </div>
@@ -70,14 +70,14 @@ export function MktnConsole() {
       </div>
     </section>
 
-    <div className="mb-6 overflow-x-auto rounded-xl border border-border bg-[hsl(var(--claw-elevated))]/72 p-1.5 shadow-[0_12px_40px_hsl(222_40%_2%/.05)]">
+    <div className="mb-6 overflow-x-auto rounded-xl border border-border bg-[hsl(var(--claw-elevated))]/70 p-1.5 shadow-[0_12px_40px_hsl(222_40%_2%/.05)]">
       <nav className="grid min-w-[760px] grid-cols-5 gap-1" aria-label="MKTN sections">
         {views.map((item, index) => {
           const Icon = item.icon;
           const isActive = view === item.id;
           return <button key={item.id} type="button" onClick={() => setView(item.id)} aria-current={isActive ? "page" : undefined}
-            className={`group relative flex min-h-[62px] items-center gap-3 rounded-lg border px-3 text-left transition-all ${isActive ? "border-[hsl(var(--claw-accent))]/30 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/55 hover:text-foreground"}`}>
-            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border ${isActive ? "border-[hsl(var(--claw-accent))]/35 text-[hsl(var(--claw-accent))]" : "border-border"}`}><Icon size={14} /></span>
+            className={`group relative flex min-h-[62px] items-center gap-3 rounded-lg border px-3 text-left transition-all ${isActive ? "border-[hsl(var(--claw-accent))]/30 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground"}`}>
+            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border ${isActive ? "border-[hsl(var(--claw-accent))]/30 text-[hsl(var(--claw-accent))]" : "border-border"}`}><Icon size={14} /></span>
             <span className="min-w-0"><span className="block text-xs font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{item.hint}</span></span>
             <span className="absolute right-2 top-2 font-mono text-[8px] text-muted-foreground/60">0{index + 1}</span>
           </button>;
@@ -128,7 +128,7 @@ function GuideView() {
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="VSL, CAC, positioning…" aria-label="Search marketing terminology" />
           <Button type="submit" disabled={busy}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}<span className="ml-2">Search intelligence</span></Button>
         </form>
-        <div className="mt-5 border-t border-border pt-4"><div className="signal-label">Example signals</div><div className="mt-3 flex flex-wrap gap-1.5">{["VSL", "AIDA", "ROAS", "JTBD"].map((sample) => <button key={sample} type="button" onClick={() => setQuery(sample)} className="rounded-md border border-border px-2 py-1 font-mono text-[9px] text-muted-foreground transition hover:border-[hsl(var(--claw-accent))]/45 hover:text-foreground">{sample}</button>)}</div></div>
+        <div className="mt-5 border-t border-border pt-4"><div className="signal-label">Example signals</div><div className="mt-3 flex flex-wrap gap-1.5">{["VSL", "AIDA", "ROAS", "JTBD"].map((sample) => <button key={sample} type="button" onClick={() => setQuery(sample)} className="rounded-md border border-border px-2 py-1 font-mono text-[9px] text-muted-foreground transition hover:border-[hsl(var(--claw-accent))]/40 hover:text-foreground">{sample}</button>)}</div></div>
       </Card>
       <Message error={error} />
     </div>
@@ -188,7 +188,7 @@ function GenerateView() {
         <div className="signal-label">Execution path</div><div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider"><span className="text-[hsl(var(--claw-accent))]">Hedra</span><ArrowRight size={11} /><span>Gemini</span><ArrowRight size={11} /><span>A2E</span></div>
       </div>
       <form className="grid gap-4" onSubmit={submit}>
-        <Labeled label="Prompt"><textarea required maxLength={8000} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the campaign image, visual tension, subject, framing, lighting, and desired response…" className="min-h-52 w-full resize-y rounded-md border border-border bg-background/65 p-3.5 text-sm leading-6 outline-none transition placeholder:text-muted-foreground/65 hover:border-[hsl(var(--border-strong))] focus:border-[hsl(var(--claw-accent))]/65 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/12" /></Labeled>
+        <Labeled label="Prompt"><textarea required maxLength={8000} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the campaign image, visual tension, subject, framing, lighting, and desired response…" className="min-h-52 w-full resize-y rounded-md border border-border bg-background/60 p-3.5 text-sm leading-6 outline-none transition placeholder:text-muted-foreground/60 hover:border-[hsl(var(--border-strong))] focus:border-[hsl(var(--claw-accent))]/60 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/10" /></Labeled>
         <Labeled label="Canvas"><Select value={aspectRatio} onChange={setAspectRatio} options={["1:1", "16:9", "9:16", "4:3", "3:4"]} /></Labeled>
         <Button type="submit" size="lg" disabled={busy}>{busy ? <Loader2 size={16} className="mr-2 animate-spin" /> : <WandSparkles size={16} className="mr-2" />}Generate once</Button>
         <p className="text-[10px] leading-5 text-muted-foreground"><ShieldCheck size={12} className="mr-1 inline text-[hsl(var(--success))]" />Accepted async jobs are never duplicated during fallback.</p>
@@ -215,7 +215,7 @@ function DistributeView() {
       <form className="grid gap-4" onSubmit={submit}>
         <Labeled label="Toolkit"><Input required value={toolkit} onChange={(e) => setToolkit(e.target.value)} placeholder="instagram" /></Labeled>
         <Labeled label="Action slug"><Input required value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="INSTAGRAM_CREATE_POST" /></Labeled>
-        <Labeled label="Arguments JSON"><textarea required value={args} onChange={(e) => setArgs(e.target.value)} className="min-h-44 w-full rounded-md border border-border bg-background/65 p-3.5 font-mono text-xs leading-6 outline-none focus:border-[hsl(var(--claw-accent))]/65 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/12" /></Labeled>
+        <Labeled label="Arguments JSON"><textarea required value={args} onChange={(e) => setArgs(e.target.value)} className="min-h-44 w-full rounded-md border border-border bg-background/60 p-3.5 font-mono text-xs leading-6 outline-none focus:border-[hsl(var(--claw-accent))]/60 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/10" /></Labeled>
         <div className="grid gap-2 sm:grid-cols-2"><Button type="submit" disabled={busy}>{busy ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Zap size={15} className="mr-2" />}Run action</Button><Button asChild type="button" variant="secondary"><Link href="/integrations">Connections <ExternalLink size={13} className="ml-2" /></Link></Button></div>
       </form>
     </Card>
@@ -262,5 +262,5 @@ function EmptyOutput({ icon: Icon, title, text }: { icon: typeof ImageIcon; titl
 }
 
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-2 text-sm"><span className="signal-label !text-foreground">{label}</span>{children}</label>; }
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) { return <select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-md border border-border bg-background/65 px-3.5 text-sm capitalize outline-none transition hover:border-[hsl(var(--border-strong))] focus:border-[hsl(var(--claw-accent))]/65 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/12">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>; }
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) { return <select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-md border border-border bg-background/60 px-3.5 text-sm capitalize outline-none transition hover:border-[hsl(var(--border-strong))] focus:border-[hsl(var(--claw-accent))]/60 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/10">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>; }
 function Message({ error, success }: { error?: string | null; success?: string | null }) { if (!error && !success) return null; return <div role={error ? "alert" : "status"} className={`flex items-center gap-2 rounded-md border p-3 text-sm ${error ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger))]/10 text-[hsl(var(--danger))]" : "border-[hsl(var(--success))]/30 bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"}`}>{error ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}{error || success}</div>; }

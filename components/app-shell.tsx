@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const active = path === item.href || path.startsWith(`${item.href}/`);
             return <li key={item.href}>
               <Link href={item.href} onClick={() => setMobileOpen(false)} aria-current={active ? "page" : undefined}
-                className={`group relative flex min-h-[58px] items-center gap-3 overflow-hidden rounded-lg border px-3 transition-all ${active ? "border-[hsl(var(--claw-accent))]/35 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"}`}>
+                className={`group relative flex min-h-[58px] items-center gap-3 overflow-hidden rounded-lg border px-3 transition-all ${active ? "border-[hsl(var(--claw-accent))]/30 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"}`}>
                 {active && <span className="absolute inset-y-2 left-0 w-0.5 bg-[hsl(var(--claw-accent))] shadow-[0_0_16px_hsl(var(--claw-accent))]" />}
                 <span className={`grid h-8 w-8 place-items-center rounded-md border ${active ? "border-[hsl(var(--claw-accent))]/25 text-[hsl(var(--claw-accent))]" : "border-border/70 group-hover:border-[hsl(var(--border-strong))]"}`}><Icon size={15} /></span>
                 <span className="min-w-0 flex-1">
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <div className="border-t border-border p-3">
-        <div className="mb-2 rounded-lg border border-border bg-background/45 p-3">
+        <div className="mb-2 rounded-lg border border-border bg-background/40 p-3">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="signal-label">System mesh</span>
             <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-[hsl(var(--success))]"><span className="signal-dot !h-1.5 !w-1.5 !bg-[hsl(var(--success))]" /> live</span>

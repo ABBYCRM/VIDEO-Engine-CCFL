@@ -18,14 +18,14 @@ export function PageHeader({ eyebrow, eyebrowIcon, title, description, actions, 
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
-  return <div className="signal-grid grid min-h-72 place-items-center rounded-xl border border-dashed border-[hsl(var(--border-strong))] bg-[hsl(var(--claw-elevated))]/55 p-8 text-center">
+  return <div className="signal-grid grid min-h-72 place-items-center rounded-xl border border-dashed border-[hsl(var(--border-strong))] bg-[hsl(var(--claw-elevated))]/50 p-8 text-center">
     <div>{icon && <div className="mb-4 text-[hsl(var(--claw-accent))]">{icon}</div>}<div className="font-semibold">{title}</div>{description && <p className="mt-2 text-sm text-muted-foreground">{description}</p>}{action && <div className="mt-5">{action}</div>}</div>
   </div>;
 }
 
 export function ErrorBanner({ error, onDismiss }: { error: string | null; onDismiss?: () => void }) {
   if (!error) return null;
-  return <div className="mb-4 flex items-start justify-between gap-2 rounded-md border border-[hsl(var(--danger))]/35 bg-[hsl(var(--danger))]/8 p-3 text-sm text-[hsl(var(--danger))]">
+  return <div className="mb-4 flex items-start justify-between gap-2 rounded-md border border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger))]/10 p-3 text-sm text-[hsl(var(--danger))]">
     <span>{error}</span>{onDismiss && <button onClick={onDismiss} className="opacity-70 hover:opacity-100" aria-label="Dismiss error">×</button>}
   </div>;
 }
