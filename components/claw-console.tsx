@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
   Hash, Loader2, Menu, Moon, PanelLeftClose, Paperclip,
-  Pencil, Plug, Plus, Search, Send, Sparkles, Square,
+  Pencil, Plug, Plus, Search, Send, Settings, Sparkles, Square,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
@@ -764,6 +764,10 @@ export function ClawConsole() {
             <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]">
               <Plug size={14} />
               Integrations
+            </Link>
+            <Link href="/settings" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]">
+              <Settings size={14} />
+              Settings
             </Link>
             <button
               type="button"
