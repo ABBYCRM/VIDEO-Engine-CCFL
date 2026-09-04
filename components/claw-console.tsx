@@ -8,12 +8,12 @@ import {
 import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
 import AILoader from "@/components/ui/ai-loader";
+import { ClawThinkingPanel, type ToolNode } from "@/components/ui/claw-thinking-panel";
 import { ModelSelectorKit, type AiModel } from "@/components/ui/ai-model-select";
 
 type Conv = { id: string; title: string; createdAt: string; updatedAt: string };
 type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content: string; toolJson?: any; createdAt: string };
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
-type ToolChip = { name: string; ok?: boolean; via?: string; preview?: string; running?: boolean; decision?: "DEFER" | "REJECT" };
 type Theme = "light" | "dark";
 
 type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] };
@@ -57,7 +57,7 @@ export function ClawConsole() {
   const [text, setText] = useState("");
   const [pendingFiles, setPendingFiles] = useState<ClawFile[]>([]);
   const [streaming, setStreaming] = useState("");
-  const [tools, setTools] = useState<ToolChip[]>([]);
+  const [tools, setTools] = useState<ToolNode[]>([]);
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>(DEFAULT_SUGGESTIONS);
   const [error, setError] = useState<string | null>(null);
@@ -275,8 +275,8 @@ export function ClawConsole() {
         if (done) break;
         sseParse(decoder.decode(value, { stream: true }), (e) => {
           if (e.type === "token") setStreaming((s) => s + e.text);
-          if (e.type === "tool_start") setTools((t) => [...t, { name: e.name, running: true }]);
-          if (e.type === "tool_end") setTools((t) => t.map((x) => x.name === e.name && x.running ? { ...x, running: false, ok: e.ok, via: e.via, preview: e.preview, decision: e.decision } : x));
+          if (e.type === "tool_start") setTools((t) => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now() }]);
+          if (e.type === "tool_end") setTools((t) => t.map((x) => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", via: e.via, result: e.preview, finishedAt: Date.now() } : x));
           if (e.type === "error") setError(e.error);
           if (e.type === "done") setStreaming("");
         }, carry);
@@ -514,7 +514,7 @@ Apply the full direct-response advertising framework (13 techniques: open loops,
                   <div className="w-full max-w-3xl">
                     <div className="mb-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
                       <ClawLogo size={56} className="shrink-0" rounded="rounded-2xl" />
-                      <h1 className="text-center text-2xl font-semibold tracking-tight text-balance sm:text-left sm:text-3xl">{greeting()}, operator</h1>
+                      <h1 suppressHydrationWarning className="text-center text-2xl font-semibold tracking-tight text-balance sm:text-left sm:text-3xl">{greeting()}, operator</h1>
                     </div>
                     {renderComposer("hero")}
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -583,29 +583,16 @@ Apply the full direct-response advertising framework (13 techniques: open loops,
                         )
                       ))}
 
-                      {tools.map((t, i) => {
-                        // A DEFER/REJECT is Claw deliberately pausing for the
-                        // operator's confirmation, not a failure.
-                        const label = t.running
-                          ? "Running"
-                          : t.decision === "DEFER"
-                            ? "Needs confirmation:"
-                            : t.decision === "REJECT"
-                              ? "Blocked:"
-                              : t.ok ? "Did" : "Failed";
-                        const isPause = t.decision === "DEFER" || t.decision === "REJECT";
-                        return (
-                          <div key={`${t.name}-${i}`} className="ml-8 rounded-xl border border-border bg-[hsl(var(--claw-elevated))] px-3 py-2 text-xs text-foreground">
-                            <div className="flex items-center gap-2">
-                              {t.running ? <AILoader variant="dots" className="text-[hsl(var(--claw-accent))]" /> : <span className={`h-1.5 w-1.5 rounded-full ${isPause ? "bg-[hsl(var(--info))]" : t.ok ? "bg-[hsl(var(--success))]" : "bg-[hsl(var(--danger))]"}`} />}
-                              <span className="font-semibold">{label} {t.name}</span>
-                              {t.via ? <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">via {t.via}</span> : null}
-                            </div>
-                            {t.preview ? <div className="mt-1.5 line-clamp-3 font-mono text-[11px] text-muted-foreground">{t.preview}</div> : null}
-                          </div>
-                        );
-                      })}
+                      {/* Live thinking panel: shows tool executions, streaming preview, elapsed timer */}
+                      {(tools.length > 0 || busy) && (
+                        <ClawThinkingPanel
+                          tools={tools}
+                          streaming={streaming}
+                          busy={busy}
+                        />
+                      )}
 
+                      {/* Streaming assistant response */}
                       {streaming && (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -618,7 +605,8 @@ Apply the full direct-response advertising framework (13 techniques: open loops,
                         </div>
                       )}
 
-                      {busy && !streaming && (
+                      {/* Only show thinking loader when busy but no tools have started yet */}
+                      {busy && !streaming && tools.length === 0 && (
                         <div className="flex items-center gap-2 pl-0">
                           <ClawLogo size={24} className="shrink-0" />
                           <AILoader label="Thinking" showElapsed variant="dots" className="text-muted-foreground" />
