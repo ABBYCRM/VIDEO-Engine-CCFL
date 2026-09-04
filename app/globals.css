@@ -7,49 +7,35 @@
  * ------------------------------------------------------------
  * White / off-white base · purple brand accent (#6E56CF) ·
  * hairline slate borders · tight typographic hierarchy ·
- * rounded-2xl cards with soft shadows. The whole app feels
- * like a content tool: lots of whitespace, clean dividers,
- * big readable numbers, calm.
  * ============================================================ */
 
 :root {
-  /* Surfaces */
-  --background:        0 0% 100%;              /* pure white */
-  --foreground:        224 71% 4%;            /* near-black ink */
-  --muted:             220 20% 96%;            /* paper / gray-100 */
-  --muted-foreground:  220 14% 46%;            /* secondary text */
-  --border:            220 20% 90%;            /* hairline */
-  --border-strong:     220 20% 78%;            /* visible divider */
-
-  /* Brand — purple */
-  --primary:           252 75% 60%;            /* #6E56CF */
-  --primary-foreground: 0 0% 100%;
-  --primary-soft:      252 100% 96%;           /* #F2EFFF */
-  --primary-soft-2:    252 80% 90%;            /* tint */
-
-  /* Status */
-  --success:           152 60% 40%;
-  --warning:           32  95% 50%;
-  --danger:            0   72% 55%;
-  --info:              199 89% 48%;
-
-  /* Glass / popovers */
-  --popover:           0 0% 100%;
-  --popover-foreground: 224 71% 4%;
-  --ring:              252 75% 60%;
-  --accent:            220 20% 96%;
-
-  /* App shell */
-  --sidebar:           0 0% 100%;
-  --sidebar-border:    220 20% 90%;
-  --sidebar-item:      224 71% 4%;
+  --background:          0 0% 100%;
+  --foreground:          224 71% 4%;
+  --muted:               220 20% 96%;
+  --muted-foreground:    220 14% 46%;
+  --border:              220 20% 90%;
+  --border-strong:       220 20% 78%;
+  --primary:             252 75% 60%;
+  --primary-foreground:  0 0% 100%;
+  --primary-soft:        252 100% 96%;
+  --primary-soft-2:      252 80% 90%;
+  --success:             152 60% 40%;
+  --warning:             32  95% 50%;
+  --danger:              0   72% 55%;
+  --info:                199 89% 48%;
+  --popover:             0 0% 100%;
+  --popover-foreground:  224 71% 4%;
+  --ring:                252 75% 60%;
+  --accent:              220 20% 96%;
+  --sidebar:             0 0% 100%;
+  --sidebar-border:      220 20% 90%;
+  --sidebar-item:        224 71% 4%;
   --sidebar-item-active-bg: 252 100% 97%;
   --sidebar-item-active-fg: 252 75% 50%;
-  --sidebar-group:     220 14% 46%;
+  --sidebar-group:       220 14% 46%;
 }
 
-/* Page bg: white with a very subtle warm wash from the top-left.
-   No more dark gradients. */
 body {
   background-color: hsl(var(--background));
   background-image:
@@ -63,198 +49,164 @@ body {
 }
 
 * { border-color: hsl(var(--border)); }
-
 input, textarea, select { color-scheme: light; }
 
 /* ============================================================
- * Soro-style utility primitives
+ * Soro utility primitives (preserved for non-Claw pages)
  * ============================================================ */
-
 @layer components {
-  /* The signature white card with a hairline border and a soft shadow.
-     Used for every "card" on every page. */
   .soro-card {
     background-color: #fff;
     border: 1px solid hsl(var(--border));
     border-radius: 16px;
-    box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.04),
-      0 1px 0 rgba(255, 255, 255, 1) inset;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 0 rgba(255, 255, 255, 1) inset;
   }
-  .soro-card-pad {
-    @apply soro-card p-5;
-  }
-  /* The flat stat card (Articles / Drafts / Published style) */
+  .soro-card-pad { @apply soro-card p-5; }
   .soro-stat {
-    background-color: #fff;
-    border: 1px solid hsl(var(--border));
-    border-radius: 16px;
-    padding: 20px;
+    background-color: #fff; border: 1px solid hsl(var(--border));
+    border-radius: 16px; padding: 20px;
   }
-  /* The icon-badge (purple circle with white icon) used on stat cards */
   .soro-icon-badge {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
-    background-color: hsl(var(--primary-soft));
-    color: hsl(var(--primary));
-    display: grid;
-    place-items: center;
+    width: 44px; height: 44px; border-radius: 14px;
+    background-color: hsl(var(--primary-soft)); color: hsl(var(--primary));
+    display: grid; place-items: center;
   }
-  /* The small count pill (the "13" on Calendar) */
   .soro-count-pill {
-    background-color: hsl(var(--primary-soft));
-    color: hsl(var(--primary));
-    font-size: 12px;
-    font-weight: 600;
-    padding: 1px 9px;
-    border-radius: 999px;
-    line-height: 1.5;
+    background-color: hsl(var(--primary-soft)); color: hsl(var(--primary));
+    font-size: 12px; font-weight: 600; padding: 1px 9px;
+    border-radius: 999px; line-height: 1.5;
   }
   .soro-new-pill {
-    background-color: hsl(20 95% 92%);
-    color: hsl(20 90% 38%);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 1px 9px;
-    border-radius: 999px;
-    line-height: 1.5;
-    text-transform: capitalize;
+    background-color: hsl(20 95% 92%); color: hsl(20 90% 38%);
+    font-size: 11px; font-weight: 600; padding: 1px 9px;
+    border-radius: 999px; line-height: 1.5; text-transform: capitalize;
   }
-  /* Group section header (INSIGHTS / SUPPORT) */
   .soro-group {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: hsl(var(--sidebar-group));
-    padding: 18px 16px 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: hsl(var(--sidebar-group)); padding: 18px 16px 8px;
   }
-  /* The big hero number on stat cards (e.g. "1" in Total Articles) */
   .soro-hero-number {
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: hsl(var(--foreground));
-    line-height: 1;
+    font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
+    color: hsl(var(--foreground)); line-height: 1;
   }
-  /* The little helper text under the number */
-  .soro-hero-label {
-    color: hsl(var(--muted-foreground));
-    font-size: 14px;
-    font-weight: 500;
-  }
-  /* The purple focus ring used everywhere */
+  .soro-hero-label { color: hsl(var(--muted-foreground)); font-size: 14px; font-weight: 500; }
   .soro-ring:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px hsl(var(--primary-soft));
-    border-color: hsl(var(--primary));
+    outline: none; box-shadow: 0 0 0 3px hsl(var(--primary-soft)); border-color: hsl(var(--primary));
   }
-  /* The status dot helpers (green / amber / red / purple) */
   .soro-dot-green  { background-color: hsl(var(--success)); }
   .soro-dot-amber  { background-color: hsl(var(--warning)); }
   .soro-dot-red    { background-color: hsl(var(--danger)); }
   .soro-dot-purple { background-color: hsl(var(--primary)); }
   .soro-dot-grey   { background-color: hsl(var(--muted-foreground)); }
-  /* The small "checked" dot for a selected tile */
   .soro-tile-check {
-    background-color: hsl(var(--success));
-    color: white;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+    background-color: hsl(var(--success)); color: white;
+    width: 22px; height: 22px; border-radius: 999px;
+    display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.15);
   }
-  /* The purple "Add" pill button */
   .soro-add-pill {
-    background-color: #fff;
-    border: 1px solid hsl(var(--border-strong));
-    color: hsl(var(--foreground));
-    padding: 4px 12px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: border-color 150ms, background-color 150ms;
+    background-color: #fff; border: 1px solid hsl(var(--border-strong));
+    color: hsl(var(--foreground)); padding: 4px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 500; display: inline-flex;
+    align-items: center; gap: 6px; transition: border-color 150ms, background-color 150ms;
   }
   .soro-add-pill:hover { border-color: hsl(var(--primary)); background-color: hsl(var(--primary-soft)); }
-  /* The "Add more websites" / "+ New" tile */
   .soro-new-tile {
-    background-color: transparent;
-    border: 1px dashed hsl(var(--border-strong));
-    border-radius: 12px;
-    color: hsl(var(--muted-foreground));
-    display: grid;
-    place-items: center;
-    height: 100%;
-    min-height: 80px;
-    font-size: 13px;
+    background-color: transparent; border: 1px dashed hsl(var(--border-strong));
+    border-radius: 12px; color: hsl(var(--muted-foreground));
+    display: grid; place-items: center; height: 100%; min-height: 80px; font-size: 13px;
   }
 }
 
 /* ============================================================
- * Claw console — "Claude"-style scoped theme
+ * Claw console — CYBER-FUTURE GLASSMORPHISM
  * ------------------------------------------------------------
- * The Claw console sets html[data-claw-theme="light|dark"] while
- * it is mounted (and removes it on unmount). We override the core
- * design tokens on the <html> element — rather than on a wrapper —
- * so the model-picker popup, which portals to document.body, also
- * inherits the theme. Other pages (login / integrations) never set
- * the attribute, so they keep the default "Soro" light tokens above.
- *
- * Palette: warm paper + clay accent in light, warm near-black +
- * lighter clay in dark. Two neutrals, one accent — Claude's look.
+ * Deep midnight background with floating ambient orbs.
+ * Glass cards with backdrop-blur and neon accents.
+ * Replace the old warm-paper / clay palette entirely.
  * ============================================================ */
-html[data-claw-theme] body {
+
+/* ── Ambient background orbs ── */
+html[data-claw-theme="dark"] body {
+  background-color: #05050d;
   background-image: none;
 }
 
-html[data-claw-theme="light"] {
-  --background:         48 33% 97%;   /* warm paper */
-  --foreground:         40 8% 16%;    /* warm ink */
-  --muted:              47 25% 92%;   /* hover / rail surface */
-  --muted-foreground:   43 6% 43%;
-  --border:             44 22% 88%;
-  --border-strong:      44 16% 80%;
-  --popover:            48 33% 98%;
-  --popover-foreground: 40 8% 16%;
-  --primary:            14 55% 52%;   /* clay */
-  --primary-foreground: 0 0% 100%;
-  --ring:               14 55% 52%;
-  --accent:             47 25% 92%;
+html[data-claw-theme="dark"] {
+  --background:           240 40% 5%;    /* deep space black */
+  --foreground:           220 20% 95%;    /* cool white */
+  --muted:                235 25% 12%;   /* glass surface dark */
+  --muted-foreground:     220 15% 60%;   /* muted text */
+  --border:               235 30% 20%;    /* subtle glass edge */
+  --border-strong:        235 35% 28%;   /* visible divider */
+  --popover:              235 25% 12%;
+  --popover-foreground:   220 20% 95%;
+  --ring:                 199 100% 67%;  /* neon cyan */
+  --accent:               235 25% 14%;
 
-  --claw-sidebar:       47 25% 93%;
-  --claw-elevated:      48 30% 99%;
-  --claw-bubble:        47 24% 90%;
-  --claw-accent:        14 55% 50%;
-  --claw-accent-hover:  14 55% 44%;
-  --claw-accent-fg:     0 0% 100%;
+  /* Brand — electric cyan + violet */
+  --primary:              262 100% 72%;   /* electric violet */
+  --primary-foreground:   0 0% 100%;
+  --primary-soft:         262 60% 15%;
+  --primary-soft-2:       199 100% 20%;
+
+  /* Status */
+  --success:              160 84% 50%;    /* neon emerald */
+  --warning:             38 100% 55%;
+  --danger:              355 90% 60%;
+  --info:                199 100% 67%;   /* neon cyan */
+
+  /* Claw custom tokens */
+  --claw-sidebar:        240 40% 6%;     /* near-black sidebar */
+  --claw-elevated:       235 25% 10%;    /* glass card surface */
+  --claw-bubble:         235 25% 14%;
+  --claw-accent:         199 100% 67%;   /* neon cyan accent */
+  --claw-accent-hover:   199 100% 72%;
+  --claw-accent-fg:      220 50% 5%;     /* dark text on cyan */
+  --claw-glow:           199 100% 67%;
+  --claw-violet:         262 100% 72%;
+
+  /* Glassmorphism tokens */
+  --glass-bg:            rgba(10, 10, 25, 0.55);
+  --glass-border:        rgba(180, 180, 255, 0.12);
+  --glass-border-hover:  rgba(180, 180, 255, 0.25);
+  --orb-purple:          rgba(130, 40, 255, 0.18);
+  --orb-cyan:            rgba(0, 210, 255, 0.12);
+  --orb-violet:          rgba(100, 60, 255, 0.14);
 }
 
-html[data-claw-theme="dark"] {
-  --background:         60 3% 15%;    /* warm near-black */
-  --foreground:         48 33% 95%;
-  --muted:              47 6% 20%;
-  --muted-foreground:   47 6% 62%;
-  --border:             47 6% 24%;
-  --border-strong:      47 6% 32%;
-  --popover:            60 3% 19%;
-  --popover-foreground: 48 33% 95%;
-  --primary:            16 61% 60%;   /* lighter clay */
-  --primary-foreground: 0 0% 100%;
-  --ring:               16 61% 60%;
-  --accent:             47 6% 22%;
-
-  --claw-sidebar:       48 3% 12%;
-  --claw-elevated:      47 6% 20%;
-  --claw-bubble:        47 6% 23%;
-  --claw-accent:        16 61% 60%;
-  --claw-accent-hover:  16 61% 66%;
-  --claw-accent-fg:     20 30% 12%;
+html[data-claw-theme="light"] {
+  --background:           60 20% 96%;
+  --foreground:           240 20% 10%;
+  --muted:               220 25% 93%;
+  --muted-foreground:    220 15% 40%;
+  --border:              220 20% 88%;
+  --border-strong:       220 20% 78%;
+  --popover:             0 0% 100%;
+  --popover-foreground:  240 20% 10%;
+  --primary:             262 100% 65%;
+  --primary-foreground:  0 0% 100%;
+  --primary-soft:       262 50% 94%;
+  --primary-soft-2:     199 100% 92%;
+  --ring:               262 100% 65%;
+  --accent:             220 25% 93%;
+  --success:             160 70% 40%;
+  --warning:            38 100% 50%;
+  --danger:             355 80% 55%;
+  --info:               199 100% 45%;
+  --claw-sidebar:       220 25% 94%;
+  --claw-elevated:      0 0% 100%;
+  --claw-bubble:        220 25% 92%;
+  --claw-accent:        262 100% 65%;
+  --claw-accent-hover:  262 100% 70%;
+  --claw-accent-fg:     0 0% 100%;
+  --claw-glow:          262 100% 65%;
+  --claw-violet:        262 100% 70%;
+  --glass-bg:           rgba(255, 255, 255, 0.60);
+  --glass-border:       rgba(130, 100, 255, 0.18);
+  --glass-border-hover: rgba(130, 100, 255, 0.35);
+  --orb-purple:         rgba(130, 40, 255, 0.10);
+  --orb-cyan:           rgba(0, 210, 255, 0.08);
+  --orb-violet:         rgba(100, 60, 255, 0.08);
 }
 
 html[data-claw-theme="dark"] input,
@@ -263,41 +215,241 @@ html[data-claw-theme="dark"] select {
   color-scheme: dark;
 }
 
-/* Smooth scrolling for in-page nav */
+/* ── Global scrollbar styling for Claw ── */
+html[data-claw-theme] ::-webkit-scrollbar { width: 6px; height: 6px; }
+html[data-claw-theme] ::-webkit-scrollbar-track { background: transparent; }
+html[data-claw-theme] ::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-strong));
+  border-radius: 999px;
+}
+html[data-claw-theme] ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* ── Text selection ── */
+html[data-claw-theme="dark"] ::selection {
+  background: rgba(199, 100, 67%, 0.35);
+  color: hsl(var(--foreground));
+}
+
+/* ── Smooth scrolling ── */
 html { scroll-behavior: smooth; }
 html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }
 
-/* Form controls default to `min-width: auto`, which lets their intrinsic
- * content (e.g. a <select>'s widest <option> text) refuse to shrink below
- * that width. Inside a CSS Grid/flex layout this doesn't just clip the
- * control itself — the whole grid track (every sibling row in that column,
- * including unrelated cards) gets stretched to match, then silently
- * clipped by the html/body overflow-x:hidden rule above. Zeroing the
- * automatic minimum lets every control shrink to its actual box and
- * ellipsize instead of blowing out the layout on narrow viewports. */
-select, input, textarea, button {
-  min-width: 0;
+/* ── Form reset ── */
+select, input, textarea, button { min-width: 0; }
+select { max-width: 100%; text-overflow: ellipsis; }
+code, pre { overflow-wrap: anywhere; word-break: break-word; }
+
+/* ============================================================
+ * GLASSMORPHISM UTILITY CLASSES
+ * ============================================================ */
+@layer components {
+  /* Core glass card — the building block of the new UI */
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+  }
+  .glass-card:hover {
+    border-color: var(--glass-border-hover);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* Glass sidebar variant */
+  .glass-sidebar {
+    background: rgba(5, 5, 15, 0.75);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border-right: 1px solid var(--glass-border);
+  }
+  html[data-claw-theme="light"] .glass-sidebar {
+    background: rgba(255, 255, 255, 0.70);
+    border-right-color: var(--glass-border);
+  }
+
+  /* Glass button */
+  .glass-btn {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    color: hsl(var(--foreground));
+    transition: all 200ms ease;
+  }
+  .glass-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-1px);
+  }
+  .glass-btn:active { transform: translateY(0); }
+
+  /* Glass input */
+  .glass-input {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    color: hsl(var(--foreground));
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+  }
+  .glass-input::placeholder { color: hsl(var(--muted-foreground)); opacity: 0.7; }
+  .glass-input:focus {
+    outline: none;
+    border-color: var(--claw-accent);
+    box-shadow: 0 0 0 3px rgba(199, 100, 67%, 0.20), 0 0 20px rgba(199, 100, 67%, 0.10);
+  }
+
+  /* Glass message bubble — user */
+  .glass-bubble-user {
+    background: linear-gradient(135deg, rgba(199, 100, 67%, 0.25) 0%, rgba(199, 100, 67%, 0.12) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(199, 100, 67%, 0.30);
+    border-radius: 20px 20px 6px 20px;
+  }
+
+  /* Glass message bubble — assistant */
+  .glass-bubble-assistant {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px 20px 20px 6px;
+  }
+
+  /* Glowing neon border on focus */
+  .glow-border:focus-within {
+    border-color: var(--claw-accent) !important;
+    box-shadow: 0 0 0 1px var(--claw-accent), 0 0 24px rgba(199, 100, 67%, 0.20);
+  }
+
+  /* Neon text gradient */
+  .text-neon {
+    background: linear-gradient(90deg, var(--claw-accent), var(--claw-violet));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Neon glow on send button */
+  .btn-send {
+    background: linear-gradient(135deg, var(--claw-accent) 0%, var(--claw-violet) 100%);
+    box-shadow: 0 0 16px rgba(199, 100, 67%, 0.45), 0 4px 12px rgba(0,0,0,0.3);
+    transition: all 200ms ease;
+  }
+  .btn-send:hover {
+    box-shadow: 0 0 28px rgba(199, 100, 67%, 0.65), 0 6px 16px rgba(0,0,0,0.35);
+    transform: translateY(-1px) scale(1.02);
+  }
+  .btn-send:active { transform: scale(0.96); }
+
+  /* Pill suggestion chips */
+  .chip-suggestion {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    padding: 6px 14px;
+    transition: all 200ms ease;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .chip-suggestion:hover {
+    background: rgba(199, 100, 67%, 0.12);
+    border-color: rgba(199, 100, 67%, 0.35);
+    color: var(--claw-accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 12px rgba(199, 100, 67%, 0.12);
+  }
+  .chip-suggestion.creative {
+    background: rgba(262, 100%, 72%, 0.10);
+    border-color: rgba(262, 100%, 72%, 0.30);
+    color: var(--claw-violet);
+  }
+  .chip-suggestion.creative:hover {
+    background: rgba(262, 100%, 72%, 0.20);
+    border-color: rgba(262, 100%, 72%, 0.50);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 12px rgba(262, 100%, 72%, 0.20);
+  }
+
+  /* Ambient orb */
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  /* Active sidebar item */
+  .sidebar-item-active {
+    background: rgba(199, 100, 67%, 0.12);
+    border: 1px solid rgba(199, 100, 67%, 0.25);
+    color: var(--claw-accent);
+  }
 }
 
-/* This codebase uses Tailwind's `grid` utility everywhere purely for
- * vertical stacking (cards, form rows), not for real multi-track layout.
- * CSS Grid tracks are shared: every item in a column defaults to
- * `min-width: auto`, so ONE child with unshrinkable content (e.g. a model
- * picker showing a long model name) forces that column — and therefore
- * every sibling, and every ancestor grid up the tree — wider than the
- * viewport. Zeroing the default lets each item shrink independently, the
- * same way normal block layout already does. */
-select {
-  max-width: 100%;
-  text-overflow: ellipsis;
+/* ============================================================
+ * KEYFRAME ANIMATIONS
+ * ============================================================ */
+@keyframes orb-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(40px, -60px) scale(1.1); }
+  66%       { transform: translate(-20px, 40px) scale(0.9); }
+}
+@keyframes orb-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%       { transform: translate(-50px, 30px) scale(1.15); }
+  70%       { transform: translate(30px, -40px) scale(0.85); }
+}
+@keyframes orb-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(20px, 50px) scale(1.2); }
+}
+@keyframes pixel-dot-wave {
+  0%, 100% { opacity: 0.15; transform: scale(0.9); }
+  50%       { opacity: 0.95; transform: scale(1.1); }
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(199, 100, 67%, 0.30); }
+  50%       { box-shadow: 0 0 32px rgba(199, 100, 67%, 0.55); }
+}
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-/* <code> chips routinely hold long, unbreakable identifiers (redirect
- * URLs, scope names, model ids). Normal word-break has no break
- * opportunity in those strings, so they force their flex/grid ancestor
- * wider than the viewport instead of wrapping — same failure mode as the
- * <select> rule above, different element. */
-code, pre {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
+/* Animation utility classes */
+.animate-orb-1 { animation: orb-float-1 18s ease-in-out infinite; }
+.animate-orb-2 { animation: orb-float-2 24s ease-in-out infinite; }
+.animate-orb-3 { animation: orb-float-3 20s ease-in-out infinite; }
+.animate-fade-up { animation: fade-up 300ms ease-out both; }
+.animate-slide-in { animation: slide-in-left 250ms ease-out both; }
+.animate-glow-pulse { animation: glow-pulse 2.5s ease-in-out infinite; }
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }

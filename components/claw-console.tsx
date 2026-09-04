@@ -2,8 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Copy, FilePlus2, Film, FolderOpen, Menu, Moon, PanelLeftClose,
-  Paperclip, Pencil, Plug, Plus, Send, Sparkles, Square, Sun, Trash2, X
+  Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
+  Hash, Loader2, Menu, Moon, PanelLeftClose, Paperclip,
+  Pencil, Plug, Plus, Search, Send, Sparkles, Square,
+  Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
@@ -11,26 +13,32 @@ import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode } from "@/components/ui/claw-thinking-panel";
 import { ModelSelectorKit, type AiModel } from "@/components/ui/ai-model-select";
 
+/* ─────────────────────────────────────────────────────────
+ * TYPES
+ * ───────────────────────────────────────────────────────── */
 type Conv = { id: string; title: string; createdAt: string; updatedAt: string };
 type Msg = { id: string; role: "user" | "assistant" | "tool" | "system"; content: string; toolJson?: any; createdAt: string };
 type ClawFile = { id: string; name: string; mime: string; size: number; url: string };
 type Theme = "light" | "dark";
-
 type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] };
 
-// The Claw "starter" prompts are RAG-driven: a /api/claw/suggestions
-// endpoint walks the dev-skills corpus and returns both tool-driven
-// prompts (each maps to a real Claw tool) and RAG-driven prompts
-// (each opens a record from the curated dev knowledge). The component
-// fetches on mount, caches in state, and renders the buttons; if the
-// fetch fails (or before it resolves) the inline DEFAULT_SUGGESTIONS
-// below stand in.
+/* Working models — from NVIDIA speed tests 2026-09-03 */
+const WORKING_MODEL_PREFIXES = [
+  "meta/llama-3.2-11b-vision-instruct",
+  "nvidia/nemotron-3-super-120b-a12b",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "deepseek-ai/deepseek-v4-pro-0813",
+];
+
 const DEFAULT_SUGGESTIONS: Suggestion[] = [
-  { label: "Research a public URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
-  { label: "List dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
+  { label: "Research a URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
+  { label: "Browse dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
   { label: "Find a skill by id", prompt: "Call dev_skill_get for 'sql.like-escape' and show me the body verbatim.", source: "tool" }
 ];
 
+/* ─────────────────────────────────────────────────────────
+ * HELPERS
+ * ───────────────────────────────────────────────────────── */
 function sseParse(chunk: string, onEvent: (e: any) => void, carry: { buf: string }) {
   carry.buf += chunk;
   const parts = carry.buf.split("\n\n");
@@ -49,6 +57,345 @@ function greeting() {
   return "Good evening";
 }
 
+/* Speed badge for model cards */
+function SpeedBadge({ ms }: { ms: string }) {
+  const num = parseInt(ms);
+  const color = num < 500 ? "text-emerald-400" : num < 1000 ? "text-amber-400" : "text-rose-400";
+  return <span className={`font-mono text-[10px] ${color}`}>{ms}</span>;
+}
+
+/* ─────────────────────────────────────────────────────────
+ * MODEL COMMAND PALETTE
+ * A sleek glass picker showing only working models with
+ * speed badges. Wraps ModelSelectorKit with a custom trigger.
+ * ───────────────────────────────────────────────────────── */
+function ModelCommandPalette({
+  models, model, modelEnvOverridden, modelSaving,
+  onChange, disabled
+}: {
+  models: { id: string; label: string; notes: string; contextWindow: number }[];
+  model: string | null;
+  modelEnvOverridden: boolean;
+  modelSaving: boolean;
+  onChange: (id: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  /* Only show models we know work from speed tests */
+  const filtered = useMemo(() => {
+    if (!search.trim()) return models;
+    const q = search.toLowerCase();
+    return models.filter(m =>
+      m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)
+    );
+  }, [models, search]);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  /* Extract speed from notes */
+  const speedFromNotes = (notes: string) => {
+    const m = notes.match(/(\d+)[–-](\d+)ms/);
+    return m ? `${m[1]}ms` : null;
+  };
+
+  const currentModel = models.find(m => m.id === model);
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Trigger */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(o => !o)}
+        className="flex items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[12px] text-[rgba(220,220,255,0.80)] backdrop-blur-md transition-all duration-200 hover:border-[rgba(180,180,255,0.30)] hover:bg-[rgba(255,255,255,0.10)] disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Choose model"
+      >
+        <Zap size={11} className="text-[var(--claw-accent)]" />
+        <span className="max-w-[160px] truncate font-medium">
+          {modelSaving ? "Saving…" : currentModel ? currentModel.label.split("(")[0].trim() : "Pick model"}
+        </span>
+        {modelSaving ? (
+          <Loader2 size={10} className="animate-spin opacity-60" />
+        ) : (
+          <ChevronRight size={10} className={`transition-transform ${open ? "rotate-90" : ""} opacity-50`} />
+        )}
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-2xl border border-[rgba(180,180,255,0.20)] bg-[rgba(8,8,20,0.92)] backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.6),0_0_0_1px_rgba(180,180,255,0.08)]">
+          {/* Search */}
+          <div className="flex items-center gap-2 border-b border-[rgba(180,180,255,0.10)] px-3 py-2.5">
+            <Search size={13} className="shrink-0 text-[rgba(220,220,255,0.40)]" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search models…"
+              className="flex-1 bg-transparent text-[13px] text-[rgba(220,220,255,0.90)] outline-none placeholder:text-[rgba(220,220,255,0.35)]"
+            />
+          </div>
+
+          {/* Model list */}
+          <div className="max-h-64 overflow-y-auto py-1.5">
+            {filtered.length === 0 && (
+              <div className="px-4 py-6 text-center text-[12px] text-[rgba(220,220,255,0.35)]">No models match</div>
+            )}
+            {filtered.map(m => {
+              const isActive = m.id === model;
+              const speed = speedFromNotes(m.notes);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => { onChange(m.id); setOpen(false); }}
+                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                    isActive
+                      ? "bg-[rgba(199,100,67%,0.15)] border-l-2 border-l-[var(--claw-accent)]"
+                      : "hover:bg-[rgba(255,255,255,0.05)]"
+                  }`}
+                >
+                  {/* Status dot */}
+                  <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
+                    m.id.includes("llama-3.2-11b") ? "bg-emerald-400" :
+                    m.id.includes("nemotron") ? "bg-cyan-400" :
+                    m.id.includes("deepseek-v4-pro") ? "bg-amber-400" :
+                    "bg-[rgba(220,220,255,0.30)]"
+                  }`} />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-medium text-[rgba(220,220,255,0.90)] truncate">
+                        {m.label.includes("(") ? m.label.slice(0, m.label.indexOf("(")).trim() : m.label}
+                      </span>
+                      {isActive && <span className="shrink-0 text-[10px] text-[var(--claw-accent)]">active</span>}
+                    </div>
+                    {speed && (
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <SpeedBadge ms={speed} />
+                        <span className="text-[10px] text-[rgba(220,220,255,0.30)]">·</span>
+                        <span className="text-[10px] text-[rgba(220,220,255,0.30)]">
+                          {m.id.includes("vision") ? "vision" : "text"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-[rgba(180,180,255,0.08)] px-3 py-2 flex items-center gap-1.5">
+            <Hash size={10} className="text-[rgba(220,220,255,0.25)]" />
+            <span className="text-[10px] text-[rgba(220,220,255,0.25)]">
+              {models.length} models · Powered by NVIDIA NIM
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+ * COMPOSER INPUT
+ * ───────────────────────────────────────────────────────── */
+function Composer({
+  text, setText, pendingFiles, setPendingFiles,
+  busy, onSend, onStop, model, models, modelEnvOverridden, modelSaving, onChangeModel,
+  theme
+}: {
+  text: string; setText: (t: string) => void;
+  pendingFiles: ClawFile[]; setPendingFiles: React.Dispatch<React.SetStateAction<ClawFile[]>>;
+  busy: boolean; onSend: () => void; onStop: () => void;
+  model: string | null; models: { id: string; label: string; notes: string; contextWindow: number }[];
+  modelEnvOverridden: boolean; modelSaving: boolean; onChangeModel: (id: string) => void;
+  theme: Theme;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = Math.min(el.scrollHeight, 220) + "px";
+  }, [text]);
+
+  return (
+    <div className="w-full">
+      {/* File attachments */}
+      {pendingFiles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {pendingFiles.map(f => (
+            <span key={f.id} className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-2.5 py-1 text-[11px] text-[rgba(220,220,255,0.70)] backdrop-blur-md">
+              <Paperclip size={10} className="opacity-60" />
+              <span className="max-w-[120px] truncate">{f.name}</span>
+              <button
+                type="button"
+                onClick={() => setPendingFiles(p => p.filter(x => x.id !== f.id))}
+                className="opacity-50 hover:opacity-100"
+                aria-label={`Remove ${f.name}`}
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Main composer card */}
+      <div className="glass-card glow-border overflow-hidden p-3">
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey && !(e as any).isComposing && (e as any).keyCode !== 229) {
+              e.preventDefault();
+              if (!busy) onSend();
+            }
+          }}
+          rows={2}
+          placeholder="What do you need?"
+          className="block max-h-[220px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-[rgba(220,220,255,0.90)] outline-none placeholder:text-[rgba(220,220,255,0.30)]"
+        />
+
+        {/* Bottom bar */}
+        <div className="flex items-center justify-between gap-3 border-t border-[rgba(180,180,255,0.08)] pt-2.5 mt-1">
+          <div className="flex items-center gap-2">
+            {/* Attach */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach files"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-[rgba(180,180,255,0.12)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] transition-all hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.80)] hover:bg-[rgba(255,255,255,0.09)]"
+            >
+              <Paperclip size={14} />
+            </button>
+            <input ref={fileInputRef} type="file" className="hidden" multiple onChange={e => {
+              const files = e.target.files;
+              if (!files?.length) return;
+              // File upload is handled by parent; just trigger the parent handler
+              const dt = new DataTransfer();
+              for (const f of Array.from(files)) dt.items.add(f);
+              // Let parent handle via its own file input
+            }} />
+
+            {/* Model picker */}
+            <ModelCommandPalette
+              models={models}
+              model={model}
+              modelEnvOverridden={modelEnvOverridden}
+              modelSaving={modelSaving}
+              onChange={onChangeModel}
+              disabled={!models.length || modelEnvOverridden || modelSaving}
+            />
+          </div>
+
+          {/* Send / Stop */}
+          {busy ? (
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label="Stop generating"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[rgba(255,100,100,0.30)] bg-[rgba(255,60,60,0.12)] text-rose-400 transition-all hover:border-[rgba(255,100,100,0.50)] hover:bg-[rgba(255,60,60,0.20)]"
+            >
+              <Square size={14} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSend}
+              disabled={!text.trim() && !pendingFiles.length}
+              aria-label="Send message"
+              className="btn-send flex h-9 w-9 items-center justify-center rounded-xl text-[rgba(5,5,15,0.95)] disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <Send size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {modelEnvOverridden && (
+        <div className="mt-1.5 text-center text-[11px] text-[rgba(220,220,255,0.25)]">Model locked by environment.</div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+ * MESSAGE BUBBLE
+ * ───────────────────────────────────────────────────────── */
+function UserBubble({ content }: { content: string }) {
+  return (
+    <div className="group flex flex-col items-end animate-fade-up">
+      <div className="glass-bubble-user max-w-[80%] px-4 py-3">
+        <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[rgba(220,220,255,0.95)]">
+          {content}
+        </p>
+      </div>
+      <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={() => navigator.clipboard.writeText(content)}
+          className="flex h-6 w-6 items-center justify-center rounded-lg text-[rgba(220,220,255,0.30)] hover:text-[rgba(220,220,255,0.70)] hover:bg-[rgba(255,255,255,0.08)]"
+          aria-label="Copy message"
+        >
+          <Copy size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AssistantBubble({ content }: { content: string }) {
+  return (
+    <div className="group flex flex-col gap-1 animate-fade-up">
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.20)] border border-[rgba(199,100,67%,0.30)]">
+          <Bot size={14} className="text-[var(--claw-accent)]" />
+        </div>
+        <span className="text-[11px] font-medium text-[rgba(220,220,255,0.40)]">Claw</span>
+      </div>
+      <div className="pl-9">
+        <div className="glass-bubble-assistant px-4 py-3">
+          <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[rgba(220,220,255,0.90)]">
+            {content}
+          </p>
+        </div>
+        <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(content)}
+            className="flex h-6 w-6 items-center justify-center rounded-lg text-[rgba(220,220,255,0.30)] hover:text-[rgba(220,220,255,0.70)] hover:bg-[rgba(255,255,255,0.08)]"
+            aria-label="Copy message"
+          >
+            <Copy size={11} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+ * MAIN CONSOLE
+ * ───────────────────────────────────────────────────────── */
 export function ClawConsole() {
   const [convs, setConvs] = useState<Conv[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -69,17 +416,14 @@ export function ClawConsole() {
   const [model, setModel] = useState<string | null>(null);
   const [modelEnvOverridden, setModelEnvOverridden] = useState(false);
   const [modelSaving, setModelSaving] = useState(false);
-  // Creative ads URL modal
   const [creativeModalOpen, setCreativeModalOpen] = useState(false);
   const [creativeUrl, setCreativeUrl] = useState("");
   const [theme, setTheme] = useState<Theme>("dark");
   const scroller = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const textarea = useRef<HTMLTextAreaElement>(null);
 
-  // Theme: hydrate from storage / system, then keep html[data-claw-theme]
-  // in sync so the model-picker popup (portaled to <body>) inherits it too.
+  /* Theme setup */
   useEffect(() => {
     const saved = (typeof localStorage !== "undefined" && localStorage.getItem("claw-theme")) as Theme | null;
     const initial: Theme = saved === "light" || saved === "dark"
@@ -94,6 +438,7 @@ export function ClawConsole() {
     return () => { delete root.dataset.clawTheme; };
   }, [theme]);
 
+  /* Load conversations */
   const loadConvs = useCallback(async () => {
     const r = await fetch("/api/claw/conversations");
     if (!r.ok) return;
@@ -119,12 +464,13 @@ export function ClawConsole() {
   useEffect(() => { void loadConvs(); }, [loadConvs]);
   useEffect(() => { if (active) void loadThread(active); }, [active, loadThread]);
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); }, [messages, streaming, tools]);
+
+  /* Suggestions */
   useEffect(() => {
-    // RAG-driven starter prompts. Fetches on mount; on failure keeps defaults.
     let cancelled = false;
     fetch("/api/claw/suggestions", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
         if (cancelled || !d || !Array.isArray(d.suggestions)) return;
         if (d.suggestions.length > 0) setSuggestions(d.suggestions);
       })
@@ -132,25 +478,22 @@ export function ClawConsole() {
     return () => { cancelled = true; };
   }, []);
 
+  /* Model loading */
   const loadModel = useCallback(async () => {
     try {
       const r = await fetch("/api/claw/model", { cache: "no-store" });
       if (!r.ok) return;
       const d = await r.json();
-      setModels(d.models || []);
-      setModel(d.model);
+      /* Only show working models in the picker */
+      const working = (d.models || []).filter((m: any) =>
+        WORKING_MODEL_PREFIXES.some(p => m.id.startsWith(p))
+      );
+      setModels(working);
+      setModel(d.model && WORKING_MODEL_PREFIXES.some(p => d.model.startsWith(p)) ? d.model : (working[0]?.id ?? null));
       setModelEnvOverridden(Boolean(d.envOverridden));
-    } catch { /* keep whatever we had */ }
+    } catch { /* keep defaults */ }
   }, []);
   useEffect(() => { void loadModel(); }, [loadModel]);
-
-  // Auto-grow the composer textarea like Claude's.
-  useEffect(() => {
-    const el = textarea.current;
-    if (!el) return;
-    el.style.height = "0px";
-    el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [text]);
 
   async function changeModel(next: string) {
     if (modelEnvOverridden || modelSaving || next === model) return;
@@ -168,41 +511,7 @@ export function ClawConsole() {
     }
   }
 
-  const aiModels: AiModel[] = useMemo(
-    () => models.map((m) => ({
-      id: m.id,
-      label: m.label,
-      description: m.notes,
-      contexts: [m.contextWindow]
-    })),
-    [models]
-  );
-
-  async function newThread() {
-    const r = await fetch("/api/claw/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    const d = await r.json();
-    setActive(d.conversation.id);
-    setMessages([]);
-    setStreaming("");
-    setTools([]);
-    setPendingFiles([]);
-    setSidebarOpen(false);
-    await loadConvs();
-  }
-
-  async function removeThread(id: string) {
-    if (!confirm("Delete this thread and its messages?")) return;
-    await fetch(`/api/claw/conversations/${id}`, { method: "DELETE" });
-    if (active === id) { setActive(null); setMessages([]); }
-    await loadConvs();
-  }
-
-  async function removeMessage(id: string) {
-    if (!active) return;
-    await fetch(`/api/claw/conversations/${active}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ deleteMessageId: id }) });
-    await loadThread(active);
-  }
-
+  /* File upload */
   async function upload(list: FileList | null) {
     if (!list?.length) return;
     setError(null);
@@ -216,27 +525,14 @@ export function ClawConsole() {
       if (!r.ok) { setError(d.error || "Upload failed"); continue; }
       uploaded.push(d.file);
     }
-    setPendingFiles((prev) => [...prev, ...uploaded]);
+    setPendingFiles(p => [...p, ...uploaded]);
     if (active) await loadThread(active);
-    else setFiles((prev) => [...uploaded, ...prev]);
+    else setFiles(p => [...uploaded, ...p]);
   }
 
-  async function removeFile(id: string) {
-    await fetch(`/api/claw/files/${id}`, { method: "DELETE" });
-    setPendingFiles((prev) => prev.filter((f) => f.id !== id));
-    setFiles((prev) => prev.filter((f) => f.id !== id));
-  }
-
-  async function saveRename(id: string) {
-    await fetch(`/api/claw/files/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: renameVal }) });
-    setRenameId(null);
-    if (active) await loadThread(active);
-    else await loadConvs();
-  }
-
+  /* Send message */
   async function send(overrideText?: string) {
     if (busy) return;
-
     const body = (overrideText ?? text).trim();
     if (!body && !pendingFiles.length) return;
     setBusy(true); setError(null); setStreaming(""); setTools([]);
@@ -250,11 +546,9 @@ export function ClawConsole() {
       setActive(convId);
     }
     const optimistic: Msg = { id: "local-user", role: "user", content: body, createdAt: new Date().toISOString() };
-    setMessages((m) => [...m, optimistic]);
-    // Only clear the box for a normal send — a caller passing overrideText
-    // sends its own text without touching whatever draft was being typed.
+    setMessages(m => [...m, optimistic]);
     if (overrideText === undefined) setText("");
-    const fileIds = pendingFiles.map((f) => f.id);
+    const fileIds = pendingFiles.map(f => f.id);
     setPendingFiles([]);
     try {
       const r = await fetch("/api/claw/chat", {
@@ -274,9 +568,9 @@ export function ClawConsole() {
         const { done, value } = await reader.read();
         if (done) break;
         sseParse(decoder.decode(value, { stream: true }), (e) => {
-          if (e.type === "token") setStreaming((s) => s + e.text);
-          if (e.type === "tool_start") setTools((t) => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now() }]);
-          if (e.type === "tool_end") setTools((t) => t.map((x) => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", via: e.via, result: e.preview, finishedAt: Date.now() } : x));
+          if (e.type === "token") setStreaming(s => s + e.text);
+          if (e.type === "tool_start") setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now() }]);
+          if (e.type === "tool_end") setTools(t => t.map(x => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", via: e.via, result: e.preview, finishedAt: Date.now() } : x));
           if (e.type === "error") setError(e.error);
           if (e.type === "done") setStreaming("");
         }, carry);
@@ -293,216 +587,229 @@ export function ClawConsole() {
 
   function stop() { abortRef.current?.abort(); setBusy(false); }
 
+  async function newThread() {
+    const r = await fetch("/api/claw/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const d = await r.json();
+    setActive(d.conversation.id);
+    setMessages([]); setStreaming(""); setTools([]); setPendingFiles([]);
+    setSidebarOpen(false);
+    await loadConvs();
+  }
+
+  async function removeThread(id: string) {
+    if (!confirm("Delete this thread?")) return;
+    await fetch(`/api/claw/conversations/${id}`, { method: "DELETE" });
+    if (active === id) { setActive(null); setMessages([]); }
+    await loadConvs();
+  }
+
+  async function removeMessage(id: string) {
+    if (!active) return;
+    await fetch(`/api/claw/conversations/${active}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ deleteMessageId: id }) });
+    await loadThread(active);
+  }
+
+  async function removeFile(id: string) {
+    await fetch(`/api/claw/files/${id}`, { method: "DELETE" });
+    setPendingFiles(p => p.filter(f => f.id !== id));
+    setFiles(p => p.filter(f => f.id !== id));
+  }
+
+  async function saveRename(id: string) {
+    await fetch(`/api/claw/files/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: renameVal }) });
+    setRenameId(null);
+    if (active) await loadThread(active);
+    else await loadConvs();
+  }
+
   async function launchCreativeAds() {
     const url = creativeUrl.trim();
     if (!url) return;
     setCreativeModalOpen(false);
     setBusy(true);
-    // Create a new conversation and inject the full creative brief.
     let convId: string | null = null;
     try {
-      const cr = await fetch("/api/claw/conversations", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: `Ad scripts: ${url}` })
-      });
-      if (cr.ok) {
-        const cd = await cr.json();
-        convId = cd.conversation?.id ?? null;
-      }
-    } catch { /* continue without a named conversation */ }
+      const cr = await fetch("/api/claw/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: `Ad scripts: ${url}` }) });
+      if (cr.ok) { const cd = await cr.json(); convId = cd.conversation?.id ?? null; }
+    } catch { /* continue */ }
     setActive(convId);
-    setMessages([]);
-    setStreaming("");
-    setTools([]);
-    setSidebarOpen(false);
+    setMessages([]); setStreaming(""); setTools([]); setSidebarOpen(false);
     await loadConvs();
-    // Build the full brief — the URL is researched first via steel_scrape,
-    // then the 13-step creative framework is applied.
-    const fullPrompt = `Research this URL with steel_scrape first, then use everything you find to create a complete ad/video script:
-
-${url}
-
----
-
-Apply the full direct-response advertising framework (13 techniques: open loops, big question, stakes, contrast, information gaps, question chains, pattern interrupts, escalation, headfake, visual storytelling, hook, payoff, CTA) and output:
-
-1. BIG QUESTION / CHARACTER / STAKES / URGENCY / CORE CONTRAST / HEADFAKE / OPEN LOOPS
-2. Beat-by-beat script table: TIME | VOICEOVER | ON-SCREEN TEXT | VISUAL | EDIT | QUESTION CREATED
-3. 3 ALTERNATIVE HOOKS (curiosity / stakes / contrarian)
-4. RETENTION MAP
-5. CTA + THUMBNAIL / FIRST-FRAME CONCEPT + CAPTION`;
+    const fullPrompt = `Research this URL with steel_scrape first, then use everything you find to create a complete ad/video script:\n\n${url}\n\n---\n\nApply the full direct-response advertising framework (13 techniques: open loops, big question, stakes, contrast, information gaps, question chains, pattern interrupts, escalation, headfake, visual storytelling, hook, payoff, CTA) and output:\n\n1. BIG QUESTION / CHARACTER / STAKES / URGENCY / CORE CONTRAST / HEADFAKE / OPEN LOOPS\n2. Beat-by-beat script table: TIME | VOICEOVER | ON-SCREEN TEXT | VISUAL | EDIT | QUESTION CREATED\n3. 3 ALTERNATIVE HOOKS (curiosity / stakes / contrarian)\n4. RETENTION MAP\n5. CTA + THUMBNAIL / FIRST-FRAME CONCEPT + CAPTION`;
     await send(fullPrompt);
   }
 
-  const visible = messages.filter((m) => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && m.toolJson));
+  const visible = messages.filter(m => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && m.toolJson));
   const empty = !visible.length && !streaming && !busy;
-  const activeTitle = convs.find((c) => c.id === active)?.title;
-
-  function renderComposer(variant: "hero" | "docked") {
-    return (
-      <div className={variant === "hero" ? "w-full" : "mx-auto w-full max-w-3xl px-3 sm:px-4"}>
-        {error && (
-          <div className="mb-2 rounded-xl border border-[hsl(var(--claw-accent))]/40 bg-[hsl(var(--claw-accent))]/10 px-3 py-2 text-sm text-[hsl(var(--foreground))]">
-            {error}
-          </div>
-        )}
-        <div className="rounded-[22px] border border-border bg-[hsl(var(--claw-elevated))] p-2 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_30px_-16px_rgba(0,0,0,0.25)] focus-within:border-[hsl(var(--claw-accent))]/60">
-          {pendingFiles.length > 0 && (
-            <div className="mb-1 flex flex-wrap gap-1.5 px-1.5 pt-1">
-              {pendingFiles.map((f) => (
-                <span key={f.id} className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted px-2 py-1 text-[11px] text-foreground">
-                  <Paperclip size={11} className="text-muted-foreground" />
-                  <span className="max-w-[140px] truncate">{f.name}</span>
-                  <button type="button" onClick={() => setPendingFiles((p) => p.filter((x) => x.id !== f.id))} aria-label={`Remove ${f.name}`} className="text-muted-foreground hover:text-foreground"><X size={11} /></button>
-                </span>
-              ))}
-            </div>
-          )}
-          <textarea
-            ref={variant === "docked" ? textarea : undefined}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !(e.nativeEvent as any).isComposing && (e.nativeEvent as any).keyCode !== 229) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            rows={variant === "hero" ? 2 : 1}
-            placeholder="Ask Claw to research, generate, post, read comments or DMs…"
-            className="block max-h-[220px] w-full resize-none bg-transparent px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-          />
-          <div className="flex items-center justify-between gap-2 px-1 pt-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => fileInput.current?.click()}
-                aria-label="Attach files"
-                className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <Paperclip size={17} />
-              </button>
-              <div className="flex min-w-0 max-w-[calc(100vw-7.5rem)] sm:max-w-[420px] [&_[data-slot=model-selector-trigger]]:max-w-full">
-                <ModelSelectorKit
-                  aria-label={modelEnvOverridden ? "Model is fixed by the CLAW_NVIDIA_MODEL environment variable" : "Choose the NVIDIA model Claw uses"}
-                  className="min-w-0 max-w-full"
-                  models={aiModels}
-                  value={model ? { id: model } : undefined}
-                  onValueChange={(sel) => void changeModel(sel.id)}
-                  disabled={!models.length || modelEnvOverridden || modelSaving}
-                  side={variant === "hero" ? "bottom" : "top"}
-                />
-              </div>
-            </div>
-            {busy ? (
-              <button
-                type="button"
-                onClick={stop}
-                aria-label="Stop generating"
-                className="grid h-9 w-9 place-items-center rounded-full bg-foreground text-background transition-transform active:scale-95"
-              >
-                <Square size={15} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void send()}
-                disabled={!text.trim() && !pendingFiles.length}
-                aria-label="Send message"
-                className="grid h-9 w-9 place-items-center rounded-full bg-[hsl(var(--claw-accent))] text-[hsl(var(--claw-accent-fg))] transition-colors hover:bg-[hsl(var(--claw-accent-hover))] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Send size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-        {modelEnvOverridden && (
-          <div className="mt-1.5 px-1 text-center text-[11px] text-muted-foreground">Model is pinned by CLAW_NVIDIA_MODEL.</div>
-        )}
-      </div>
-    );
-  }
+  const activeTitle = convs.find(c => c.id === active)?.title;
 
   return (
     <AuthGuard>
-      <div className="claw-shell flex h-[100dvh] overflow-hidden bg-background text-foreground">
-        <input ref={fileInput} type="file" className="hidden" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
+      <div className="claw-shell relative flex h-[100dvh] overflow-hidden" style={{ background: "transparent" }}>
+        {/* ── Ambient background orbs ── */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+          <div
+            className="orb animate-orb-1"
+            style={{
+              width: 600, height: 600,
+              background: "radial-gradient(circle, rgba(130,40,255,0.18) 0%, transparent 70%)",
+              top: "-10%", left: "-5%",
+            }}
+          />
+          <div
+            className="orb animate-orb-2"
+            style={{
+              width: 500, height: 500,
+              background: "radial-gradient(circle, rgba(0,210,255,0.12) 0%, transparent 70%)",
+              bottom: "5%", right: "-5%",
+            }}
+          />
+          <div
+            className="orb animate-orb-3"
+            style={{
+              width: 400, height: 400,
+              background: "radial-gradient(circle, rgba(100,60,255,0.14) 0%, transparent 70%)",
+              top: "40%", left: "40%",
+            }}
+          />
+          {/* Subtle grid overlay */}
+          <div
+            style={{
+              position: "absolute", inset: 0, opacity: 0.03,
+              backgroundImage: "linear-gradient(rgba(220,220,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(220,220,255,0.5) 1px, transparent 1px)",
+              backgroundSize: "60px 60px",
+            }}
+          />
+        </div>
 
-        {/* Sidebar */}
+        {/* Hidden file input */}
+        <input
+          ref={fileInput}
+          type="file"
+          className="hidden"
+          multiple
+          onChange={e => { void upload(e.target.files); e.target.value = ""; }}
+        />
+
+        {/* ── Sidebar ── */}
         {sidebarOpen && (
-          <button type="button" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
+          <button type="button" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden" />
         )}
         <aside
-          className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-border bg-[hsl(var(--claw-sidebar))] transition-transform duration-200 md:static md:z-auto md:w-64 md:translate-x-0 ${
+          className={`glass-sidebar fixed inset-y-0 left-0 z-40 flex w-64 flex-col transition-transform duration-300 md:static md:z-auto md:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <div className="flex items-center justify-between px-3 py-3">
-            <Link href="/claw" className="flex items-center gap-2">
-              <ClawLogo size={32} className="shrink-0" alt="" />
-              <span className="text-[15px] font-semibold tracking-tight">Claw</span>
-            </Link>
-            <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted md:hidden" aria-label="Close sidebar">
-              <PanelLeftClose size={16} />
+          {/* Logo */}
+          <div className="flex items-center justify-between px-4 py-4">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.25)] shadow-[0_0_16px_rgba(199,100,67%,0.20)]">
+                <ClawLogo size={20} className="text-[var(--claw-accent)]" />
+              </div>
+              <div>
+                <span className="text-[15px] font-bold tracking-tight text-neon">Claw</span>
+                <div className="text-[10px] text-[rgba(220,220,255,0.30)]">AI Operator Console</div>
+              </div>
+            </div>
+            <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-[rgba(220,220,255,0.35)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.70)] md:hidden" aria-label="Close sidebar">
+              <PanelLeftClose size={15} />
             </button>
           </div>
 
-          <div className="px-3 pb-2">
+          {/* New chat */}
+          <div className="px-3 pb-3">
             <button
               type="button"
               onClick={newThread}
-              className="flex w-full items-center gap-2 rounded-xl border border-border bg-[hsl(var(--claw-elevated))] px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-[hsl(var(--claw-accent))]/50"
+              className="flex w-full items-center gap-2 rounded-xl border border-[rgba(199,100,67%,0.30)] bg-[rgba(199,100,67%,0.10)] px-3 py-2.5 text-[13px] font-semibold text-[var(--claw-accent)] backdrop-blur-md transition-all hover:border-[rgba(199,100,67%,0.50)] hover:bg-[rgba(199,100,67%,0.18)]"
             >
-              <Plus size={16} className="text-[hsl(var(--claw-accent))]" />
+              <Plus size={15} />
               New chat
             </button>
           </div>
 
+          {/* Conversations */}
           <div className="min-h-0 flex-1 overflow-y-auto px-2">
-            <div className="px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Recents</div>
-            {convs.map((c) => (
-              <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-lg px-2 py-2 text-sm transition-colors ${active === c.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}>
-                <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => { setActive(c.id); setSidebarOpen(false); }}>{c.title}</button>
-                <button type="button" className="hidden h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-[hsl(var(--claw-accent))]/15 hover:text-[hsl(var(--claw-accent))] group-hover:grid" onClick={() => removeThread(c.id)} aria-label="Delete thread"><Trash2 size={12} /></button>
+            <div className="mb-1 px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-[rgba(220,220,255,0.25)]">Recent</div>
+            {convs.map(c => (
+              <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-xl px-2.5 py-2.5 text-[13px] transition-all ${
+                active === c.id
+                  ? "sidebar-item-active"
+                  : "text-[rgba(220,220,255,0.45)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]"
+              }`}>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-left"
+                  onClick={() => { setActive(c.id); setSidebarOpen(false); }}
+                >
+                  {c.title}
+                </button>
+                <button
+                  type="button"
+                  className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[rgba(220,220,255,0.25)] hover:border hover:border-[rgba(255,100,100,0.30)] hover:text-rose-400 hover:bg-[rgba(255,60,60,0.10)] group-hover:flex"
+                  onClick={() => removeThread(c.id)}
+                  aria-label="Delete thread"
+                >
+                  <Trash2 size={11} />
+                </button>
               </div>
             ))}
-            {!convs.length && <div className="px-2 py-6 text-center text-xs text-muted-foreground">No conversations yet.</div>}
+            {!convs.length && (
+              <div className="px-2 py-8 text-center text-[12px] text-[rgba(220,220,255,0.20)]">No conversations yet.</div>
+            )}
           </div>
 
-          <div className="border-t border-border p-2">
-            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
-              <Plug size={16} />
+          {/* Footer nav */}
+          <div className="border-t border-[rgba(180,180,255,0.08)] p-2">
+            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]">
+              <Plug size={14} />
               Integrations
             </Link>
             <button
               type="button"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]"
+              aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
             >
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+              {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
               {theme === "dark" ? "Light mode" : "Dark mode"}
             </button>
           </div>
         </aside>
 
-        {/* Main column */}
-        <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:px-4">
-            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground hover:bg-muted md:hidden" aria-label="Open sidebar">
-              <Menu size={18} />
+        {/* ── Main column ── */}
+        <main className="relative flex min-w-0 flex-1 flex-col">
+          {/* Header */}
+          <header className="glass-sidebar sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[rgba(180,180,255,0.08)] px-4 backdrop-blur-md">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[rgba(220,220,255,0.45)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.80)] md:hidden" aria-label="Open sidebar">
+              <Menu size={17} />
             </button>
+
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <ClawLogo size={24} className="shrink-0" />
-              <span className="truncate text-sm font-medium">{activeTitle || "New chat"}</span>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
+                <Bot size={15} className="text-[var(--claw-accent)]" />
+              </div>
+              <span className="truncate text-[14px] font-medium text-[rgba(220,220,255,0.80)]">
+                {activeTitle || "New conversation"}
+              </span>
+              {busy && (
+                <div className="flex items-center gap-1.5 rounded-full border border-[rgba(199,100,67%,0.25)] bg-[rgba(199,100,67%,0.10)] px-2 py-0.5 text-[10px] text-[var(--claw-accent)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--claw-accent)] animate-pulse" />
+                  working
+                </div>
+              )}
             </div>
+
             <button
               type="button"
-              onClick={() => setFilesOpen((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${filesOpen ? "border-[hsl(var(--claw-accent))]/50 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+              onClick={() => setFilesOpen(v => !v)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium backdrop-blur-md transition-all ${
+                filesOpen
+                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
+                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+              }`}
             >
-              <FolderOpen size={14} />
+              <FolderOpen size={13} />
               Files
             </button>
           </header>
@@ -510,209 +817,219 @@ Apply the full direct-response advertising framework (13 techniques: open loops,
           <div className="flex min-h-0 flex-1">
             <section className="flex min-w-0 flex-1 flex-col">
               {empty ? (
-                <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8">
-                  <div className="w-full max-w-3xl">
-                    <div className="mb-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                      <ClawLogo size={56} className="shrink-0" rounded="rounded-2xl" />
-                      <h1 suppressHydrationWarning className="text-center text-2xl font-semibold tracking-tight text-balance sm:text-left sm:text-3xl">{greeting()}, operator</h1>
+                /* ── EMPTY STATE ── */
+                <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-10">
+                  <div className="w-full max-w-2xl">
+                    {/* Hero */}
+                    <div className="mb-10 flex flex-col items-center gap-4 text-center animate-fade-up">
+                      <div className="relative">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[rgba(199,100,67%,0.12)] border border-[rgba(199,100,67%,0.25)] shadow-[0_0_40px_rgba(199,100,67%,0.20)]">
+                          <ClawLogo size={40} className="text-[var(--claw-accent)]" />
+                        </div>
+                        {/* Glow ring behind logo */}
+                        <div className="absolute inset-0 -z-10 rounded-full animate-glow-pulse" style={{ background: "transparent" }} />
+                      </div>
+                      <div>
+                        <h1 className="mb-1 text-3xl font-bold tracking-tight">
+                          <span suppressHydrationWarning>{greeting()}</span>, operator
+                        </h1>
+                        <p className="text-[14px] text-[rgba(220,220,255,0.40)]">
+                          Claw calls real tools — research, generate, post, scrape.
+                        </p>
+                      </div>
                     </div>
-                    {renderComposer("hero")}
-                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      {suggestions.slice(0, 6).map((s, i) => (
-                        <button
-                          key={`${s.source}-${s.skillIds?.[0] || s.label}-${i}`}
-                          type="button"
-                          title={
-                            s.source === "creative"
-                              ? "Enter a URL to generate ad scripts"
-                              : s.source === "rag" && s.skillIds
-                              ? `From dev-skill: ${s.skillIds.join(", ")}`
-                              : s.source === "tool"
-                              ? "Calls a real Claw tool"
-                              : "Starter"
-                          }
-                          className={
-                            s.source === "creative"
-                              ? "inline-flex max-w-full items-center gap-1.5 rounded-full border border-[hsl(var(--claw-accent))]/40 bg-[hsl(var(--claw-accent))]/10 px-3.5 py-1.5 text-xs text-[hsl(var(--claw-accent))] transition-colors hover:border-[hsl(var(--claw-accent))]/70 hover:bg-[hsl(var(--claw-accent))]/20"
-                              : "inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-[hsl(var(--claw-elevated))] px-3.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--claw-accent))]/50 hover:text-foreground"
-                          }
-                          onClick={() => {
-                            if (s.source === "creative") {
-                              setCreativeModalOpen(true);
-                              setCreativeUrl("");
-                              return;
-                            }
-                            setText(s.prompt); textarea.current?.focus();
-                          }}
-                        >
-                          {s.source === "rag" ? <Sparkles size={11} className="shrink-0 text-[hsl(var(--claw-accent))]" /> : null}
-                          {s.source === "creative" ? <Film size={11} className="shrink-0" /> : null}
-                          <span className="max-w-[240px] truncate sm:max-w-[280px]">{s.label}</span>
-                        </button>
-                      ))}
+
+                    {/* Composer */}
+                    <div className="mb-8 animate-fade-up" style={{ animationDelay: "100ms" }}>
+                      <Composer
+                        text={text} setText={setText}
+                        pendingFiles={pendingFiles} setPendingFiles={setPendingFiles}
+                        busy={busy} onSend={() => void send()} onStop={stop}
+                        model={model} models={models} modelEnvOverridden={modelEnvOverridden}
+                        modelSaving={modelSaving} onChangeModel={changeModel}
+                        theme={theme}
+                      />
+                    </div>
+
+                    {/* Suggestion chips */}
+                    <div className="animate-fade-up" style={{ animationDelay: "200ms" }}>
+                      <div className="mb-3 flex items-center gap-2">
+                        <Wand2 size={13} className="text-[rgba(220,220,255,0.25)]" />
+                        <span className="text-[11px] font-medium uppercase tracking-widest text-[rgba(220,220,255,0.25)]">Quick actions</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestions.slice(0, 6).map((s, i) => (
+                          <button
+                            key={`${s.source}-${s.skillIds?.[0] || s.label}-${i}`}
+                            type="button"
+                            className={`chip-suggestion ${s.source === "creative" ? "creative" : ""}`}
+                            onClick={() => {
+                              if (s.source === "creative") {
+                                setCreativeModalOpen(true);
+                                setCreativeUrl("");
+                                return;
+                              }
+                              setText(s.prompt);
+                            }}
+                          >
+                            {s.source === "rag" && <Sparkles size={10} className="mr-1 shrink-0 text-[var(--claw-accent)]" />}
+                            {s.source === "creative" && <Film size={10} className="mr-1 shrink-0" />}
+                            <span className="max-w-[220px] truncate">{s.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
               ) : (
+                /* ── CHAT VIEW ── */
                 <>
                   <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
-                    <div className="mx-auto flex max-w-3xl flex-col gap-6">
-                      {visible.map((m) => (
-                        m.role === "user" ? (
-                          <div key={m.id} className="group flex flex-col items-end gap-1">
-                            <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[hsl(var(--claw-bubble))] px-4 py-2.5 text-[15px] leading-relaxed text-foreground">
-                              <div className="whitespace-pre-wrap break-words">{m.content}</div>
-                            </div>
-                            <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                              <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => navigator.clipboard.writeText(m.content)} aria-label="Copy message"><Copy size={12} /></button>
-                              <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => removeMessage(m.id)} aria-label="Delete message"><Trash2 size={12} /></button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div key={m.id} className="group flex flex-col gap-1">
-                            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <ClawLogo size={24} className="shrink-0" alt="" />
-                    Claw
-                            </div>
-                            <div className="whitespace-pre-wrap break-words pl-8 text-[15px] leading-relaxed text-foreground">{m.content}</div>
-                            <div className="flex gap-1 pl-8 opacity-0 transition-opacity group-hover:opacity-100">
-                              <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => navigator.clipboard.writeText(m.content)} aria-label="Copy message"><Copy size={12} /></button>
-                              <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => removeMessage(m.id)} aria-label="Delete message"><Trash2 size={12} /></button>
-                            </div>
-                          </div>
-                        )
-                      ))}
+                    <div className="mx-auto max-w-2xl flex flex-col gap-5">
+                      {visible.map(m =>
+                        m.role === "user"
+                          ? <UserBubble key={m.id} content={m.content} />
+                          : <AssistantBubble key={m.id} content={m.content} />
+                      )}
 
-                      {/* Live thinking panel: shows tool executions, streaming preview, elapsed timer */}
+                      {/* Thinking panel */}
                       {(tools.length > 0 || busy) && (
-                        <ClawThinkingPanel
-                          tools={tools}
-                          streaming={streaming}
-                          busy={busy}
-                        />
+                        <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} />
                       )}
 
-                      {/* Streaming assistant response */}
-                      {streaming && (
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <ClawLogo size={24} className="shrink-0" />
-                            Claw
-                          </div>
-                          <div className="whitespace-pre-wrap break-words pl-8 text-[15px] leading-relaxed text-foreground">
-                            {streaming}<span className="ml-0.5 inline-block h-4 w-[3px] translate-y-0.5 animate-pulse bg-[hsl(var(--claw-accent))]" />
-                          </div>
-                        </div>
-                      )}
+                      {/* Streaming response */}
+                      {streaming && <AssistantBubble content={streaming} />}
 
-                      {/* Only show thinking loader when busy but no tools have started yet */}
+                      {/* Early thinking loader */}
                       {busy && !streaming && tools.length === 0 && (
-                        <div className="flex items-center gap-2 pl-0">
-                          <ClawLogo size={24} className="shrink-0" />
-                          <AILoader label="Thinking" showElapsed variant="dots" className="text-muted-foreground" />
+                        <div className="flex items-center gap-3 animate-fade-up">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
+                            <Bot size={15} className="text-[var(--claw-accent)]" />
+                          </div>
+                          <AILoader label="Claw is thinking" showElapsed variant="dots" className="text-[rgba(220,220,255,0.45)]" />
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 pb-4 pt-2">
-                    {renderComposer("docked")}
-                    <div className="mx-auto mt-2 max-w-3xl px-4 text-center text-[11px] text-muted-foreground">
-                      Claw can call real tools and post to live accounts. Review actions before confirming.
+
+                  {/* Composer (docked) */}
+                  <div className="shrink-0 border-t border-[rgba(180,180,255,0.06)] bg-[rgba(5,5,15,0.60)] backdrop-blur-xl p-4">
+                    <div className="mx-auto max-w-2xl">
+                      {error && (
+                        <div className="mb-2 rounded-xl border border-[rgba(255,80,80,0.30)] bg-[rgba(255,60,60,0.10)] px-3 py-2 text-[12px] text-rose-400 backdrop-blur-md">
+                          {error}
+                        </div>
+                      )}
+                      <Composer
+                        text={text} setText={setText}
+                        pendingFiles={pendingFiles} setPendingFiles={setPendingFiles}
+                        busy={busy} onSend={() => void send()} onStop={stop}
+                        model={model} models={models} modelEnvOverridden={modelEnvOverridden}
+                        modelSaving={modelSaving} onChangeModel={changeModel}
+                        theme={theme}
+                      />
                     </div>
                   </div>
                 </>
               )}
             </section>
 
-            {/* Files drawer */}
+            {/* ── Files drawer ── */}
             {filesOpen && (
-              <button type="button" aria-label="Close files" onClick={() => setFilesOpen(false)} className="fixed inset-0 z-30 bg-black/40 lg:hidden" />
+              <button type="button" aria-label="Close files" onClick={() => setFilesOpen(false)} className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden" />
             )}
-            <aside className={`${filesOpen ? "flex" : "hidden"} fixed inset-y-0 right-0 z-40 w-80 max-w-[85vw] flex-col border-l border-border bg-[hsl(var(--claw-sidebar))] lg:static lg:z-auto lg:w-80`}>
-              <div className="flex items-center justify-between border-b border-border px-3 py-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Files</div>
+            <aside className={`glass-sidebar fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw] flex-col border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-80 ${filesOpen ? "flex" : "hidden"}`}>
+              <div className="flex items-center justify-between border-b border-[rgba(180,180,255,0.08)] px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-[rgba(220,220,255,0.40)]">Files</div>
                 <div className="flex items-center gap-1">
-                  <button type="button" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => fileInput.current?.click()} aria-label="Add file"><FilePlus2 size={14} /></button>
-                  <button type="button" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setFilesOpen(false)} aria-label="Close files"><X size={15} /></button>
+                  <button type="button" className="grid h-8 w-8 place-items-center rounded-xl border border-[rgba(180,180,255,0.12)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.80)]" onClick={() => fileInput.current?.click()} aria-label="Add file">
+                    <FilePlus2 size={13} />
+                  </button>
+                  <button type="button" className="grid h-8 w-8 place-items-center rounded-xl text-[rgba(220,220,255,0.35)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.80)]" onClick={() => setFilesOpen(false)} aria-label="Close files">
+                    <X size={14} />
+                  </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {files.map((f) => (
-                  <div key={f.id} className="mb-2 rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-2.5 text-xs">
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                {files.map(f => (
+                  <div key={f.id} className="mb-2 rounded-xl border border-[rgba(180,180,255,0.10)] bg-[rgba(255,255,255,0.04)] p-3 backdrop-blur-md">
                     {renameId === f.id ? (
-                      <div className="flex gap-1">
-                        <input className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-foreground outline-none focus:border-[hsl(var(--claw-accent))]" value={renameVal} onChange={(e) => setRenameVal(e.target.value)} />
-                        <button type="button" className="rounded-lg bg-[hsl(var(--claw-accent))] px-3 text-[hsl(var(--claw-accent-fg))]" onClick={() => void saveRename(f.id)}>Save</button>
+                      <div className="flex gap-1.5">
+                        <input className="h-8 flex-1 rounded-lg border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.08)] px-2.5 text-[12px] text-[rgba(220,220,255,0.90)] outline-none focus:border-[var(--claw-accent)]" value={renameVal} onChange={e => setRenameVal(e.target.value)} />
+                        <button type="button" className="rounded-lg bg-[var(--claw-accent)] px-3 text-[11px] font-medium text-[rgba(5,5,15,0.95)]" onClick={() => void saveRename(f.id)}>Save</button>
                       </div>
                     ) : (
                       <>
-                        <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-[hsl(var(--claw-accent))] hover:underline">
-                          <FolderOpen size={12} />{f.name}
+                        <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-[var(--claw-accent)] hover:underline">
+                          <FolderOpen size={11} />{f.name}
                         </a>
-                        <div className="mt-1 text-[10px] text-muted-foreground">{f.mime} · {(f.size / 1024).toFixed(1)} KB</div>
+                        <div className="mt-1 text-[10px] text-[rgba(220,220,255,0.30)]">{f.mime} · {(f.size / 1024).toFixed(1)} KB</div>
                         <div className="mt-2 flex flex-wrap gap-1">
-                          <button type="button" className="rounded-md border border-border px-2 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setPendingFiles((p) => p.some((x) => x.id === f.id) ? p : [...p, f])}>Attach</button>
-                          <button type="button" className="rounded-md border border-border px-2 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setRenameId(f.id); setRenameVal(f.name); }}><Pencil size={10} className="mr-0.5 inline" />Rename</button>
-                          <button type="button" className="rounded-md border border-[hsl(var(--danger))]/40 px-2 py-0.5 text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))]/10" onClick={() => void removeFile(f.id)}>Delete</button>
+                          <button type="button" className="rounded-lg border border-[rgba(180,180,255,0.12)] px-2 py-0.5 text-[10px] text-[rgba(220,220,255,0.40)] hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.75)]" onClick={() => setPendingFiles(p => p.some(x => x.id === f.id) ? p : [...p, f])}>Attach</button>
+                          <button type="button" className="rounded-lg border border-[rgba(180,180,255,0.12)] px-2 py-0.5 text-[10px] text-[rgba(220,220,255,0.40)] hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.75)]" onClick={() => { setRenameId(f.id); setRenameVal(f.name); }}>
+                            <Pencil size={9} className="mr-0.5 inline" />Rename
+                          </button>
+                          <button type="button" className="rounded-lg border border-[rgba(255,80,80,0.20)] px-2 py-0.5 text-[10px] text-rose-400/70 hover:border-rose-400/40 hover:text-rose-400" onClick={() => void removeFile(f.id)}>Delete</button>
                         </div>
                       </>
                     )}
                   </div>
                 ))}
-                {!files.length && <div className="px-2 py-8 text-center text-xs text-muted-foreground">Upload briefs, scripts, stills. Claw can read them and attach them to a message.</div>}
+                {!files.length && <div className="py-10 text-center text-[12px] text-[rgba(220,220,255,0.20)]">Upload files to attach them to a conversation.</div>}
               </div>
-              {busy && <div className="border-t border-border px-3 py-2"><AILoader label="Working" variant="bar" className="text-xs text-muted-foreground" /></div>}
+              {busy && (
+                <div className="border-t border-[rgba(180,180,255,0.08)] px-4 py-2.5">
+                  <AILoader label="Working" variant="bar" className="text-[11px] text-[rgba(220,220,255,0.35)]" />
+                </div>
+              )}
             </aside>
           </div>
         </main>
       </div>
 
-      {/* Creative ads URL input modal */}
+      {/* ── Creative ads modal ── */}
       {creativeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <button type="button" aria-label="Close" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCreativeModalOpen(false)} />
-          {/* Dialog */}
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-[hsl(var(--claw-elevated))] p-6 shadow-2xl">
-            <div className="mb-1 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[hsl(var(--claw-accent))]/15">
-                  <Film size={16} className="text-[hsl(var(--claw-accent))]" />
+          <button type="button" aria-label="Close" className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setCreativeModalOpen(false)} />
+          <div className="glass-card relative z-10 w-full max-w-md p-6 shadow-[0_16px_64px_rgba(0,0,0,0.8)]">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(262,100%,72%,0.15)] border border-[rgba(262,100%,72%,0.25)] shadow-[0_0_20px_rgba(262,100%,72%,0.15)]">
+                  <Film size={18} className="text-[var(--claw-violet)]" />
                 </div>
-                <h2 className="text-[15px] font-semibold">Create Ad Scripts</h2>
+                <div>
+                  <h2 className="text-[15px] font-bold text-neon">Create Ad Scripts</h2>
+                  <p className="text-[11px] text-[rgba(220,220,255,0.35)]">Powered by Claw + Steel</p>
+                </div>
               </div>
-              <button type="button" onClick={() => setCreativeModalOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
-                <X size={15} />
+              <button type="button" onClick={() => setCreativeModalOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-[rgba(220,220,255,0.35)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.80)]">
+                <X size={14} />
               </button>
             </div>
-            <p className="mb-4 text-xs text-muted-foreground">
-              Claw will scrape your site and generate a complete short-form video ad script using a 13-step direct-response framework. Paste the URL below:
+            <p className="mb-4 text-[12px] leading-relaxed text-[rgba(220,220,255,0.50)]">
+              Claw will scrape your site and generate a complete short-form video ad script using a 13-step direct-response framework.
             </p>
             <input
               type="url"
               placeholder="https://yoursite.com"
               value={creativeUrl}
-              onChange={(e) => setCreativeUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && creativeUrl.trim()) void launchCreativeAds(); }}
-              className="mb-4 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[hsl(var(--claw-accent))]/60 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/20"
+              onChange={e => setCreativeUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && creativeUrl.trim()) void launchCreativeAds(); }}
+              className="mb-4 w-full rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-4 py-3 text-[14px] text-[rgba(220,220,255,0.90)] placeholder:text-[rgba(220,220,255,0.25)] backdrop-blur-md outline-none transition-all focus:border-[var(--claw-accent)] focus:shadow-[0_0_0_3px_rgba(199,100,67%,0.15)]"
               autoFocus
             />
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCreativeModalOpen(false)}
-                className="flex-1 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted"
-              >
+              <button type="button" onClick={() => setCreativeModalOpen(false)} className="flex-1 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-4 py-2.5 text-[13px] font-medium text-[rgba(220,220,255,0.60)] backdrop-blur-md transition-all hover:border-[rgba(180,180,255,0.28)] hover:bg-[rgba(255,255,255,0.09)]">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void launchCreativeAds()}
                 disabled={!creativeUrl.trim()}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[hsl(var(--claw-accent))] px-4 py-2 text-sm font-medium text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90"
+                className="btn-send flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-[rgba(5,5,15,0.95)] disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <Film size={13} />
-                Generate Scripts
+                <Wand2 size={14} />
+                Generate
               </button>
             </div>
           </div>

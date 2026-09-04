@@ -72,31 +72,32 @@ function ToolAccordion({ tool }: { tool: ToolNode }) {
   }[tool.status];
 
   const borderColor = {
-    running: "border-[hsl(var(--claw-accent))]/30",
-    success: "border-emerald-500/30",
-    error: "border-rose-500/30",
-    pending: "border-border",
+    running: "border-[rgba(199,100,67%,0.30)]",
+    success: "border-[rgba(50,220,130,0.25)]",
+    error: "border-[rgba(255,80,80,0.25)]",
+    pending: "border-[rgba(180,180,255,0.10)]",
   }[tool.status];
 
   return (
     <div
       className={cn(
-        "rounded-xl border bg-[hsl(var(--claw-elevated))] text-xs transition-all",
+        "rounded-xl border text-xs transition-all backdrop-blur-md",
         borderColor,
-        !open && hasContent && "cursor-pointer hover:bg-[hsl(var(--claw-elevated))]/80"
+        tool.status === "running" ? "bg-[rgba(199,100,67%,0.08)]" : "bg-[rgba(255,255,255,0.04)]",
+        !open && hasContent && "cursor-pointer hover:bg-[rgba(255,255,255,0.07)]"
       )}
     >
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
         onClick={() => hasContent && setOpen((o) => !o)}
         aria-expanded={open}
       >
         {hasContent ? (
           <ChevronRight
-            size={12}
+            size={11}
             className={cn(
-              "shrink-0 text-muted-foreground transition-transform",
+              "shrink-0 text-[rgba(220,220,255,0.30)] transition-transform",
               open && "rotate-90"
             )}
           />
@@ -108,45 +109,45 @@ function ToolAccordion({ tool }: { tool: ToolNode }) {
 
         <span className={cn(
           "flex-1 truncate font-semibold",
-          tool.status === "running" && "text-foreground",
-          tool.status === "success" && "text-emerald-600 dark:text-emerald-400",
-          tool.status === "error" && "text-rose-600 dark:text-rose-400",
-          tool.status === "pending" && "text-muted-foreground"
+          tool.status === "running" && "text-[rgba(220,220,255,0.90)]",
+          tool.status === "success" && "text-emerald-400",
+          tool.status === "error" && "text-rose-400",
+          tool.status === "pending" && "text-[rgba(220,220,255,0.35)]"
         )}>
           {tool.name}
         </span>
 
         {tool.via && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            via {tool.via}
+          <span className="rounded border border-[rgba(180,180,255,0.12)] bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-[10px] text-[rgba(220,220,255,0.40)]">
+            {tool.via}
           </span>
         )}
 
         {tool.finishedAt && tool.startedAt && (
-          <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+          <span className="font-mono text-[10px] text-[rgba(220,220,255,0.25)] tabular-nums shrink-0">
             {tool.finishedAt - tool.startedAt}ms
           </span>
         )}
       </button>
 
       {open && hasContent && (
-        <div className="border-t border-border/50">
+        <div className="border-t border-[rgba(180,180,255,0.07)]">
           {tool.args && (
-            <div className="px-3 py-2">
-              <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="px-3 py-2.5">
+              <div className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[rgba(220,220,255,0.25)]">
                 <Terminal size={10} /> Input
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-black/40 p-2 font-mono text-[11px] leading-relaxed text-green-400 whitespace-pre-wrap break-all">
+              <pre className="overflow-x-auto rounded-lg border border-[rgba(180,180,255,0.08)] bg-[rgba(0,0,0,0.30)] p-2.5 font-mono text-[11px] leading-relaxed text-emerald-400/90 whitespace-pre-wrap break-all">
                 {tool.args.length > 400 ? tool.args.slice(0, 400) + "…" : tool.args}
               </pre>
             </div>
           )}
           {tool.result && (
-            <div className="px-3 pb-2">
-              <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="px-3 pb-2.5">
+              <div className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[rgba(220,220,255,0.25)]">
                 <Wrench size={10} /> Output
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-black/40 p-2 font-mono text-[11px] leading-relaxed text-blue-300 whitespace-pre-wrap break-all max-h-40">
+              <pre className="overflow-x-auto rounded-lg border border-[rgba(180,180,255,0.08)] bg-[rgba(0,0,0,0.30)] p-2.5 font-mono text-[11px] leading-relaxed text-cyan-400/80 whitespace-pre-wrap break-all max-h-40">
                 {tool.result.length > 600 ? tool.result.slice(0, 600) + "…" : tool.result}
               </pre>
             </div>
@@ -161,18 +162,17 @@ function ToolAccordion({ tool }: { tool: ToolNode }) {
  * STREAMING TOKEN PREVIEW
  * ───────────────────────────────────────────────────────── */
 function StreamingPreview({ text }: { text: string }) {
-  // Show the last ~200 chars of streaming text
   const preview = text.length > 200 ? "…" + text.slice(-200) : text;
   if (!preview) return null;
   return (
-    <div className="mt-2 rounded-xl border border-border bg-[hsl(var(--claw-elevated))] px-3 py-2">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--claw-accent))] animate-pulse" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Responding</span>
+    <div className="mt-2 rounded-xl border border-[rgba(180,180,255,0.10)] bg-[rgba(199,100,67%,0.06)] px-3 py-2.5 backdrop-blur-md">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--claw-accent)] animate-pulse shadow-[0_0_6px_var(--claw-accent)]" />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--claw-accent)]">Responding</span>
       </div>
-      <p className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-foreground/80">
+      <p className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-[rgba(220,220,255,0.70)]">
         {preview}
-        <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 animate-pulse bg-[hsl(var(--claw-accent))]" />
+        <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 animate-pulse bg-[var(--claw-accent)]" />
       </p>
     </div>
   );
@@ -202,7 +202,7 @@ function ElapsedTimer({ running }: { running: boolean }) {
   }, [running]);
 
   return (
-    <span className="tabular-nums text-[11px] text-muted-foreground">
+    <span className="tabular-nums font-mono text-[11px] text-[rgba(220,220,255,0.30)]">
       {elapsed}s
     </span>
   );
@@ -225,9 +225,11 @@ export function ClawThinkingPanel({ tools, streaming, busy, className }: ClawThi
       `}</style>
 
       {/* Thinking header */}
-      <div className="ml-8 flex items-center gap-2 py-1">
-        <ClawLogo size={16} className="shrink-0" />
-        <span className="text-xs font-medium text-muted-foreground">
+      <div className="ml-9 flex items-center gap-2 py-1">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
+          <ClawLogo size={12} className="text-[var(--claw-accent)]" />
+        </div>
+        <span className="text-[12px] font-medium text-[rgba(220,220,255,0.50)]">
           {isDone ? "Claw worked" : busy ? "Claw is working" : ""}
         </span>
         {busy ? (
@@ -237,9 +239,9 @@ export function ClawThinkingPanel({ tools, streaming, busy, className }: ClawThi
           </>
         ) : isDone ? (
           <>
-            <Check size={12} className="text-emerald-500" />
+            <Check size={12} className="text-emerald-400" />
             {tools.length > 0 && (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-[11px] text-[rgba(220,220,255,0.35)]">
                 {tools.filter(t => t.status === "success").length}/{tools.length} tools
               </span>
             )}
@@ -249,7 +251,7 @@ export function ClawThinkingPanel({ tools, streaming, busy, className }: ClawThi
 
       {/* Tool executions */}
       {hasTools && (
-        <div className="ml-8 flex flex-col gap-1.5">
+        <div className="ml-9 flex flex-col gap-1.5">
           {tools.map((tool) => (
             <ToolAccordion key={tool.id} tool={tool} />
           ))}
