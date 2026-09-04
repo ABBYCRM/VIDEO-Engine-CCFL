@@ -1,114 +1,113 @@
 "use client";
-// Minimal app shell for the secondary pages (Integrations). The Claw
-// console renders its own full-screen shell; this one just gives the
-// other pages a matching header + nav. Private deployment, so there is
-// no login/logout here.
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, MessageSquare, Menu, Plug, Megaphone } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { X, MessageSquare, Menu, Plug, Megaphone, Moon, Sun, Activity, ArrowUpRight } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
 
-type NavItem = { href: string; label: string; icon: any };
+type NavItem = { href: string; label: string; caption: string; icon: LucideIcon; index: string };
 
 const NAV: NavItem[] = [
-  { href: "/claw", label: "Claw", icon: MessageSquare },
-  { href: "/mktn", label: "MKTN", icon: Megaphone },
-  { href: "/integrations", label: "Integrations", icon: Plug }
+  { href: "/claw", label: "Claw", caption: "Operator", icon: MessageSquare, index: "01" },
+  { href: "/mktn", label: "MKTN", caption: "Campaign OS", icon: Megaphone, index: "02" },
+  { href: "/integrations", label: "Integrations", caption: "Tool mesh", icon: Plug, index: "03" }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
-  // Share the Claw console's theme so the warm --claw-* tokens resolve on the
-  // secondary pages too (Integrations). Mirrors the hydration in
-  // components/claw-console.tsx: read the saved / system preference and set
-  // html[data-claw-theme]. We don't own a toggle here — we just follow it.
   useEffect(() => {
     const root = document.documentElement;
-    if (root.dataset.clawTheme) return; // Claw console already set it
-    const saved = (typeof localStorage !== "undefined" && localStorage.getItem("claw-theme")) as "light" | "dark" | null;
+    const saved = localStorage.getItem("claw-theme");
     const initial = saved === "light" || saved === "dark"
       ? saved
-      : (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      : window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     root.dataset.clawTheme = initial;
+    setTheme(initial);
   }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.dataset.clawTheme = next;
+    localStorage.setItem("claw-theme", next);
+  }
+
+  const navigation = (
+    <>
+      <div className="flex h-[76px] items-center justify-between border-b border-border px-5">
+        <Link href="/claw" className="group flex items-center gap-3" onClick={() => setMobileOpen(false)}>
+          <span className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-lg border border-[hsl(var(--claw-accent))]/30 bg-[hsl(var(--claw-accent))]/10">
+            <ClawLogo size={25} className="relative z-10" alt="" />
+          </span>
+          <span>
+            <span className="block text-[15px] font-semibold tracking-[-0.02em]">CLAW</span>
+            <span className="block font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">Control system</span>
+          </span>
+        </Link>
+        <button type="button" onClick={() => setMobileOpen(false)} className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden" aria-label="Close navigation"><X size={17} /></button>
+      </div>
+
+      <nav className="flex-1 px-3 py-5" aria-label="Primary navigation">
+        <div className="mb-3 px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Workspaces</div>
+        <ul className="space-y-1.5">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const active = path === item.href || path.startsWith(`${item.href}/`);
+            return <li key={item.href}>
+              <Link href={item.href} onClick={() => setMobileOpen(false)} aria-current={active ? "page" : undefined}
+                className={`group relative flex min-h-[58px] items-center gap-3 overflow-hidden rounded-lg border px-3 transition-all ${active ? "border-[hsl(var(--claw-accent))]/35 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"}`}>
+                {active && <span className="absolute inset-y-2 left-0 w-0.5 bg-[hsl(var(--claw-accent))] shadow-[0_0_16px_hsl(var(--claw-accent))]" />}
+                <span className={`grid h-8 w-8 place-items-center rounded-md border ${active ? "border-[hsl(var(--claw-accent))]/25 text-[hsl(var(--claw-accent))]" : "border-border/70 group-hover:border-[hsl(var(--border-strong))]"}`}><Icon size={15} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{item.label}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">{item.caption}</span>
+                </span>
+                <span className="font-mono text-[9px] text-muted-foreground/70">{item.index}</span>
+              </Link>
+            </li>;
+          })}
+        </ul>
+      </nav>
+
+      <div className="border-t border-border p-3">
+        <div className="mb-2 rounded-lg border border-border bg-background/45 p-3">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="signal-label">System mesh</span>
+            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-[hsl(var(--success))]"><span className="signal-dot !h-1.5 !w-1.5 !bg-[hsl(var(--success))]" /> live</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">NVIDIA reasoning · provider failover · Composio actions</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={toggleTheme} className="flex h-10 flex-1 items-center gap-2 rounded-md px-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />} {theme === "dark" ? "Light signal" : "Dark signal"}
+          </button>
+          <Link href="/integrations" className="grid h-10 w-10 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Open integrations"><ArrowUpRight size={14} /></Link>
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur">
-        <Link href="/claw" className="flex items-center gap-2">
-          <ClawLogo size={28} className="shrink-0" alt="" />
-          <span className="text-[15px] font-semibold tracking-tight">Claw</span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => setMobileOpen((v) => !v)}
-          className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-background text-foreground active:bg-muted"
-          aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
-        >
-          {mobileOpen ? <X size={16} /> : <Menu size={16} />}
-        </button>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-border bg-[hsl(var(--claw-sidebar))]/95 backdrop-blur-xl md:flex">{navigation}</aside>
+
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur-xl md:hidden">
+        <Link href="/claw" className="flex items-center gap-2.5"><ClawLogo size={26} alt="" /><span className="text-sm font-semibold tracking-tight">CLAW</span></Link>
+        <div className="flex items-center gap-2">
+          <span className="hidden items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground min-[380px]:flex"><Activity size={12} className="text-[hsl(var(--claw-accent))]" /> online</span>
+          <button type="button" onClick={() => setMobileOpen(true)} className="grid h-10 w-10 place-items-center rounded-md border border-border bg-[hsl(var(--claw-elevated))]" aria-label="Open navigation"><Menu size={17} /></button>
+        </div>
       </header>
 
-      <div className="flex">
-        <aside
-          className={`fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] border-r border-border bg-background transition-transform ${
-            mobileOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-border p-3">
-              <Link href="/claw" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
-                <ClawLogo size={28} className="shrink-0" alt="" />
-                <span className="text-base font-semibold tracking-tight">Claw</span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
-                aria-label="Close navigation"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto px-2 pb-2 pt-2">
-              <ul className="flex flex-col gap-0.5">
-                {NAV.map((n) => {
-                  const I = n.icon;
-                  const active = path === n.href || path.startsWith(n.href + "/");
-                  return (
-                    <li key={n.href}>
-                      <Link
-                        href={n.href}
-                        onClick={() => setMobileOpen(false)}
-                        className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] transition ${
-                          active ? "bg-primary/10 font-semibold text-primary" : "text-foreground hover:bg-muted"
-                        }`}
-                      >
-                        <I size={16} className={active ? "text-primary" : "text-muted-foreground"} />
-                        <span className="flex-1 truncate">{n.label}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-          </div>
-        </aside>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[294px] max-w-[86vw] flex-col border-r border-border bg-[hsl(var(--claw-sidebar))] transition-transform duration-300 md:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>{navigation}</aside>
+      {mobileOpen && <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden" />}
 
-        {mobileOpen && (
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => setMobileOpen(false)}
-            className="fixed inset-0 z-30 bg-foreground/40"
-          />
-        )}
-
-        <main className="min-h-[calc(100vh-49px)] flex-1">{children}</main>
-      </div>
+      <main className="min-h-screen md:pl-[264px]">{children}</main>
     </div>
   );
 }

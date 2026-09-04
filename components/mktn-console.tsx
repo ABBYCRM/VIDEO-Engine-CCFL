@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertCircle, BookOpen, CheckCircle2, ExternalLink, Image as ImageIcon, KeyRound, Loader2, Route, Search, Settings, Share2 } from "lucide-react";
+import {
+  AlertCircle, ArrowRight, BookOpen, BrainCircuit, Check, CheckCircle2,
+  ExternalLink, Image as ImageIcon, KeyRound, Layers3, Loader2, Radio,
+  Route, Search, Settings, Share2, ShieldCheck, Sparkles, WandSparkles, Workflow, Zap
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,19 +16,19 @@ type Provider = "nvidia" | "hedra" | "gemini" | "a2e";
 type ProviderState = Record<Provider, { configured: boolean; source: "saved" | "environment" | "none" }>;
 type Guide = { name: string; definition: string; category: string; aliases: string[]; when: string; where: string; how: string; why: string; caution?: string };
 
-const views: Array<{ id: View; label: string; icon: typeof BookOpen }> = [
-  { id: "guide", label: "Guide", icon: BookOpen },
-  { id: "plan", label: "Plan", icon: Route },
-  { id: "generate", label: "Generate", icon: ImageIcon },
-  { id: "distribute", label: "Distribute", icon: Share2 },
-  { id: "settings", label: "Settings", icon: Settings },
+const views: Array<{ id: View; label: string; hint: string; icon: typeof BookOpen }> = [
+  { id: "guide", label: "Guide", hint: "Use the language", icon: BookOpen },
+  { id: "plan", label: "Plan", hint: "Shape the strategy", icon: Route },
+  { id: "generate", label: "Generate", hint: "Produce creative", icon: ImageIcon },
+  { id: "distribute", label: "Distribute", hint: "Run Composio", icon: Share2 },
+  { id: "settings", label: "Settings", hint: "Wire providers", icon: Settings },
 ];
 
-const providerMeta: Record<Provider, { label: string; role: string }> = {
-  nvidia: { label: "NVIDIA NIM", role: "Fast campaign reasoning" },
-  hedra: { label: "Hedra", role: "Primary image provider" },
-  gemini: { label: "Gemini", role: "First image fallback" },
-  a2e: { label: "A2E", role: "Final image fallback" },
+const providerMeta: Record<Provider, { label: string; role: string; order: string }> = {
+  nvidia: { label: "NVIDIA NIM", role: "Fast campaign reasoning", order: "CORE" },
+  hedra: { label: "Hedra", role: "Primary image provider", order: "01" },
+  gemini: { label: "Gemini", role: "First image fallback", order: "02" },
+  a2e: { label: "A2E", role: "Final image fallback", order: "03" },
 };
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
@@ -36,29 +40,69 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function MktnConsole() {
   const [view, setView] = useState<View>("guide");
-  return (
-    <div className="pb-12">
-      <div className="mb-5 overflow-x-auto border-b border-border">
-        <nav className="flex min-w-max gap-1" aria-label="MKTN sections">
-          {views.map((item) => {
-            const Icon = item.icon;
-            const active = view === item.id;
-            return (
-              <button key={item.id} type="button" onClick={() => setView(item.id)} aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition ${active ? "border-[hsl(var(--claw-accent))] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-                <Icon size={16} />{item.label}
-              </button>
-            );
-          })}
-        </nav>
+  const active = views.find((item) => item.id === view) ?? views[0];
+
+  return <div className="pb-16">
+    <section className="mb-6 grid gap-3 lg:grid-cols-[1.35fr_.65fr]" aria-label="MKTN system overview">
+      <div className="signal-panel signal-grid signal-scan min-h-[210px] rounded-xl p-5 sm:p-7">
+        <div className="relative z-10 flex h-full flex-col justify-between gap-8">
+          <div className="flex items-start justify-between gap-4">
+            <div><div className="signal-kicker">Live routing fabric</div><h2 className="mt-4 max-w-xl text-2xl font-semibold leading-tight tracking-[-0.045em] sm:text-4xl">From market signal to shipped creative.</h2></div>
+            <span className="hidden items-center gap-2 rounded-md border border-[hsl(var(--success))]/25 bg-[hsl(var(--success))]/10 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-widest text-[hsl(var(--success))] sm:flex"><Radio size={11} /> operational</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5" aria-label="Image provider failover order">
+            {["Hedra", "Gemini", "A2E"].map((name, index) => <div className="contents" key={name}>
+              <div className={`rounded-md border px-3 py-2 ${index === 0 ? "border-[hsl(var(--claw-accent))]/45 bg-[hsl(var(--claw-accent))]/10" : "border-border bg-background/65"}`}>
+                <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">{index === 0 ? "primary" : `fallback 0${index}`}</div>
+                <div className="mt-1 text-xs font-semibold">{name}</div>
+              </div>
+              {index < 2 && <ArrowRight size={14} className="text-[hsl(var(--claw-accent))]" />}
+            </div>)}
+            <div className="ml-auto hidden items-center gap-2 border-l border-border pl-4 text-xs text-muted-foreground xl:flex"><ShieldCheck size={15} className="text-[hsl(var(--claw-accent))]" /> no duplicate paid jobs</div>
+          </div>
+        </div>
       </div>
-      {view === "guide" && <GuideView />}
-      {view === "plan" && <PlanView />}
-      {view === "generate" && <GenerateView />}
-      {view === "distribute" && <DistributeView />}
-      {view === "settings" && <SettingsView />}
+      <div className="grid grid-cols-2 gap-3">
+        <Metric icon={BrainCircuit} value="NIM" label="Reasoning core" accent />
+        <Metric icon={Layers3} value="13" label="Marketing domains" />
+        <Metric icon={Workflow} value="3×" label="Image resilience" />
+        <Metric icon={Zap} value="LIVE" label="Composio mesh" />
+      </div>
+    </section>
+
+    <div className="mb-6 overflow-x-auto rounded-xl border border-border bg-[hsl(var(--claw-elevated))]/72 p-1.5 shadow-[0_12px_40px_hsl(222_40%_2%/.05)]">
+      <nav className="grid min-w-[760px] grid-cols-5 gap-1" aria-label="MKTN sections">
+        {views.map((item, index) => {
+          const Icon = item.icon;
+          const isActive = view === item.id;
+          return <button key={item.id} type="button" onClick={() => setView(item.id)} aria-current={isActive ? "page" : undefined}
+            className={`group relative flex min-h-[62px] items-center gap-3 rounded-lg border px-3 text-left transition-all ${isActive ? "border-[hsl(var(--claw-accent))]/30 bg-[hsl(var(--claw-accent))]/10 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/55 hover:text-foreground"}`}>
+            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border ${isActive ? "border-[hsl(var(--claw-accent))]/35 text-[hsl(var(--claw-accent))]" : "border-border"}`}><Icon size={14} /></span>
+            <span className="min-w-0"><span className="block text-xs font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{item.hint}</span></span>
+            <span className="absolute right-2 top-2 font-mono text-[8px] text-muted-foreground/60">0{index + 1}</span>
+          </button>;
+        })}
+      </nav>
     </div>
-  );
+
+    <div className="mb-4 flex items-center justify-between gap-4">
+      <div><span className="signal-label">Active module</span><h2 className="mt-1 text-xl font-semibold tracking-[-0.03em]">{active.label}</h2></div>
+      <span className="hidden font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground sm:block">MKTN / {view} / ready</span>
+    </div>
+
+    {view === "guide" && <GuideView />}
+    {view === "plan" && <PlanView />}
+    {view === "generate" && <GenerateView />}
+    {view === "distribute" && <DistributeView />}
+    {view === "settings" && <SettingsView />}
+  </div>;
+}
+
+function Metric({ icon: Icon, value, label, accent = false }: { icon: typeof Zap; value: string; label: string; accent?: boolean }) {
+  return <div className={`signal-panel flex min-h-[98px] flex-col justify-between rounded-xl p-3.5 ${accent ? "border-[hsl(var(--claw-accent))]/30 bg-[hsl(var(--claw-accent))]/10" : ""}`}>
+    <Icon size={14} className={accent ? "text-[hsl(var(--claw-accent))]" : "text-muted-foreground"} />
+    <div><div className="font-mono text-lg font-semibold tracking-[-0.04em]">{value}</div><div className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{label}</div></div>
+  </div>;
 }
 
 function GuideView() {
@@ -73,24 +117,35 @@ function GuideView() {
     finally { setBusy(false); }
   }
   useEffect(() => { void search(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return <div className="grid gap-4">
-    <Card>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void search(); }}>
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search VSL, CAC, positioning…" aria-label="Search marketing terminology" />
-        <Button type="submit" disabled={busy}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}<span className="ml-2 hidden sm:inline">Search</span></Button>
-      </form>
-      <p className="mt-2 text-xs text-muted-foreground">Search by term, acronym, or definition. Every result explains when, where, how, and why to use it.</p>
-    </Card>
-    <Message error={error} />
-    {terms.map((term) => <Card key={`${term.category}:${term.name}`}>
-      <div className="mb-3 flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold">{term.name}</h2><span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">{term.category}</span></div>
-      <p className="mb-4 text-sm text-muted-foreground">{term.definition}</p>
-      <dl className="grid gap-3 sm:grid-cols-2">
-        {[["When", term.when], ["Where", term.where], ["How", term.how], ["Why", term.why]].map(([label, value]) => <div key={label} className="rounded-xl border border-border p-3"><dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--claw-accent))]">{label}</dt><dd className="text-sm leading-relaxed">{value}</dd></div>)}
-      </dl>
-      {term.caution && <p className="mt-3 flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm"><AlertCircle size={16} className="mt-0.5 shrink-0" />{term.caution}</p>}
-    </Card>)}
-    {!busy && !error && terms.length === 0 && <Card className="text-sm text-muted-foreground">No matching terms.</Card>}
+
+  return <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+    <div className="space-y-4 lg:sticky lg:top-5 lg:self-start">
+      <Card>
+        <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--claw-accent))]/25 bg-[hsl(var(--claw-accent))]/10 text-[hsl(var(--claw-accent))]"><Search size={17} /></div>
+        <h3 className="text-lg font-semibold tracking-tight">Decode the playbook</h3>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Find any term or acronym, then see exactly when, where, how, and why it earns a place in your campaign.</p>
+        <form className="mt-5 grid gap-2" onSubmit={(e) => { e.preventDefault(); void search(); }}>
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="VSL, CAC, positioning…" aria-label="Search marketing terminology" />
+          <Button type="submit" disabled={busy}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}<span className="ml-2">Search intelligence</span></Button>
+        </form>
+        <div className="mt-5 border-t border-border pt-4"><div className="signal-label">Example signals</div><div className="mt-3 flex flex-wrap gap-1.5">{["VSL", "AIDA", "ROAS", "JTBD"].map((sample) => <button key={sample} type="button" onClick={() => setQuery(sample)} className="rounded-md border border-border px-2 py-1 font-mono text-[9px] text-muted-foreground transition hover:border-[hsl(var(--claw-accent))]/45 hover:text-foreground">{sample}</button>)}</div></div>
+      </Card>
+      <Message error={error} />
+    </div>
+    <div className="grid gap-4">
+      {terms.map((term, termIndex) => <Card key={`${term.category}:${term.name}`} className="!p-0">
+        <div className="border-b border-border p-5 sm:p-6">
+          <div className="mb-3 flex flex-wrap items-center gap-2"><span className="font-mono text-[9px] text-muted-foreground">0{termIndex + 1}</span><span className="rounded-sm bg-[hsl(var(--claw-accent))]/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-[hsl(var(--claw-accent))]">{term.category}</span></div>
+          <h3 className="text-2xl font-semibold tracking-[-0.04em]">{term.name}</h3>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{term.definition}</p>
+        </div>
+        <dl className="grid sm:grid-cols-2">
+          {[["When", term.when], ["Where", term.where], ["How", term.how], ["Why", term.why]].map(([label, value], index) => <div key={label} className={`p-5 sm:p-6 ${index < 2 ? "border-b border-border" : ""} ${index % 2 === 0 ? "sm:border-r" : ""}`}><dt className="signal-label mb-2 !text-[hsl(var(--claw-accent))]">{label}</dt><dd className="text-sm leading-6">{value}</dd></div>)}
+        </dl>
+        {term.caution && <div className="mx-5 mb-5 flex gap-2 rounded-md border border-[hsl(var(--warning))]/25 bg-[hsl(var(--warning))]/10 p-3 text-sm text-[hsl(var(--warning))] sm:mx-6 sm:mb-6"><AlertCircle size={15} className="mt-0.5 shrink-0" />{term.caution}</div>}
+      </Card>)}
+      {!busy && !error && terms.length === 0 && <Card className="text-sm text-muted-foreground">No matching terms. Try a broader concept or acronym.</Card>}
+    </div>
   </div>;
 }
 
@@ -100,16 +155,21 @@ function PlanView() {
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(null); setResult(null);
-    try { setResult(await jsonRequest("/api/mktn/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, channels: form.channels.split(",").map((v) => v.trim()).filter(Boolean) }) })); }
+    try { setResult(await jsonRequest<{ narrative: string; provider: string; warning?: string }>("/api/mktn/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, channels: form.channels.split(",").map((v) => v.trim()).filter(Boolean) }) })); }
     catch (e) { setError(e instanceof Error ? e.message : "Planning failed."); } finally { setBusy(false); }
   }
-  return <div className="grid gap-4"><Card title="Campaign brief"><form className="grid gap-3" onSubmit={submit}>
-    <Labeled label="Product"><Input required value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} /></Labeled>
-    <Labeled label="Audience"><Input required value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} /></Labeled>
-    <div className="grid gap-3 sm:grid-cols-2"><Labeled label="Goal"><Select value={form.goal} onChange={(v) => setForm({ ...form, goal: v })} options={["awareness", "leads", "sales", "activation", "retention", "research", "measurement"]} /></Labeled><Labeled label="Funnel stage"><Select value={form.funnelStage} onChange={(v) => setForm({ ...form, funnelStage: v })} options={["awareness", "consideration", "conversion", "retention"]} /></Labeled></div>
-    <Labeled label="Channels (comma-separated)"><Input required value={form.channels} onChange={(e) => setForm({ ...form, channels: e.target.value })} /></Labeled>
-    <Button type="submit" disabled={busy}>{busy && <Loader2 size={16} className="mr-2 animate-spin" />}Build plan</Button>
-  </form></Card><Message error={error} />{result && <Card title={`Plan · ${result.provider}`}><pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap text-sm leading-relaxed">{result.narrative}</pre>{result.warning && <p className="mt-3 text-xs text-amber-600">{result.warning}</p>}</Card>}</div>;
+  return <div className="grid gap-4 lg:grid-cols-[.82fr_1.18fr]">
+    <Card title={<span className="flex items-center gap-2"><Route size={15} className="text-[hsl(var(--claw-accent))]" />Campaign brief</span>}>
+      <form className="grid gap-4" onSubmit={submit}>
+        <Labeled label="Product"><Input required value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} placeholder="What are we taking to market?" /></Labeled>
+        <Labeled label="Audience"><Input required value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} placeholder="Who needs to care?" /></Labeled>
+        <div className="grid gap-4 sm:grid-cols-2"><Labeled label="Goal"><Select value={form.goal} onChange={(v) => setForm({ ...form, goal: v })} options={["awareness", "leads", "sales", "activation", "retention", "research", "measurement"]} /></Labeled><Labeled label="Funnel stage"><Select value={form.funnelStage} onChange={(v) => setForm({ ...form, funnelStage: v })} options={["awareness", "consideration", "conversion", "retention"]} /></Labeled></div>
+        <Labeled label="Channels"><Input required value={form.channels} onChange={(e) => setForm({ ...form, channels: e.target.value })} placeholder="Comma-separated" /></Labeled>
+        <Button type="submit" size="lg" disabled={busy}>{busy ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Sparkles size={16} className="mr-2" />}Build strategy</Button>
+      </form>
+    </Card>
+    <div className="grid min-h-[430px] gap-4"><Message error={error} />{result ? <Card title={<span className="flex items-center gap-2"><BrainCircuit size={15} className="text-[hsl(var(--claw-accent))]" />Strategy output</span>} actions={<span className="rounded-sm bg-[hsl(var(--claw-accent))]/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-[hsl(var(--claw-accent))]">{result.provider}</span>}><pre className="max-h-[38rem] overflow-auto whitespace-pre-wrap font-sans text-sm leading-7">{result.narrative}</pre>{result.warning && <p className="mt-4 border-t border-border pt-4 text-xs text-[hsl(var(--warning))]">{result.warning}</p>}</Card> : <EmptyOutput icon={BrainCircuit} title="NVIDIA strategy core" text="Complete the signal brief. The reasoning engine will turn it into a campaign plan with usable terminology, channel choices, and execution logic." />}</div>
+  </div>;
 }
 
 function GenerateView() {
@@ -118,18 +178,27 @@ function GenerateView() {
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(null); setResult(null);
-    try { setResult(await jsonRequest("/api/mktn/generate-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, aspectRatio }) })); }
+    try { setResult(await jsonRequest<{ provider: string; status: string; url?: string; dataUrl?: string; jobId?: string; failures: Array<{ provider: string; reason: string }> }>("/api/mktn/generate-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, aspectRatio }) })); }
     catch (e) { setError(e instanceof Error ? e.message : "Generation failed."); } finally { setBusy(false); }
   }
   const src = result?.url || result?.dataUrl;
-  return <div className="grid gap-4"><Card title="Image generation"><p className="mb-4 text-sm text-muted-foreground">Failover order: Hedra → Gemini → A2E. An accepted pending job never triggers a duplicate paid generation.</p><form className="grid gap-3" onSubmit={submit}>
-    <Labeled label="Prompt"><textarea required maxLength={8000} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="min-h-32 w-full rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-3 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/40" /></Labeled>
-    <Labeled label="Aspect ratio"><Select value={aspectRatio} onChange={setAspectRatio} options={["1:1", "16:9", "9:16", "4:3", "3:4"]} /></Labeled>
-    <Button type="submit" disabled={busy}>{busy && <Loader2 size={16} className="mr-2 animate-spin" />}Generate once</Button>
-  </form></Card><Message error={error} />{result && <Card title={`${result.provider} · ${result.status}`}>
-    {src ? <img src={src} alt="Generated marketing creative" className="max-h-[36rem] w-full rounded-xl object-contain" /> : <p className="text-sm text-muted-foreground">Job accepted and still processing. Job ID: <code>{result.jobId}</code></p>}
-    {result.failures.length > 0 && <details className="mt-3"><summary className="cursor-pointer text-xs text-muted-foreground">Fallback diagnostics</summary><ul className="mt-2 grid gap-1 text-xs text-muted-foreground">{result.failures.map((f) => <li key={f.provider}>{f.provider}: {f.reason}</li>)}</ul></details>}
-  </Card>}</div>;
+  return <div className="grid gap-4 lg:grid-cols-[390px_1fr]">
+    <Card title={<span className="flex items-center gap-2"><WandSparkles size={15} className="text-[hsl(var(--claw-accent))]" />Creative directive</span>}>
+      <div className="mb-5 grid gap-2 rounded-lg border border-border bg-background/50 p-3">
+        <div className="signal-label">Execution path</div><div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider"><span className="text-[hsl(var(--claw-accent))]">Hedra</span><ArrowRight size={11} /><span>Gemini</span><ArrowRight size={11} /><span>A2E</span></div>
+      </div>
+      <form className="grid gap-4" onSubmit={submit}>
+        <Labeled label="Prompt"><textarea required maxLength={8000} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the campaign image, visual tension, subject, framing, lighting, and desired response…" className="min-h-52 w-full resize-y rounded-md border border-border bg-background/65 p-3.5 text-sm leading-6 outline-none transition placeholder:text-muted-foreground/65 hover:border-[hsl(var(--border-strong))] focus:border-[hsl(var(--claw-accent))]/65 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/12" /></Labeled>
+        <Labeled label="Canvas"><Select value={aspectRatio} onChange={setAspectRatio} options={["1:1", "16:9", "9:16", "4:3", "3:4"]} /></Labeled>
+        <Button type="submit" size="lg" disabled={busy}>{busy ? <Loader2 size={16} className="mr-2 animate-spin" /> : <WandSparkles size={16} className="mr-2" />}Generate once</Button>
+        <p className="text-[10px] leading-5 text-muted-foreground"><ShieldCheck size={12} className="mr-1 inline text-[hsl(var(--success))]" />Accepted async jobs are never duplicated during fallback.</p>
+      </form>
+    </Card>
+    <div className="grid min-h-[540px] gap-4"><Message error={error} />{result ? <Card className="!p-3" title={<span className="flex items-center gap-2 px-2"><ImageIcon size={15} className="text-[hsl(var(--claw-accent))]" />Creative output</span>} actions={<span className="rounded-sm bg-[hsl(var(--claw-accent))]/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-[hsl(var(--claw-accent))]">{result.provider} · {result.status}</span>}>
+      {src ? <img src={src} alt="Generated marketing creative" className="max-h-[42rem] w-full rounded-lg border border-border bg-background object-contain" /> : <div className="signal-grid grid min-h-[420px] place-items-center rounded-lg border border-border"><div className="text-center"><Loader2 size={24} className="mx-auto mb-3 animate-spin text-[hsl(var(--claw-accent))]" /><p className="text-sm text-muted-foreground">Job accepted and processing</p><code className="mt-2 block text-xs">{result.jobId}</code></div></div>}
+      {result.failures.length > 0 && <details className="mx-2 mt-3"><summary className="cursor-pointer text-xs text-muted-foreground">Fallback diagnostics</summary><ul className="mt-2 grid gap-1 text-xs text-muted-foreground">{result.failures.map((f) => <li key={f.provider}>{f.provider}: {f.reason}</li>)}</ul></details>}
+    </Card> : <EmptyOutput icon={ImageIcon} title="Creative canvas" text="Your generated image will land here with its actual provider, status, and fallback trail—no mystery routing." />}</div>
+  </div>;
 }
 
 function DistributeView() {
@@ -140,12 +209,18 @@ function DistributeView() {
     try { setResult((await jsonRequest<{ result: unknown }>("/api/mktn/composio", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ toolkit, slug, args: JSON.parse(args) }) })).result); }
     catch (e) { setError(e instanceof Error ? e.message : "Distribution failed."); } finally { setBusy(false); }
   }
-  return <div className="grid gap-4"><Card title="Composio action"><p className="mb-4 text-sm text-muted-foreground">Execute a connected Composio tool with its exact toolkit, action slug, and arguments. The same connection is available to Claw.</p><form className="grid gap-3" onSubmit={submit}>
-    <Labeled label="Toolkit"><Input required value={toolkit} onChange={(e) => setToolkit(e.target.value)} placeholder="instagram" /></Labeled>
-    <Labeled label="Action slug"><Input required value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="INSTAGRAM_CREATE_POST" /></Labeled>
-    <Labeled label="Arguments JSON"><textarea required value={args} onChange={(e) => setArgs(e.target.value)} className="min-h-32 w-full rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/40" /></Labeled>
-    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy}>{busy && <Loader2 size={16} className="mr-2 animate-spin" />}Run action</Button><Button asChild type="button" variant="secondary"><Link href="/integrations">Manage connections <ExternalLink size={14} className="ml-2" /></Link></Button></div>
-  </form></Card><Message error={error} />{result !== null && <Card title="Composio response"><pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(result, null, 2)}</pre></Card>}</div>;
+  return <div className="grid gap-4 lg:grid-cols-[.85fr_1.15fr]">
+    <Card title={<span className="flex items-center gap-2"><Workflow size={15} className="text-[hsl(var(--claw-accent))]" />Composio action</span>}>
+      <p className="mb-5 text-sm leading-6 text-muted-foreground">Execute a connected tool with its exact toolkit, action slug, and arguments. Claw shares the same connection mesh.</p>
+      <form className="grid gap-4" onSubmit={submit}>
+        <Labeled label="Toolkit"><Input required value={toolkit} onChange={(e) => setToolkit(e.target.value)} placeholder="instagram" /></Labeled>
+        <Labeled label="Action slug"><Input required value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="INSTAGRAM_CREATE_POST" /></Labeled>
+        <Labeled label="Arguments JSON"><textarea required value={args} onChange={(e) => setArgs(e.target.value)} className="min-h-44 w-full rounded-md border border-border bg-background/65 p-3.5 font-mono text-xs leading-6 outline-none focus:border-[hsl(var(--claw-accent))]/65 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/12" /></Labeled>
+        <div className="grid gap-2 sm:grid-cols-2"><Button type="submit" disabled={busy}>{busy ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Zap size={15} className="mr-2" />}Run action</Button><Button asChild type="button" variant="secondary"><Link href="/integrations">Connections <ExternalLink size={13} className="ml-2" /></Link></Button></div>
+      </form>
+    </Card>
+    <div className="grid min-h-[430px] gap-4"><Message error={error} />{result !== null ? <Card title="Composio response"><pre className="max-h-[38rem] overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-muted-foreground">{JSON.stringify(result, null, 2)}</pre></Card> : <EmptyOutput icon={Share2} title="Distribution console" text="The exact response from Composio will appear here. Nothing is posted until you deliberately run the action." />}</div>
+  </div>;
 }
 
 function SettingsView() {
@@ -159,11 +234,33 @@ function SettingsView() {
     try { const data = await jsonRequest<{ providers: ProviderState }>("/api/mktn/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(clear ? { provider, clear: true } : { provider, apiKey: keys[provider] }) }); setProviders(data.providers); setKeys({ ...keys, [provider]: "" }); setMessage(`${providerMeta[provider].label} ${clear ? "saved key cleared" : "key saved"}.`); }
     catch (e) { setError(e instanceof Error ? e.message : "Settings update failed."); } finally { setBusy(null); }
   }
-  return <div className="grid gap-4"><Card title="Provider keys"><p className="mb-4 text-sm text-muted-foreground">Keys are encrypted server-side and are never returned to this page. Environment values remain valid fallbacks.</p><div className="grid gap-4">
-    {(Object.keys(providerMeta) as Provider[]).map((provider) => <div key={provider} className="rounded-xl border border-border p-3"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="font-medium">{providerMeta[provider].label}</div><div className="text-xs text-muted-foreground">{providerMeta[provider].role}</div></div>{providers?.[provider].configured ? <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle2 size={14} />{providers[provider].source}</span> : <span className="text-xs text-muted-foreground">not configured</span>}</div><div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"><Input type="password" autoComplete="new-password" value={keys[provider]} onChange={(e) => setKeys({ ...keys, [provider]: e.target.value })} placeholder="Paste new API key" aria-label={`${providerMeta[provider].label} API key`} /><Button size="sm" onClick={() => void update(provider)} disabled={busy === provider || !keys[provider].trim()}>{busy === provider ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} className="mr-1" />}Save</Button><Button size="sm" variant="secondary" onClick={() => void update(provider, true)} disabled={busy === provider || providers?.[provider].source !== "saved"}>Clear saved</Button></div></div>)}
-  </div></Card><Message error={error} success={message} /><Card title="Composio"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{composio ? "Connected and shared with MKTN + Claw." : "Not configured. Connect Composio to distribute through external toolkits."}</p><Button asChild variant="secondary"><Link href="/integrations">Open Integrations <ExternalLink size={14} className="ml-2" /></Link></Button></div></Card></div>;
+  return <div className="grid gap-4">
+    <Card title={<span className="flex items-center gap-2"><KeyRound size={15} className="text-[hsl(var(--claw-accent))]" />Provider vault</span>} actions={<span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-[hsl(var(--success))]"><ShieldCheck size={12} />server encrypted</span>}>
+      <p className="mb-6 max-w-3xl text-sm leading-6 text-muted-foreground">Keys are encrypted server-side, never returned to the browser, and can fall back to environment configuration. Saving a new value replaces only that provider.</p>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {(Object.keys(providerMeta) as Provider[]).map((provider) => {
+          const state = providers?.[provider];
+          return <div key={provider} className="rounded-lg border border-border bg-background/40 p-4 transition hover:border-[hsl(var(--border-strong))]">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex gap-3"><span className={`grid h-9 w-9 place-items-center rounded-md border font-mono text-[9px] ${state?.configured ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]" : "border-border text-muted-foreground"}`}>{providerMeta[provider].order}</span><div><div className="text-sm font-semibold">{providerMeta[provider].label}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{providerMeta[provider].role}</div></div></div>
+              {state?.configured ? <span className="flex items-center gap-1 rounded-sm bg-[hsl(var(--success))]/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wider text-[hsl(var(--success))]"><Check size={10} />{state.source}</span> : <span className="font-mono text-[8px] uppercase tracking-wider text-muted-foreground">empty</span>}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"><Input type="password" autoComplete="new-password" value={keys[provider]} onChange={(e) => setKeys({ ...keys, [provider]: e.target.value })} placeholder="Paste new API key" aria-label={`${providerMeta[provider].label} API key`} /><Button size="sm" onClick={() => void update(provider)} disabled={busy === provider || !keys[provider].trim()}>{busy === provider ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} className="mr-1" />}Save</Button><Button size="sm" variant="ghost" onClick={() => void update(provider, true)} disabled={busy === provider || state?.source !== "saved"}>Clear</Button></div>
+          </div>;
+        })}
+      </div>
+    </Card>
+    <Message error={error} success={message} />
+    <Card title={<span className="flex items-center gap-2"><Workflow size={15} className="text-[hsl(var(--claw-accent))]" />Composio mesh</span>}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className={`signal-dot ${composio ? "" : "!bg-muted-foreground !shadow-none"}`} /><div><div className="text-sm font-semibold">{composio ? "Connection online" : "Connection required"}</div><p className="mt-1 text-xs text-muted-foreground">{composio ? "Connected and shared with MKTN + Claw." : "Connect Composio to activate external toolkits."}</p></div></div><Button asChild variant="secondary"><Link href="/integrations">Open Integrations <ExternalLink size={13} className="ml-2" /></Link></Button></div>
+    </Card>
+  </div>;
 }
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-1.5 text-sm"><span className="font-medium">{label}</span>{children}</label>; }
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) { return <select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-xl border border-border bg-[hsl(var(--claw-elevated))] px-3 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/40">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>; }
-function Message({ error, success }: { error?: string | null; success?: string | null }) { if (!error && !success) return null; return <div role={error ? "alert" : "status"} className={`flex items-center gap-2 rounded-xl border p-3 text-sm ${error ? "border-rose-500/30 bg-rose-500/10 text-rose-600" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"}`}>{error ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}{error || success}</div>; }
+function EmptyOutput({ icon: Icon, title, text }: { icon: typeof ImageIcon; title: string; text: string }) {
+  return <div className="signal-panel signal-grid grid min-h-full place-items-center rounded-xl p-8 text-center"><div className="max-w-sm"><div className="mx-auto grid h-12 w-12 place-items-center rounded-lg border border-[hsl(var(--claw-accent))]/25 bg-[hsl(var(--claw-accent))]/10 text-[hsl(var(--claw-accent))]"><Icon size={19} /></div><h3 className="mt-5 text-lg font-semibold tracking-tight">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div></div>;
+}
+
+function Labeled({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-2 text-sm"><span className="signal-label !text-foreground">{label}</span>{children}</label>; }
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) { return <select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-md border border-border bg-background/65 px-3.5 text-sm capitalize outline-none transition hover:border-[hsl(var(--border-strong))] focus:border-[hsl(var(--claw-accent))]/65 focus:ring-2 focus:ring-[hsl(var(--claw-accent))]/12">{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>; }
+function Message({ error, success }: { error?: string | null; success?: string | null }) { if (!error && !success) return null; return <div role={error ? "alert" : "status"} className={`flex items-center gap-2 rounded-md border p-3 text-sm ${error ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger))]/10 text-[hsl(var(--danger))]" : "border-[hsl(var(--success))]/30 bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"}`}>{error ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}{error || success}</div>; }

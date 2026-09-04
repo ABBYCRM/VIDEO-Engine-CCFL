@@ -1,60 +1,31 @@
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
-// Shared page header — every page should use this so the eyebrow / title / description
-// pattern is identical. Right-side action buttons go in `actions`. Optional `eyebrowIcon`
-// and `eyebrow` render in violet-700 small text above the title.
-
-export type PageHeaderProps = {
-  eyebrow?: string;
-  eyebrowIcon?: ReactNode;
-  title: string;
-  description?: ReactNode;
-  actions?: ReactNode;
-  className?: string;
-};
+export type PageHeaderProps = { eyebrow?: string; eyebrowIcon?: ReactNode; title: string; description?: ReactNode; actions?: ReactNode; className?: string };
 
 export function PageHeader({ eyebrow, eyebrowIcon, title, description, actions, className }: PageHeaderProps) {
-  return (
-    <div className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", className)}>
-      <div>
-        {eyebrow && (
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[hsl(var(--claw-accent))]">
-            {eyebrowIcon}
-            {eyebrow}
-          </div>
-        )}
-        <h1 className="text-[34px] font-semibold leading-tight tracking-tight text-foreground">{title}</h1>
-        {description && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>}
+  return <div className={cn("relative mb-8 border-b border-border pb-7 pt-8 sm:mb-10 sm:pb-9 sm:pt-11", className)}>
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="max-w-3xl">
+        {eyebrow && <div className="signal-kicker mb-4">{eyebrowIcon}{eyebrow}</div>}
+        <h1 className="text-[clamp(2.65rem,7vw,5.75rem)] font-semibold leading-[.82] tracking-[-0.07em] text-foreground">{title}<span className="text-[hsl(var(--claw-accent))]">.</span></h1>
+        {description && <p className="mt-5 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
-  );
+    <span className="absolute -bottom-px left-0 h-px w-28 bg-[hsl(var(--claw-accent))] shadow-[0_0_16px_hsl(var(--claw-accent))]" />
+  </div>;
 }
 
-// Small reusable empty-state for pages that have no data yet
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
-  return (
-    <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-      <div>
-        {icon && <div className="mb-3 text-slate-400">{icon}</div>}
-        <div className="font-medium text-slate-700">{title}</div>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
-        {action && <div className="mt-4">{action}</div>}
-      </div>
-    </div>
-  );
+  return <div className="signal-grid grid min-h-72 place-items-center rounded-xl border border-dashed border-[hsl(var(--border-strong))] bg-[hsl(var(--claw-elevated))]/55 p-8 text-center">
+    <div>{icon && <div className="mb-4 text-[hsl(var(--claw-accent))]">{icon}</div>}<div className="font-semibold">{title}</div>{description && <p className="mt-2 text-sm text-muted-foreground">{description}</p>}{action && <div className="mt-5">{action}</div>}</div>
+  </div>;
 }
 
-// Small reusable error banner
 export function ErrorBanner({ error, onDismiss }: { error: string | null; onDismiss?: () => void }) {
   if (!error) return null;
-  return (
-    <div className="mb-4 flex items-start justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-      <span>{error}</span>
-      {onDismiss && (
-        <button onClick={onDismiss} className="text-rose-500 hover:text-rose-700" aria-label="Dismiss error">×</button>
-      )}
-    </div>
-  );
+  return <div className="mb-4 flex items-start justify-between gap-2 rounded-md border border-[hsl(var(--danger))]/35 bg-[hsl(var(--danger))]/8 p-3 text-sm text-[hsl(var(--danger))]">
+    <span>{error}</span>{onDismiss && <button onClick={onDismiss} className="opacity-70 hover:opacity-100" aria-label="Dismiss error">×</button>}
+  </div>;
 }

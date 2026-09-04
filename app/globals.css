@@ -2,302 +2,219 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
- * VIDEO-Engine CCFL — "Soro"-style design system
- * ------------------------------------------------------------
- * White / off-white base · purple brand accent (#6E56CF) ·
- * hairline slate borders · tight typographic hierarchy ·
- * rounded-2xl cards with soft shadows. The whole app feels
- * like a content tool: lots of whitespace, clean dividers,
- * big readable numbers, calm.
- * ============================================================ */
-
+/* Claw Signal Desk
+ * A high-contrast operator interface: mineral paper in light mode,
+ * midnight graphite in dark mode, and a single electric signal color.
+ */
 :root {
-  /* Surfaces */
-  --background:        0 0% 100%;              /* pure white */
-  --foreground:        224 71% 4%;            /* near-black ink */
-  --muted:             220 20% 96%;            /* paper / gray-100 */
-  --muted-foreground:  220 14% 46%;            /* secondary text */
-  --border:            220 20% 90%;            /* hairline */
-  --border-strong:     220 20% 78%;            /* visible divider */
-
-  /* Brand — purple */
-  --primary:           252 75% 60%;            /* #6E56CF */
-  --primary-foreground: 0 0% 100%;
-  --primary-soft:      252 100% 96%;           /* #F2EFFF */
-  --primary-soft-2:    252 80% 90%;            /* tint */
-
-  /* Status */
-  --success:           152 60% 40%;
-  --warning:           32  95% 50%;
-  --danger:            0   72% 55%;
-  --info:              199 89% 48%;
-
-  /* Glass / popovers */
-  --popover:           0 0% 100%;
-  --popover-foreground: 224 71% 4%;
-  --ring:              252 75% 60%;
-  --accent:            220 20% 96%;
-
-  /* App shell */
-  --sidebar:           0 0% 100%;
-  --sidebar-border:    220 20% 90%;
-  --sidebar-item:      224 71% 4%;
-  --sidebar-item-active-bg: 252 100% 97%;
-  --sidebar-item-active-fg: 252 75% 50%;
-  --sidebar-group:     220 14% 46%;
-}
-
-/* Page bg: white with a very subtle warm wash from the top-left.
-   No more dark gradients. */
-body {
-  background-color: hsl(var(--background));
-  background-image:
-    radial-gradient(ellipse 60% 50% at 0% 0%, hsla(252, 75%, 90%, 0.12), transparent 60%),
-    radial-gradient(ellipse 40% 30% at 100% 0%, hsla(40, 80%, 80%, 0.10), transparent 60%);
-  background-attachment: fixed;
-  color: hsl(var(--foreground));
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Inter", sans-serif;
-}
-
-* { border-color: hsl(var(--border)); }
-
-input, textarea, select { color-scheme: light; }
-
-/* ============================================================
- * Soro-style utility primitives
- * ============================================================ */
-
-@layer components {
-  /* The signature white card with a hairline border and a soft shadow.
-     Used for every "card" on every page. */
-  .soro-card {
-    background-color: #fff;
-    border: 1px solid hsl(var(--border));
-    border-radius: 16px;
-    box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.04),
-      0 1px 0 rgba(255, 255, 255, 1) inset;
-  }
-  .soro-card-pad {
-    @apply soro-card p-5;
-  }
-  /* The flat stat card (Articles / Drafts / Published style) */
-  .soro-stat {
-    background-color: #fff;
-    border: 1px solid hsl(var(--border));
-    border-radius: 16px;
-    padding: 20px;
-  }
-  /* The icon-badge (purple circle with white icon) used on stat cards */
-  .soro-icon-badge {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
-    background-color: hsl(var(--primary-soft));
-    color: hsl(var(--primary));
-    display: grid;
-    place-items: center;
-  }
-  /* The small count pill (the "13" on Calendar) */
-  .soro-count-pill {
-    background-color: hsl(var(--primary-soft));
-    color: hsl(var(--primary));
-    font-size: 12px;
-    font-weight: 600;
-    padding: 1px 9px;
-    border-radius: 999px;
-    line-height: 1.5;
-  }
-  .soro-new-pill {
-    background-color: hsl(20 95% 92%);
-    color: hsl(20 90% 38%);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 1px 9px;
-    border-radius: 999px;
-    line-height: 1.5;
-    text-transform: capitalize;
-  }
-  /* Group section header (INSIGHTS / SUPPORT) */
-  .soro-group {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: hsl(var(--sidebar-group));
-    padding: 18px 16px 8px;
-  }
-  /* The big hero number on stat cards (e.g. "1" in Total Articles) */
-  .soro-hero-number {
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: hsl(var(--foreground));
-    line-height: 1;
-  }
-  /* The little helper text under the number */
-  .soro-hero-label {
-    color: hsl(var(--muted-foreground));
-    font-size: 14px;
-    font-weight: 500;
-  }
-  /* The purple focus ring used everywhere */
-  .soro-ring:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px hsl(var(--primary-soft));
-    border-color: hsl(var(--primary));
-  }
-  /* The status dot helpers (green / amber / red / purple) */
-  .soro-dot-green  { background-color: hsl(var(--success)); }
-  .soro-dot-amber  { background-color: hsl(var(--warning)); }
-  .soro-dot-red    { background-color: hsl(var(--danger)); }
-  .soro-dot-purple { background-color: hsl(var(--primary)); }
-  .soro-dot-grey   { background-color: hsl(var(--muted-foreground)); }
-  /* The small "checked" dot for a selected tile */
-  .soro-tile-check {
-    background-color: hsl(var(--success));
-    color: white;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,.15);
-  }
-  /* The purple "Add" pill button */
-  .soro-add-pill {
-    background-color: #fff;
-    border: 1px solid hsl(var(--border-strong));
-    color: hsl(var(--foreground));
-    padding: 4px 12px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: border-color 150ms, background-color 150ms;
-  }
-  .soro-add-pill:hover { border-color: hsl(var(--primary)); background-color: hsl(var(--primary-soft)); }
-  /* The "Add more websites" / "+ New" tile */
-  .soro-new-tile {
-    background-color: transparent;
-    border: 1px dashed hsl(var(--border-strong));
-    border-radius: 12px;
-    color: hsl(var(--muted-foreground));
-    display: grid;
-    place-items: center;
-    height: 100%;
-    min-height: 80px;
-    font-size: 13px;
-  }
-}
-
-/* ============================================================
- * Claw console — "Claude"-style scoped theme
- * ------------------------------------------------------------
- * The Claw console sets html[data-claw-theme="light|dark"] while
- * it is mounted (and removes it on unmount). We override the core
- * design tokens on the <html> element — rather than on a wrapper —
- * so the model-picker popup, which portals to document.body, also
- * inherits the theme. Other pages (login / integrations) never set
- * the attribute, so they keep the default "Soro" light tokens above.
- *
- * Palette: warm paper + clay accent in light, warm near-black +
- * lighter clay in dark. Two neutrals, one accent — Claude's look.
- * ============================================================ */
-html[data-claw-theme] body {
-  background-image: none;
-}
-
-html[data-claw-theme="light"] {
-  --background:         48 33% 97%;   /* warm paper */
-  --foreground:         40 8% 16%;    /* warm ink */
-  --muted:              47 25% 92%;   /* hover / rail surface */
-  --muted-foreground:   43 6% 43%;
-  --border:             44 22% 88%;
-  --border-strong:      44 16% 80%;
-  --popover:            48 33% 98%;
-  --popover-foreground: 40 8% 16%;
-  --primary:            14 55% 52%;   /* clay */
-  --primary-foreground: 0 0% 100%;
-  --ring:               14 55% 52%;
-  --accent:             47 25% 92%;
-
-  --claw-sidebar:       47 25% 93%;
-  --claw-elevated:      48 30% 99%;
-  --claw-bubble:        47 24% 90%;
-  --claw-accent:        14 55% 50%;
-  --claw-accent-hover:  14 55% 44%;
-  --claw-accent-fg:     0 0% 100%;
+  --background: 48 24% 96%;
+  --foreground: 220 28% 8%;
+  --muted: 45 16% 91%;
+  --muted-foreground: 218 10% 40%;
+  --border: 216 16% 82%;
+  --border-strong: 216 16% 66%;
+  --popover: 48 28% 98%;
+  --popover-foreground: 220 28% 8%;
+  --primary: 78 88% 38%;
+  --primary-foreground: 222 35% 5%;
+  --primary-soft: 78 80% 88%;
+  --primary-soft-2: 78 74% 77%;
+  --ring: 78 88% 38%;
+  --accent: 45 16% 91%;
+  --success: 150 67% 36%;
+  --warning: 32 94% 48%;
+  --danger: 0 72% 52%;
+  --info: 193 88% 39%;
+  --sidebar: 48 28% 98%;
+  --sidebar-border: 216 16% 82%;
+  --sidebar-item: 220 28% 8%;
+  --sidebar-item-active-bg: 78 80% 88%;
+  --sidebar-item-active-fg: 220 28% 8%;
+  --sidebar-group: 218 10% 40%;
+  --claw-sidebar: 48 28% 98%;
+  --claw-elevated: 48 30% 99%;
+  --claw-bubble: 45 16% 91%;
+  --claw-accent: 78 88% 38%;
+  --claw-accent-hover: 78 91% 32%;
+  --claw-accent-fg: 222 35% 5%;
+  --signal-cyan: 190 92% 40%;
+  --signal-violet: 252 82% 64%;
 }
 
 html[data-claw-theme="dark"] {
-  --background:         60 3% 15%;    /* warm near-black */
-  --foreground:         48 33% 95%;
-  --muted:              47 6% 20%;
-  --muted-foreground:   47 6% 62%;
-  --border:             47 6% 24%;
-  --border-strong:      47 6% 32%;
-  --popover:            60 3% 19%;
-  --popover-foreground: 48 33% 95%;
-  --primary:            16 61% 60%;   /* lighter clay */
-  --primary-foreground: 0 0% 100%;
-  --ring:               16 61% 60%;
-  --accent:             47 6% 22%;
-
-  --claw-sidebar:       48 3% 12%;
-  --claw-elevated:      47 6% 20%;
-  --claw-bubble:        47 6% 23%;
-  --claw-accent:        16 61% 60%;
-  --claw-accent-hover:  16 61% 66%;
-  --claw-accent-fg:     20 30% 12%;
+  --background: 222 32% 5%;
+  --foreground: 72 22% 94%;
+  --muted: 220 22% 10%;
+  --muted-foreground: 215 10% 61%;
+  --border: 218 19% 18%;
+  --border-strong: 216 16% 31%;
+  --popover: 222 26% 7%;
+  --popover-foreground: 72 22% 94%;
+  --primary: 78 96% 58%;
+  --primary-foreground: 222 35% 5%;
+  --primary-soft: 78 45% 14%;
+  --primary-soft-2: 78 45% 21%;
+  --ring: 78 96% 58%;
+  --accent: 220 22% 11%;
+  --success: 150 70% 50%;
+  --warning: 32 95% 57%;
+  --danger: 0 82% 64%;
+  --info: 190 92% 56%;
+  --sidebar: 222 34% 4%;
+  --sidebar-border: 218 19% 16%;
+  --sidebar-item: 72 22% 94%;
+  --sidebar-item-active-bg: 78 45% 14%;
+  --sidebar-item-active-fg: 78 96% 58%;
+  --sidebar-group: 215 10% 61%;
+  --claw-sidebar: 222 34% 4%;
+  --claw-elevated: 222 27% 7%;
+  --claw-bubble: 220 22% 11%;
+  --claw-accent: 78 96% 58%;
+  --claw-accent-hover: 78 96% 66%;
+  --claw-accent-fg: 222 35% 5%;
+  --signal-cyan: 190 100% 62%;
+  --signal-violet: 252 100% 74%;
 }
 
+* { border-color: hsl(var(--border)); }
+html { scroll-behavior: smooth; }
+html, body { min-height: 100%; max-width: 100%; overflow-x: hidden; overscroll-behavior-x: contain; }
+body {
+  position: relative;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(hsl(var(--border) / .22) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / .22) 1px, transparent 1px),
+    radial-gradient(circle at 74% -10%, hsl(var(--claw-accent) / .11), transparent 34%);
+  background-size: 56px 56px, 56px 56px, 100% 100%;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+::selection { background: hsl(var(--claw-accent)); color: hsl(var(--claw-accent-fg)); }
+input, textarea, select { color-scheme: light; }
 html[data-claw-theme="dark"] input,
 html[data-claw-theme="dark"] textarea,
-html[data-claw-theme="dark"] select {
-  color-scheme: dark;
+html[data-claw-theme="dark"] select { color-scheme: dark; }
+select, input, textarea, button { min-width: 0; }
+select { max-width: 100%; text-overflow: ellipsis; }
+code, pre { overflow-wrap: anywhere; word-break: break-word; }
+
+@layer components {
+  .signal-kicker {
+    @apply inline-flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.22em];
+    color: hsl(var(--claw-accent));
+  }
+  .signal-kicker::before {
+    content: "";
+    width: 18px;
+    height: 1px;
+    background: currentColor;
+    box-shadow: 7px 0 12px currentColor;
+  }
+  .signal-panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    background: linear-gradient(145deg, hsl(var(--claw-elevated)), hsl(var(--background) / .84));
+    box-shadow: 0 20px 60px hsl(222 40% 2% / .08), inset 0 1px hsl(var(--foreground) / .035);
+  }
+  .signal-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 44px;
+    height: 2px;
+    background: hsl(var(--claw-accent));
+  }
+  .signal-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / .28) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / .28) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .signal-scan {
+    position: relative;
+  }
+  .signal-scan::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%, hsl(var(--claw-accent) / .045) 50%, transparent 65%);
+    transform: translateX(-100%);
+    animation: signal-scan 7s ease-in-out infinite;
+  }
+  .signal-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: hsl(var(--claw-accent));
+    box-shadow: 0 0 0 4px hsl(var(--claw-accent) / .12), 0 0 18px hsl(var(--claw-accent) / .5);
+  }
+  .signal-label {
+    @apply font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+  }
+  .signal-route-line {
+    height: 1px;
+    flex: 1;
+    min-width: 16px;
+    background: linear-gradient(90deg, hsl(var(--claw-accent)), hsl(var(--signal-cyan) / .5));
+  }
+
+  /* Compatibility primitives retained for the existing Claw surfaces. */
+  .soro-card, .soro-card-pad, .soro-stat {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: .75rem;
+    background: linear-gradient(145deg, hsl(var(--claw-elevated)), hsl(var(--background) / .84));
+    box-shadow: 0 20px 60px hsl(222 40% 2% / .08), inset 0 1px hsl(var(--foreground) / .035);
+  }
+  .soro-card-pad, .soro-stat { @apply p-5; }
+  .soro-icon-badge {
+    @apply grid h-11 w-11 place-items-center rounded-lg;
+    color: hsl(var(--claw-accent));
+    background: hsl(var(--claw-accent) / .1);
+    border: 1px solid hsl(var(--claw-accent) / .18);
+  }
+  .soro-count-pill, .soro-new-pill {
+    @apply rounded-sm px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider;
+    color: hsl(var(--claw-accent));
+    background: hsl(var(--claw-accent) / .1);
+  }
+  .soro-group { @apply px-4 pb-2 pt-5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground; }
+  .soro-hero-number { @apply text-4xl font-semibold leading-none tracking-[-0.045em]; }
+  .soro-hero-label { @apply text-sm font-medium text-muted-foreground; }
+  .soro-ring:focus-visible { outline: none; box-shadow: 0 0 0 3px hsl(var(--claw-accent) / .22); border-color: hsl(var(--claw-accent)); }
+  .soro-dot-green { background: hsl(var(--success)); }
+  .soro-dot-amber { background: hsl(var(--warning)); }
+  .soro-dot-red { background: hsl(var(--danger)); }
+  .soro-dot-purple { background: hsl(var(--signal-violet)); }
+  .soro-dot-grey { background: hsl(var(--muted-foreground)); }
+  .soro-tile-check { @apply grid h-6 w-6 place-items-center rounded-full; color: #06110b; background: hsl(var(--success)); }
+  .soro-add-pill {
+    @apply inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-semibold transition-colors;
+    background: hsl(var(--claw-elevated));
+  }
+  .soro-add-pill:hover { border-color: hsl(var(--claw-accent) / .7); color: hsl(var(--claw-accent)); }
+  .soro-new-tile { @apply grid min-h-20 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground; }
 }
 
-/* Smooth scrolling for in-page nav */
-html { scroll-behavior: smooth; }
-html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }
-
-/* Form controls default to `min-width: auto`, which lets their intrinsic
- * content (e.g. a <select>'s widest <option> text) refuse to shrink below
- * that width. Inside a CSS Grid/flex layout this doesn't just clip the
- * control itself — the whole grid track (every sibling row in that column,
- * including unrelated cards) gets stretched to match, then silently
- * clipped by the html/body overflow-x:hidden rule above. Zeroing the
- * automatic minimum lets every control shrink to its actual box and
- * ellipsize instead of blowing out the layout on narrow viewports. */
-select, input, textarea, button {
-  min-width: 0;
+@keyframes signal-scan {
+  0%, 68% { transform: translateX(-100%); }
+  88%, 100% { transform: translateX(100%); }
 }
 
-/* This codebase uses Tailwind's `grid` utility everywhere purely for
- * vertical stacking (cards, form rows), not for real multi-track layout.
- * CSS Grid tracks are shared: every item in a column defaults to
- * `min-width: auto`, so ONE child with unshrinkable content (e.g. a model
- * picker showing a long model name) forces that column — and therefore
- * every sibling, and every ancestor grid up the tree — wider than the
- * viewport. Zeroing the default lets each item shrink independently, the
- * same way normal block layout already does. */
-select {
-  max-width: 100%;
-  text-overflow: ellipsis;
-}
-
-/* <code> chips routinely hold long, unbreakable identifiers (redirect
- * URLs, scope names, model ids). Normal word-break has no break
- * opportunity in those strings, so they force their flex/grid ancestor
- * wider than the viewport instead of wrapping — same failure mode as the
- * <select> rule above, different element. */
-code, pre {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
