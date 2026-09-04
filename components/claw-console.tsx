@@ -11,7 +11,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
 import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode } from "@/components/ui/claw-thinking-panel";
-import { ModelSelectorKit, type AiModel } from "@/components/ui/ai-model-select";
+
 
 /* ─────────────────────────────────────────────────────────
  * TYPES
