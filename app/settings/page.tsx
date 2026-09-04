@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertCircle, Check, CircleDot, Eye, EyeOff, KeyRound,
+  AlertCircle, Check, CircleDot, Eye, EyeOff, Gauge, KeyRound,
   Loader2, Plug, Plus, Save, ShieldCheck, Trash2, Zap
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -43,8 +43,12 @@ function SpeedBadge({ notes }: { notes: string }) {
   const fast = notes.includes("FAST");
   const warn = notes.includes("⚠") || notes.includes("SLOW");
   if (!fast && !warn) return null;
-  if (fast) return <span className="ml-2 text-[10px] font-bold text-emerald-400">⚡ fast</span>;
-  if (warn) return <span className="ml-2 text-[10px] font-bold text-amber-400">{notes.includes("⚠") ? "⚠ warning" : "slow"}</span>;
+  if (fast) return <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+    <Zap size={9} /> fast
+  </span>;
+  if (warn) return <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+    <Gauge size={9} /> {notes.includes("⚠") ? "warning" : "slow"}
+  </span>;
   return null;
 }
 
@@ -235,10 +239,10 @@ function NvidiaPanel() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className={`font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
-                      {m.label.split("★")[0].trim()}
+                      {m.label.split("★")[0].replace(/[⚠️⚠]/g, "").trim()}
                     </span>
                     {m.notes.includes("default") && (
-                      <span className="rounded bg-[rgba(16,185,129,0.15)] px-1.5 py-0.5 text-[10px] text-emerald-400">default</span>
+                      <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">default</span>
                     )}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1">

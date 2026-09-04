@@ -730,7 +730,7 @@ export function ClawConsole() {
 
           {/* Conversations */}
           <div className="min-h-0 flex-1 overflow-y-auto px-2">
-            <div className="mb-1 px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-[rgba(220,220,255,0.25)]">Recent</div>
+            <div className="mb-1 px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Recent</div>
             {convs.map(c => (
               <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-xl px-2.5 py-2.5 text-[13px] transition-all ${
                 active === c.id
@@ -761,18 +761,18 @@ export function ClawConsole() {
 
           {/* Footer nav */}
           <div className="border-t border-[rgba(180,180,255,0.08)] p-2">
-            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]">
+            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
               <Plug size={14} />
               Integrations
             </Link>
-            <Link href="/settings" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]">
+            <Link href="/settings" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
               <Settings size={14} />
               Settings
             </Link>
             <button
               type="button"
               onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-[rgba(220,220,255,0.40)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]"
               aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
             >
               {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
@@ -837,7 +837,7 @@ export function ClawConsole() {
                         <h1 className="mb-1 text-3xl font-bold tracking-tight">
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
-                        <p className="text-[14px] text-[rgba(220,220,255,0.40)]">
+                        <p className="text-[14px] text-muted-foreground">
                           Claw calls real tools — research, generate, post, scrape.
                         </p>
                       </div>
@@ -858,8 +858,8 @@ export function ClawConsole() {
                     {/* Suggestion chips */}
                     <div className="animate-fade-up" style={{ animationDelay: "200ms" }}>
                       <div className="mb-3 flex items-center gap-2">
-                        <Wand2 size={13} className="text-[rgba(220,220,255,0.25)]" />
-                        <span className="text-[11px] font-medium uppercase tracking-widest text-[rgba(220,220,255,0.25)]">Quick actions</span>
+                        <Wand2 size={13} className="text-muted-foreground" />
+                        <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Quick actions</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {suggestions.slice(0, 6).map((s, i) => (

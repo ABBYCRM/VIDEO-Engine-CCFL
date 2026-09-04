@@ -96,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         onClick={() => setMobileOpen(false)}
                         className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] transition ${
                           active
-                            ? "bg-[rgba(199,100,67%,0.12)] font-semibold dark:text-[rgba(220,220,255,0.90)] dark:border dark:border-[rgba(199,100,67%,0.25)]"
+                            ? "sidebar-item-active"
                             : "text-foreground hover:bg-muted dark:text-[rgba(220,220,255,0.50)] dark:hover:bg-[rgba(255,255,255,0.06)]"
                         }`}
                       >
