@@ -1,3 +1,4 @@
+import { StreamState } from "./stream-state";
 // NVIDIA NIM HTTP client with multi-key failover.
 //
 // The build endpoint is OpenAI-compatible:
@@ -330,7 +331,9 @@ export async function chatCompletionStream(
 
   let lastError: Error | null = null;
 
+  try {
   for (const [i, key] of keys.entries()) {
+    if (signal.aborted) throw signal.reason ?? new Error("Stream aborted");
     try {
       const { url: finalUrl, extraHeaders } = heliconeRoute(`${NVIDIA_BASE}/chat/completions`);
       const r = await fetch(finalUrl, {
@@ -368,14 +371,12 @@ export async function chatCompletionStream(
 
       const reader = r.body.getReader();
       const decoder = new TextDecoder();
-      let buf = "";
-      let text = "";
-      let finishReason = "stop";
+      const state = new StreamState(onToken);
       let lastActivity = Date.now();
 
       const watchdog = setInterval(() => {
         if (Date.now() - lastActivity > 25_000) {
-          try { reader.cancel("watchdog timeout"); } catch { /* ignore */ }
+          void reader.cancel("watchdog timeout").catch(() => {});
           try { timeoutController.abort(); } catch { /* ignore */ }
         }
       }, 2_000);
@@ -385,30 +386,16 @@ export async function chatCompletionStream(
           const { done, value } = await reader.read();
           if (done) break;
           lastActivity = Date.now();
-          buf += decoder.decode(value, { stream: true });
-          const parts = buf.split("\n");
-          buf = parts.pop() || "";
-          for (const line of parts) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data:")) continue;
-            const data = trimmed.slice(5).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const json = JSON.parse(data) as {
-                choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>;
-              };
-              const delta = json.choices?.[0]?.delta?.content || "";
-              if (delta) {
-                text += delta;
-                onToken(delta);
-              }
-              if (json.choices?.[0]?.finish_reason) finishReason = String(json.choices[0].finish_reason);
-            } catch { /* ignore malformed SSE lines */ }
-          }
+          state.feed(decoder.decode(value, { stream: true }));
         }
+        state.feed(decoder.decode());
+        state.end();
+        if (signal.aborted) state.finishReason = "interrupted";
       } catch (streamErr) {
+        state.finishReason = "interrupted";
+        if (req.signal?.aborted) throw req.signal.reason ?? new Error("Stopped");
         console.warn(`[nvidia] stream watchdog/network error on key ${i + 1}/${keys.length}:`, streamErr instanceof Error ? streamErr.message : streamErr);
-        if (!text) {
+        if (!state.text && !signal.aborted) {
           // Try non-stream on this key as fallback
           try {
             clearTimeout(t);
@@ -425,11 +412,13 @@ export async function chatCompletionStream(
         }
       } finally {
         clearInterval(watchdog);
+        reader.releaseLock();
       }
 
       clearTimeout(t);
-      return { text, finishReason, usage: null, rawModel: req.model };
+      return { text: state.text, finishReason: state.finishReason, usage: null, rawModel: req.model };
     } catch (e) {
+      if (signal.aborted) throw e;
       if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) {
         if (e instanceof NvidiaAuthError || i === keys.length - 1) throw e;
         lastError = e as Error;
@@ -446,4 +435,5 @@ export async function chatCompletionStream(
 
   clearTimeout(t);
   throw lastError ?? new NvidiaUpstreamError("NVIDIA stream failed with no keys available", 0);
+  } finally { clearTimeout(t); }
 }

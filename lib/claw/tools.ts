@@ -212,6 +212,17 @@ export const CLAW_TOOLS: ToolDef[] = [
     }
   },
 
+  {
+    name: "save_file",
+    description: "Save a complete text/code file in this conversation's file panel. Returns a downloadable URL and file ID. This stores a file; it does NOT execute code or prove a build passes. Write one file per call. Never include credentials.",
+    args: "{\"name\":\"scheduler.ts\",\"content\":\"complete file content\"}",
+    handler: async (a, context) => {
+      if (typeof a.name !== "string" || !a.name.trim() || typeof a.content !== "string" || !a.content.length) throw new Error("name and nonempty content are required");
+      if (Buffer.byteLength(a.content) > 1_000_000) throw new Error("File exceeds 1 MB");
+      const file = await saveClawFile({ conversationId: context?.conversationId, name: a.name, mime: "text/plain", bytes: Buffer.from(a.content) });
+      return { ok: true, id: file.id, name: file.name, size: file.size, url: file.url };
+    }
+  },
   // ─── Local file CRUD (Claw file panel) ─────────────────────────
   {
     name: "list_files",
