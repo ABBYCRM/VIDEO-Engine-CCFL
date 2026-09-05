@@ -33,6 +33,7 @@ import {
   getComposio,
   getToolkitMeta,
   isComposioConfigured,
+  isComposioConsumer,
   listCustomToolkits,
   removeCustomToolkit,
   saveComposioApiKey,
@@ -116,7 +117,8 @@ export async function GET() {
   }
   return NextResponse.json({
     configured: isComposioConfigured(),
-    toolkits: buildToolkitView(),
+    mode: isComposioConsumer() ? "consumer" : "project",
+    toolkits: isComposioConsumer() ? [] : buildToolkitView(),
     ...(syncNote ? { syncNote } : {})
   });
 }

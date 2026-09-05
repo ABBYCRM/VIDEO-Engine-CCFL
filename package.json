@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@composio/core": "^0.17.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@radix-ui/react-slot": "^1.2.3",
     "better-sqlite3": "^11.10.0",
     "class-variance-authority": "^0.7.1",
