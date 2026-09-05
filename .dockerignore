@@ -2,8 +2,7 @@ node_modules
 .next
 .git
 .env*
+.aion.env
 data/*.db
 data/videos/*.mp4
-# Separate deployable unit — its own package.json/Dockerfile, own deploy
-# target (see sandbox-server/README.md). Never bundled into the main app.
 sandbox-server

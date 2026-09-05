@@ -236,7 +236,9 @@ export async function runClawTurn(input: {
     for (const call of calls) {
       input.onEvent({ type: "tool_start", name: call.name, args: call.args });
       try {
-        const raw = serializeToolResult(await executeClawTool(call.name, call.args));
+        const raw = serializeToolResult(await executeClawTool(call.name, call.args, {
+          conversationId: input.conversationId, signal: turnSignal
+        }));
         let via: string | undefined;
         try {
           const parsed = JSON.parse(raw);

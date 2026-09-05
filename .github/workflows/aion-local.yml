@@ -1,0 +1,43 @@
+name: Aion local stack
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.aion.yml'
+      - 'docker/aion.Dockerfile'
+      - 'lib/claw/aion.ts'
+      - 'scripts/setup-aion-local.sh'
+      - '.github/workflows/aion-local.yml'
+  workflow_dispatch:
+jobs:
+  build-and-connect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated test configuration
+        run: |
+          python3 - <<'PY'
+          import base64, os, pathlib, secrets
+          os.umask(0o077)
+          pathlib.Path('.env').write_text('ADMIN_PASSWORD=test-only-password\nSESSION_SECRET='+secrets.token_hex(32)+'\nAPP_ENCRYPTION_KEY='+base64.b64encode(secrets.token_bytes(32)).decode()+'\n')
+          pathlib.Path('.aion.env').write_text('AION_API_KEY='+secrets.token_hex(32)+'\nAION_ADMIN_KEY='+secrets.token_hex(32)+'\nAION_NVIDIA_API_KEY=nvapi-test-only-never-used\n')
+          PY
+      - name: Build both images and start private stack
+        run: docker compose --env-file .aion.env -f docker-compose.aion.yml up -d --build --wait --wait-timeout 120
+      - name: Verify authenticated Claw to Aion connection and real curriculum
+        run: |
+          docker compose --env-file .aion.env -f docker-compose.aion.yml exec -T video-engine node -e '
+            const headers={"X-AION-Key":process.env.AION_API_KEY};
+            (async()=>{
+              const state=await fetch(process.env.AION_BASE_URL+"/api/state",{headers});
+              if(!state.ok || (await state.json()).app!=="aion-brain")throw Error("Aion connection failed");
+              const denied=await fetch(process.env.AION_BASE_URL+"/api/sqm/topics");
+              if(denied.status!==401)throw Error("Missing authentication was accepted");
+              const result=await fetch(process.env.AION_BASE_URL+"/api/sqm",{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({topics:["Python"],limit:1})});
+              if(!result.ok || !(await result.json()).sections[0].results[0].body)throw Error("Corpus integration failed");
+              console.log("Authenticated API and real corpus verified; no provider or workflow calls made.");
+            })().catch(e=>{console.error(e.message);process.exit(1)});
+          '
+      - name: Stop test stack
+        if: always()
+        run: docker compose --env-file .aion.env -f docker-compose.aion.yml down -v

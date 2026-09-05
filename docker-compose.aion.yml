@@ -1,0 +1,46 @@
+# Standalone local stack. Use scripts/setup-aion-local.sh for setup and updates.
+services:
+  video-engine:
+    build: .
+    ports: ["127.0.0.1:3000:3000"]
+    env_file: .env
+    environment:
+      AION_BASE_URL: http://aion-brain:10000
+      AION_API_KEY: ${AION_API_KEY:?Run scripts/setup-aion-local.sh first}
+    volumes:
+      - video_engine_data:/app/data
+    depends_on:
+      aion-brain:
+        condition: service_healthy
+    restart: unless-stopped
+  aion-brain:
+    build:
+      context: .
+      dockerfile: docker/aion.Dockerfile
+    environment:
+      ENVIRONMENT: production
+      AION_API_KEYS: ${AION_API_KEY:?Missing Aion key}
+      AION_ADMIN_KEYS: ${AION_ADMIN_KEY:?Missing Aion admin key}
+      NVIDIA_API_KEY: ${AION_NVIDIA_API_KEY:?Missing NVIDIA key}
+      PRIMARY_MODEL: ${AION_PRIMARY_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
+      FALLBACK_MODELS: meta/llama-3.3-70b-instruct
+      N8N_MCP_URL: ${N8N_MCP_URL:-https://paisabrazil.app.n8n.cloud/mcp-server/http}
+      N8N_MCP_TOKEN: ${N8N_MCP_TOKEN:-}
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      N8N_BASE_URL: ${N8N_BASE_URL:-https://paisabrazil.app.n8n.cloud}
+      N8N_EXECUTABLE_WORKFLOW_IDS: ${N8N_EXECUTABLE_WORKFLOW_IDS:-eEElzMUUnW8DTt4S}
+      N8N_WEBHOOK_TOKEN: ${N8N_WEBHOOK_TOKEN:-}
+    volumes:
+      - aion_brain_data:/app/data
+      - aion_brain_reports:/app/reports
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10000/api/state',{headers:{'X-AION-Key':process.env.AION_API_KEYS},signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+volumes:
+  video_engine_data:
+  aion_brain_data:
+  aion_brain_reports:
