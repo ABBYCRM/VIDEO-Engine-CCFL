@@ -104,8 +104,13 @@ function stripTools(text: string) {
   return text.replace(new RegExp(TOOL_RE.source, "gi"), "").trim();
 }
 
-function preview(v: unknown, n = 280) {
-  const s = typeof v === "string" ? v : JSON.stringify(v);
+function serializeToolResult(value: unknown): string {
+  // Handlers return structured values; interpolation would discard their
+  // payload as "[object Object]". Keep existing text unchanged.
+  return typeof value === "string" ? value : JSON.stringify(value) ?? "null";
+}
+
+function preview(s: string, n = 280) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
@@ -231,7 +236,7 @@ export async function runClawTurn(input: {
     for (const call of calls) {
       input.onEvent({ type: "tool_start", name: call.name, args: call.args });
       try {
-        const raw = await executeClawTool(call.name, call.args);
+        const raw = serializeToolResult(await executeClawTool(call.name, call.args));
         let via: string | undefined;
         try {
           const parsed = JSON.parse(raw);
