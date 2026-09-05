@@ -1,4 +1,5 @@
 node_modules
+.aion.env
 .next
 .env
 .env.local
