@@ -259,7 +259,8 @@ function Composer({
       )}
 
       {/* Main composer card */}
-      <div className="glass-card glow-border overflow-hidden p-3">
+      {/* The upward-opening model menu must escape the composer bounds. */}
+      <div className="glass-card glow-border relative z-10 overflow-visible p-3">
         <textarea
           ref={textareaRef}
           value={text}
