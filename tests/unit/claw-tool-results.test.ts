@@ -1,3 +1,4 @@
+import { Execution, parseToolCalls, awaitWithSignal, toolSucceeded } from "../../lib/claw/execution.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
@@ -16,7 +17,7 @@ async function runWithResult(payload: unknown) {
   const events: any[] = [];
   const requests: any[] = [];
   const context = vm.createContext({
-    AbortController, AbortSignal, setTimeout, clearTimeout,
+    AbortController, AbortSignal, setTimeout, clearTimeout, Execution, parseToolCalls, awaitWithSignal,
     getClawModel: () => "test-model",
     isNvidiaEnabled: () => true,
     getConversation: () => ({ title: "Existing thread" }),
@@ -32,7 +33,7 @@ async function runWithResult(payload: unknown) {
         ? '<tool_call name="composio_action">{"slug":"GITHUB_GET_REPOSITORY"}</tool_call>'
         : "Read the result.";
       onToken(text);
-      return { text };
+      return { text, finishReason: "stop" };
     },
   });
   vm.runInContext(executable, context);
@@ -58,13 +59,13 @@ for (const [label, payload] of [
 ] as const) {
   test(`tool result preserves ${label} in history, next model request, and SSE preview`, async () => {
     const { messages, requests, events } = await runWithResult(payload);
-    const expected = typeof payload === "string" ? payload : JSON.stringify(payload) ?? "null";
+    const expected = JSON.stringify({ evidenceId: "e1", revision: 1, ok: toolSucceeded(payload), result: payload });
     const body = `<tool_result name="composio_action">${expected}</tool_result>`;
     assert.equal(messages.find(m => m.role === "tool").content, body);
     assert.ok(requests[1].messages.some((m: any) => m.content === `tool_result:\n${body}`));
     const end = events.find(e => e.type === "tool_end");
     assert.equal(end.preview, expected);
-    assert.equal(end.via, label === "Composio response" ? "composio" : undefined);
+    assert.equal(end.ok, toolSucceeded(payload));
     assert.equal(events.at(-1).type, "done");
   });
 }
@@ -72,7 +73,7 @@ for (const [label, payload] of [
 test("long result keeps model payload intact while limiting the console preview", async () => {
   const payload = { data: "x".repeat(1000) };
   const { messages, events } = await runWithResult(payload);
-  const expected = JSON.stringify(payload);
+  const expected = JSON.stringify({ evidenceId: "e1", revision: 1, ok: true, result: payload });
   assert.ok(messages.find(m => m.role === "tool").content.includes(expected));
   assert.equal(events.find(e => e.type === "tool_end").preview, expected.slice(0, 280) + "…");
 });
