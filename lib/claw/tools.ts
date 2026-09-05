@@ -31,7 +31,7 @@
 
 import { db } from "@/lib/db";
 import { aionStatus, aionConsult, aionCurriculum, aionN8n, type AionContext } from "@/lib/claw/aion";
-import { composioHealth, composioAction } from "@/lib/composio/client";
+import { composioHealth, composioAction, getComposioToolSchema } from "@/lib/composio/client";
 import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
 import { takeScreenshot } from "@/lib/screenshotone";
 import { webSearch } from "@/lib/web-search";
@@ -137,13 +137,19 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Composio (granular in/out passthrough) ──────────────────────
   {
     name: "composio_health",
-    description: "Ping the Composio API. Returns the configured flag, live flag, and the list of connected toolkits. Use this BEFORE calling composio_action to confirm the toolkit you want is actually wired up; if the toolkit isn't in the list, composio_action will 4xx and tell you which one is missing.",
+    description: "Ping Composio. Consumer keys return MCP tool names: call composio_tool_schema for their inputSchema, discover actions with the listed search tool, then call the advertised MCP tools via composio_action. An empty toolkit list in consumer mode does not mean disconnected. Project keys return the configured flag, live flag, and the list of connected toolkits. Use this BEFORE calling composio_action to confirm the toolkit you want is actually wired up; if the toolkit isn't in the list, composio_action will 4xx and tell you which one is missing.",
     args: "{}",
     handler: async () => composioHealth()
   },
   {
+    name: "composio_tool_schema",
+    description: "Get the complete inputSchema for one exact Composio Connect MCP tool name returned by composio_health. Use this before composio_action; never guess required arguments.",
+    args: "{\"name\":\"exact MCP tool name\"}",
+    handler: async (a) => getComposioToolSchema(str(a.name).trim())
+  },
+  {
     name: "composio_action",
-    description: "Call a single Composio tool. Pass the exact slug the operator wants (e.g. 'HACKERNEWS_CREATE_POST', 'REDDIT_SEARCH_ACROSS_SUBREDDITS', 'INSTAGRAM_CREATE_POST', 'GMAIL_SEND_EMAIL', 'SLACK_POST_MESSAGE', 'GITHUB_CREATE_ISSUE', 'NOTION_CREATE_PAGE', 'TWITTER_CREATION_OF_A_POST', 'LINKEDIN_CREATE_POST', 'YOUTUBE_UPLOAD_VIDEO', etc.) and the exact `args` dict the upstream tool expects. The response is the raw upstream payload, clipped to 6,000 chars. The `toolkit` field is required so the right connected account is picked; if you don't know the toolkit, pass an empty string and the client will pick by slug. Connection / auth / schema errors come back as `{ error: string, code?: string }` rather than throwing, so the operator can see the upstream's own message.",
+    description: "Call a single Composio tool. For consumer mode, first call composio_health and use an exact MCP tool name from it and fetch its inputSchema with composio_tool_schema; leave toolkit empty. Do not invent MCP names or send project action slugs directly to MCP. For project mode, pass the exact slug the operator wants (e.g. 'HACKERNEWS_CREATE_POST', 'REDDIT_SEARCH_ACROSS_SUBREDDITS', 'INSTAGRAM_CREATE_POST', 'GMAIL_SEND_EMAIL', 'SLACK_POST_MESSAGE', 'GITHUB_CREATE_ISSUE', 'NOTION_CREATE_PAGE', 'TWITTER_CREATION_OF_A_POST', 'LINKEDIN_CREATE_POST', 'YOUTUBE_UPLOAD_VIDEO', etc.) and the exact `args` dict the upstream tool expects. The response is the raw upstream payload, clipped to 6,000 chars. The `toolkit` field is required so the right connected account is picked; if you don't know the toolkit, pass an empty string and the client will pick by slug. Connection / auth / schema errors come back as `{ error: string, code?: string }` rather than throwing, so the operator can see the upstream's own message.",
     args: "{\"slug\":\"HACKERNEWS_CREATE_POST\",\"args\":{\"title\":\"...\",\"body\":\"...\"},\"toolkit\":\"\"}",
     handler: async (a) => {
       const slug = str(a.slug).trim();
@@ -343,5 +349,5 @@ export async function executeClawTool(name: string, args: Record<string, unknown
   const tool = CLAW_TOOL_MAP.get(name);
   if (!tool) throw new Error(`Unknown tool ${name}`);
   const data = await tool.handler(args, context);
-  return clip(data, 6000);
+  return name === "composio_tool_schema" ? data : clip(data, 6000);
 }

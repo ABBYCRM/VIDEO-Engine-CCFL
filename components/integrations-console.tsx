@@ -33,7 +33,7 @@ type Toolkit = {
   authConfigConfigured: boolean;
 };
 
-type Overview = { configured: boolean; toolkits: Toolkit[] };
+type Overview = { configured: boolean; toolkits: Toolkit[]; mode?: "consumer" | "project"; syncNote?: string };
 type CatalogItem = { slug: string; name: string; logo: string | null; description: string | null; categories: string[]; toolsCount: number | null };
 type Flash = { level: "success" | "failed" | "info"; msg: string };
 
@@ -61,7 +61,7 @@ export function IntegrationsConsole() {
     const r = await fetch("/api/integrations/composio", { cache: "no-store", credentials: "same-origin" });
     const d = await r.json().catch(() => null);
     if (r.ok && d) {
-      setOverview({ configured: d.configured, toolkits: d.toolkits || [] });
+      setOverview({ configured: d.configured, toolkits: d.toolkits || [], mode: d.mode, syncNote: d.syncNote });
       if (d.syncNote) pushFlash("info", d.syncNote);
     } else {
       try {
@@ -215,7 +215,7 @@ export function IntegrationsConsole() {
       const r = await fetch("/api/integrations/composio/sync", { method: "POST", credentials: "same-origin" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Sync failed");
-      pushFlash("success", `Synced ${d.mirrored ?? 0} account(s)`);
+      pushFlash("success", d.mode === "consumer" ? `Composio Connect authenticated: ${d.tools} tools available` : `Synced ${d.mirrored ?? 0} account(s)`);
       await reload();
     } catch (e) {
       pushFlash("failed", e instanceof Error ? e.message : String(e));
@@ -253,8 +253,7 @@ export function IntegrationsConsole() {
           </div>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          Composio is the operator&apos;s single MCP for every external service. Search the full
-          catalog below, add the apps you want, then connect each one with OAuth.
+          Save a Composio consumer key or project API key. Consumer keys use Composio Connect; project keys use the app catalog below.
         </p>
         <details className="group">
           <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
@@ -269,6 +268,13 @@ export function IntegrationsConsole() {
         </details>
       </Card>
 
+      {overview?.syncNote && <p role="alert" className="text-sm text-[hsl(var(--danger))]">{overview.syncNote}</p>}
+      {overview?.mode === "consumer" ? (
+        <Card>
+          <p>Composio Connect is selected. Click Sync to verify authentication, then ask Claw to check Composio and discover the tools you need.</p>
+          <a href="https://dashboard.composio.dev" target="_blank" rel="noreferrer" className="underline">Manage your connected apps in Composio</a>
+        </Card>
+      ) : <>
       {/* Add a toolkit — searchable catalog */}
       <Card>
         <div className="mb-1 flex items-center gap-2 font-medium">
@@ -359,6 +365,7 @@ export function IntegrationsConsole() {
           </div>
         )}
       </Card>
+      </>}
     </div>
   );
 }

@@ -5,6 +5,7 @@
 //   - type-narrowed errors so the API routes can return meaningful messages
 //   - never throws on init (returns null if no key is configured)
 
+import { isConsumerKey, listConsumerTools, callConsumerTool } from "./consumer";
 import { Composio } from "@composio/core";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
@@ -65,6 +66,10 @@ export function getComposioApiKey(): string {
   throw new ComposioAuthError("Composio API key is not configured");
 }
 
+export function isComposioConsumer(): boolean {
+  return isComposioConfigured() && isConsumerKey(getComposioApiKey());
+}
+
 export function saveComposioApiKey(value: string) { setRaw(COMPOSIO_SETTING_KEY, encryptSecret(value.trim())); }
 
 export function isComposioConfigured(): boolean {
@@ -87,6 +92,7 @@ let _clientKey: string | null = null;
 
 export function getComposio(): Composio {
   const key = getComposioApiKey();
+  if (isConsumerKey(key)) throw new ComposioAuthError("This consumer key uses Composio Connect. Manage app connections at https://dashboard.composio.dev or through Claw’s Composio tools.");
   if (_client && _clientKey === key) return _client;
   _client = new Composio({ apiKey: key });
   _clientKey = key;
@@ -125,6 +131,10 @@ export function getActiveConnectedAccountId(toolkit: string, userId = "admin"): 
 }
 
 export async function syncConnectedAccounts() {
+  if (isComposioConsumer()) {
+    const tools = await listConsumerTools(getComposioApiKey());
+    return { mirrored: 0, accounts: [], mode: "consumer" as const, tools: tools.length };
+  }
   const USER_ID = "admin";
   const client: any = getComposio();
   const listed: any = await withTimeout(client.connectedAccounts.list(), DEFAULT_TIMEOUT_MS, "connectedAccounts.list");
@@ -349,6 +359,11 @@ export async function authorizeToolkit(slug: string, userId = "admin"): Promise<
  *  linkedin-composio.ts, reddit-composio.ts, instagram-composio.ts). */
 export async function executeComposioTool(toolkit: string, slug: string, args: Record<string, unknown>, userId = "admin") {
   if (!isComposioConfigured()) throw new Error(`Composio is not configured (${toolkit} unavailable)`);
+  if (isComposioConsumer()) {
+    const result = await callConsumerTool(getComposioApiKey(), slug, args);
+    if (result.isError) throw new Error("Composio tool failed: " + JSON.stringify(result));
+    return result;
+  }
   const connectedAccountId = getActiveConnectedAccountId(toolkit, userId) || undefined;
   if (!connectedAccountId) throw new Error(`${getToolkitMeta(toolkit).label} is not connected. Connect it in Integrations first.`);
   const composio: any = getComposio();
@@ -378,6 +393,8 @@ export type ComposioHealth = {
   live: boolean;
   toolkits: Array<{ id: string; label: string; status: string; lastSyncAt: string | null }>;
   note?: string;
+  mode?: "consumer";
+  tools?: Array<{ name: string; description?: string }>;
 };
 
 export async function composioHealth(): Promise<ComposioHealth> {
@@ -389,6 +406,14 @@ export async function composioHealth(): Promise<ComposioHealth> {
       toolkits: [],
       note: "Composio is not configured. Set COMPOSIO_API_KEY in the app env, or save it under the composio_api_key setting."
     };
+  }
+  if (isComposioConsumer()) {
+    try {
+      const tools = await listConsumerTools(getComposioApiKey());
+      return { configured: true, live: true, mode: "consumer", toolkits: [], tools: tools.map(t => ({ name: t.name, description: t.description?.slice(0, 160) })), note: "Composio Connect authenticated. Call composio_tool_schema for an exact tool name, then use its inputSchema with composio_action; discover app actions through the search tool. App connections are managed by Connect." };
+    } catch (e) {
+      return { configured: true, live: false, mode: "consumer", toolkits: [], note: e instanceof Error ? e.message : String(e) };
+    }
   }
   // ALWAYS sync before reading. The Integrations page calls sync on every load
   // and is served by the primary worker; Claw's app_status and composio_health
@@ -408,7 +433,7 @@ export async function composioHealth(): Promise<ComposioHealth> {
   ).all() as Array<{ toolkit: string; status: string; last_sync_at: string | null }>;
   return {
     configured: true,
-    live: true,
+    live: !syncNote,
     toolkits: rows.map((r) => {
       const meta = getToolkitMeta(r.toolkit);
       return { id: r.toolkit, label: meta.label, status: r.status, lastSyncAt: r.last_sync_at };
@@ -451,6 +476,11 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
     return { ok: false, slug, toolkit: toolkit || null, error: "Composio is not configured (COMPOSIO_API_KEY missing or composio_api_key setting empty)" };
   }
   try {
+    if (isComposioConsumer()) {
+      const data = await callConsumerTool(getComposioApiKey(), slug, input.args || {});
+      if (data.isError) return { ok: false, slug, toolkit: toolkit || null, error: JSON.stringify(data) };
+      return { ok: true, slug, toolkit: toolkit || null, data };
+    }
     const composio: any = getComposio();
     // Resolve the connected account (if a toolkit was named) before
     // we send the call, so the upstream's "no connected account" error
@@ -486,4 +516,10 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
   } catch (e) {
     return { ok: false, slug, toolkit: toolkit || null, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export async function getComposioToolSchema(name: string) {
+  if (!isComposioConsumer()) return { error: "Tool schema discovery here is for Composio Connect consumer keys." };
+  const tools = await listConsumerTools(getComposioApiKey());
+  return tools.find(t => t.name === name) || { error: "Unknown MCP tool name", tools: tools.map(t => t.name) };
 }
