@@ -17,14 +17,12 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } }
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    // GitHub Actions sets HOSTNAME to the runner name. Next standalone
-    // binds to that host, so Playwright's 127.0.0.1:3000 poll never connects.
-    // NODE_ENV=test on the verify job also keeps the production server from
-    // serving the standalone build. Force loopback + production for CI.
-    command: process.env.CI
-      ? "mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static && cp -R public .next/standalone/public && HOSTNAME=127.0.0.1 PORT=3000 NODE_ENV=production node .next/standalone/server.js"
-      : "npm run dev",
-    url: "http://127.0.0.1:3000/login",
+    // CI: production `next start` on loopback. Do not poll /login — that
+    // route was removed in the Claw-only strip (not-found redirects to
+    // /claw). Playwright treats HTTP 404 as "not ready" (status < 404),
+    // so a 404 health URL hangs until webServer.timeout.
+    command: process.env.CI ? "bash scripts/e2e-webserver.sh" : "npm run dev",
+    url: "http://127.0.0.1:3000/api/ready",
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     stdout: "pipe",
