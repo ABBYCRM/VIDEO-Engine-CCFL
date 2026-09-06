@@ -49,21 +49,21 @@ test("Claw is the operator chat with thread/file controls, model picker, and too
   });
 
   await page.goto("/claw");
-  await expect(page.getByRole("link", { name: "Claw", exact: true })).toBeVisible();
-  await expect(page.getByText("Talk to Claw")).toBeVisible();
+  await expect(page.getByText("AI Operator Console")).toBeVisible();
+  await expect(page.getByText(/Claw calls real tools/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Research a public URL with Steel" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "New" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Upload files" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Attach files" })).toBeVisible();
 
   // Model picker reflects the mocked NVIDIA catalog, not a placeholder/demo model.
-  await expect(page.locator("[data-slot='model-selector-trigger']")).toContainText("Llama 3.2 11B Vision Instruct");
+  await expect(page.getByRole("button", { name: "Choose model" })).toContainText("Llama 3.2 11B Vision Instruct");
 
-  await page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…").fill("Summarize https://example.com");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await page.getByPlaceholder("What do you need?").fill("Summarize https://example.com");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByRole("button", { name: "Stop generating" })).toBeVisible();
   await expect(page.getByText(/Thinking/i).first()).toBeVisible();
   await expect(page.getByText("steel_scrape")).toBeVisible();
-  await expect(page.getByText("via steel.dev")).toBeVisible();
+  await expect(page.getByText("steel.dev")).toBeVisible();
   await expect(page.getByText("HEALTHY").first()).toBeVisible();
   await expect(page.getByText("Example Domain is a placeholder page.")).toBeVisible();
 });
