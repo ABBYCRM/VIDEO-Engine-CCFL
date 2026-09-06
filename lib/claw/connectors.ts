@@ -93,7 +93,7 @@ export async function scrapeScrapingBee(url: string) {
   const key = secret("scrapingbee_api_key", "SCRAPINGBEE_API_KEY");
   if (!key) return missing("ScrapingBee", "SCRAPINGBEE_API_KEY", "JS-rendered HTML fallback");
   const target = validateSteelUrl(url);
-  const res = await timedFetch(`https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&render_js=false`);
+  const res = await timedFetch(`https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&render_js=false`, {});
   const text = await res.text();
   if (!res.ok) return { ok: false, error: `ScrapingBee HTTP ${res.status}`, hint: text.slice(0, 200) };
   const clipped = clipText(text);
@@ -104,7 +104,7 @@ export async function scrapeScrapfly(url: string) {
   const key = secret("scrapfly_api_key", "SCRAPFLY_API_KEY");
   if (!key) return missing("Scrapfly", "SCRAPFLY_API_KEY", "anti-bot scrape fallback");
   const target = validateSteelUrl(url);
-  const res = await timedFetch(`https://api.scrapfly.io/scrape?key=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&format=markdown`);
+  const res = await timedFetch(`https://api.scrapfly.io/scrape?key=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&format=markdown`, {});
   const body = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: `Scrapfly HTTP ${res.status}`, hint: String(body?.message || body?.error || "").slice(0, 200) };
   const markdown = String(body?.result?.content || body?.result?.markdown || "");

@@ -306,13 +306,16 @@ export async function aionTools(context: AionContext = {}) {
   const response = await request("/api/claw/tools", context);
   const body = await response.json() as Record<string, unknown>;
   if (body.ok !== true) throw new Error("Aion-Brain did not return a tool catalog.");
-  const tools = Array.isArray(body.tools) ? body.tools.slice(0, 200).map((item) => {
-    if (!item || typeof item !== "object") return null;
-    const row = item as Record<string, unknown>;
-    const name = asString(row.name);
-    if (!name) return null;
-    return { name, description: asString(row.description) };
-  }).filter((item): item is { name: string; description?: string } => Boolean(item)) : [];
+  const tools: Array<{ name: string; description?: string }> = [];
+  if (Array.isArray(body.tools)) {
+    for (const item of body.tools.slice(0, 200)) {
+      if (!item || typeof item !== "object") continue;
+      const name = asString((item as Record<string, unknown>).name);
+      if (!name) continue;
+      const description = asString((item as Record<string, unknown>).description);
+      tools.push(description ? { name, description } : { name });
+    }
+  }
   return { ok: true, source: "aion-brain", count: typeof body.count === "number" ? body.count : tools.length, tools };
 }
 

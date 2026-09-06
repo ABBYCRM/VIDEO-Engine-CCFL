@@ -350,9 +350,13 @@ export async function runClawTurn(input: {
           }
           const raw = serializeToolResult(value);
           const ok = !(value && typeof value === "object" && (value as { ok?: boolean }).ok === false);
-          const via = value && typeof value === "object" && typeof (value as { via?: unknown }).via === "string"
-            ? (value as { via: string }).via
-            : value && typeof value === "object" && (value as { result?: { via?: string } }).result?.via;
+          const via = (() => {
+            if (!value || typeof value !== "object") return undefined;
+            const row = value as { via?: unknown; result?: { via?: unknown } };
+            if (typeof row.via === "string") return row.via;
+            if (typeof row.result?.via === "string") return row.result.via;
+            return undefined;
+          })();
           addMessage({
             conversationId: input.conversationId,
             role: "tool",
