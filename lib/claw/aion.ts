@@ -116,7 +116,7 @@ export function aionAcceptanceForGoal(goal: string): AionAcceptance[] {
 }
 
 export function isToolfulGoal(text: string): boolean {
-  return /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch)\b/i.test(text);
+  return /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint)\b/i.test(text);
 }
 
 export async function aionStatus(context: AionContext = {}) {

@@ -43,6 +43,8 @@ import {
   e2bRun, githubRequest, resendSend, hedraStatus, heliconeStatus
 } from "@/lib/claw/connectors";
 import { isHeliconeEnabled } from "@/lib/nvidia/helicone";
+import { isGdyConfigured, gdySearch, gdyRagContext, gdyCategories, gdyTools } from "@/lib/claw/gdy";
+import { arxivSearch } from "@/lib/claw/arxiv";
 import { isExaConfigured, isTavilyConfigured } from "@/lib/web-search";
 import { isScreenshotOneConfigured } from "@/lib/screenshotone";
 import {
@@ -199,7 +201,9 @@ export const CLAW_TOOLS: ToolDef[] = [
           steel: { configured: isSteelConfigured() },
           screenshotone: { configured: isScreenshotOneConfigured() },
           search: { exa: isExaConfigured(), tavily: isTavilyConfigured() },
-          helicone: { enabled: isHeliconeEnabled() }
+          helicone: { enabled: isHeliconeEnabled() },
+          gdy: { configured: isGdyConfigured() },
+          arxiv: { configured: true }
         }
       };
     }
@@ -482,6 +486,41 @@ export const CLAW_TOOLS: ToolDef[] = [
     args: "{}",
     when: "First step when a tool fails with MISSING_KEY or the operator asks what is wired.",
     handler: async () => ({ ok: true, connectors: connectorInventory() })
+  },
+  {
+    name: "gdy_search",
+    description: "OSINT search via GDY GET /v1/search?q=. Bearer auth. Fail-soft with MISSING_KEY if GDY_API_KEY (and GDY_API_BASE or GDY_BASE_URL) is unset. Never invent hits.",
+    args: "{\"q\":\"subject or entity\"}",
+    when: "Operator asks for OSINT, GDY, or structured investigative search beyond a generic web snippet.",
+    handler: async (a) => gdySearch(str(a.q || a.query))
+  },
+  {
+    name: "gdy_rag_context",
+    description: "Retrieve GDY RAG context via GET /v1/rag/context?q=. Fail-soft if GDY is unconfigured.",
+    args: "{\"q\":\"question or topic\"}",
+    when: "Need retrieved OSINT context from the GDY corpus, not a live page scrape.",
+    handler: async (a) => gdyRagContext(str(a.q || a.query))
+  },
+  {
+    name: "gdy_categories",
+    description: "List GDY OSINT categories via GET /v1/categories. Fail-soft if unconfigured.",
+    args: "{}",
+    when: "Discover GDY category coverage before searching.",
+    handler: async () => gdyCategories()
+  },
+  {
+    name: "gdy_tools",
+    description: "List tools advertised by GDY via GET /v1/tools. Catalog only. Fail-soft if unconfigured.",
+    args: "{}",
+    when: "See which GDY tools the remote OSINT service exposes.",
+    handler: async () => gdyTools()
+  },
+  {
+    name: "arxiv_search",
+    description: "Search public arXiv preprints via export.arxiv.org Atom API. No API key. Returns title, id, summary, published, authors. Fail-soft on transport errors; never fabricate papers.",
+    args: "{\"query\":\"transformer retrieval\",\"maxResults\":8}",
+    when: "Operator asks for papers, preprints, or arXiv results.",
+    handler: async (a) => arxivSearch(str(a.query || a.q), num(a.maxResults, 8))
   }
 ];
 

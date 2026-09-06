@@ -174,6 +174,9 @@ test("contract and tools GETs use the claw aliases", async () => {
 test("acceptance helpers stay on documented brain tools", () => {
   assert.deepEqual(aionAcceptanceForGoal("Please search the docket"), [{ id: "search", description: "live search ran", tool: "web_search" }]);
   assert.equal(isToolfulGoal("search the docket"), true);
+  assert.equal(isToolfulGoal("run osint on the subject"), true);
+  assert.equal(isToolfulGoal("arxiv transformer papers"), true);
+  assert.deepEqual(aionAcceptanceForGoal("run osint on the subject"), []);
   assert.deepEqual(sanitizeAionToolResults([{ tool: "datetime", ok: true, id: "t1" }]), [{ name: "datetime", ok: true, evidence_id: "t1" }]);
 });
 test("n8n bridge forwards exact read/write arguments to Aion's actual tool route", async () => {

@@ -7,7 +7,15 @@ Claw calls the running Aion-Brain API with the same keys (`AION_BASE_URL` +
 `/api/chat` without `"agentic"` unless the caller sets `agentic: true`.
 `previous_tool_results` are the only Aion evidence; Claw never marks a
 local execution verified from Aion prose. This is separate from browsing
-its GitHub repository. Aion is not a new entry in the NVIDIA model picker.
+its GitHub repository.
+
+Local Claw also registers GDY OSINT (`gdy_search`, `gdy_rag_context`,
+`gdy_categories`, `gdy_tools`) and public `arxiv_search`. GDY uses
+server-only `GDY_API_KEY` / `GDY_API_KEY_ALT` with `GDY_API_BASE` or
+`GDY_BASE_URL` and fails soft when unconfigured. These tools are available
+to native `tool_calls` and the SELF_STATE ACTION step on the local
+registry; Aion execute acceptance still uses documented brain tools
+(`web_search` / `steel_browser`) and is not weakened. Aion is not a new entry in the NVIDIA model picker.
 Each Claw conversation gets a distinct Aion session. Only the question and
 context passed to the tool are sent; chat history is not automatically copied.
 
