@@ -50,10 +50,22 @@ export type ToolNode = {
   finishedAt?: number;
 };
 
+export type SelfStateView = {
+  health?: string;
+  issue?: string;
+  phase?: string;
+  progress?: number;
+  strategy?: string;
+  blockers?: string[];
+  step?: string;
+  toolsRun?: number;
+};
+
 type ClawThinkingPanelProps = {
   tools: ToolNode[];
   streaming?: string;
   busy: boolean;
+  selfState?: SelfStateView | null;
   className?: string;
 };
 
@@ -211,9 +223,18 @@ function ElapsedTimer({ running }: { running: boolean }) {
 /* ─────────────────────────────────────────────────────────
  * MAIN PANEL
  * ───────────────────────────────────────────────────────── */
-export function ClawThinkingPanel({ tools, streaming, busy, className }: ClawThinkingPanelProps) {
+function healthTone(health?: string) {
+  if (health === "LOOP_DETECTED") return "text-amber-300";
+  if (health === "BLOCKED" || health === "UNSTABLE") return "text-rose-300";
+  if (health === "DEGRADED") return "text-amber-200";
+  return "text-emerald-300";
+}
+
+export function ClawThinkingPanel({ tools, streaming, busy, selfState, className }: ClawThinkingPanelProps) {
   const hasTools = tools.length > 0;
   const isDone = !busy && tools.length > 0;
+  const health = selfState?.health;
+  const issue = selfState?.issue;
 
   return (
     <>
@@ -230,7 +251,7 @@ export function ClawThinkingPanel({ tools, streaming, busy, className }: ClawThi
           <ClawLogo size={12} className="text-[var(--claw-accent)]" />
         </div>
         <span className="text-[12px] font-medium text-[rgba(220,220,255,0.50)]">
-          {isDone ? "Claw worked" : busy ? "Claw is working" : ""}
+          {isDone ? "Claw worked" : busy ? (health ? `Thinking · ${health}` : "Claw is thinking") : ""}
         </span>
         {busy ? (
           <>
@@ -248,6 +269,25 @@ export function ClawThinkingPanel({ tools, streaming, busy, className }: ClawThi
           </>
         ) : null}
       </div>
+
+      {selfState && (health || issue) && (
+        <div className="ml-9 mt-1 rounded-xl border border-[rgba(180,180,255,0.12)] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2">
+            {health && <span className={`font-semibold ${healthTone(health)}`}>{health}</span>}
+            {issue && issue !== "NONE" && <span className="text-[rgba(220,220,255,0.55)]">{issue}</span>}
+            {typeof selfState.progress === "number" && (
+              <span className="font-mono text-[10px] text-[rgba(220,220,255,0.35)]">{Math.round(selfState.progress * 100)}%</span>
+            )}
+            {selfState.step && <span className="text-[rgba(220,220,255,0.40)]">step {selfState.step}</span>}
+          </div>
+          {selfState.strategy && (
+            <div className="mt-1 text-[rgba(220,220,255,0.40)]">strategy: {selfState.strategy}</div>
+          )}
+          {!!selfState.blockers?.length && (
+            <div className="mt-1 text-rose-300/80">{selfState.blockers[selfState.blockers.length - 1]}</div>
+          )}
+        </div>
+      )}
 
       {/* Tool executions */}
       {hasTools && (

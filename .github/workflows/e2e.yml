@@ -31,6 +31,10 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Run Playwright
+        env:
+          # GHA sets HOSTNAME to the runner name. Next binds to that host
+          # unless the e2e webServer forces loopback (scripts/e2e-webserver.sh).
+          HOSTNAME: 127.0.0.1
         run: npm run test:e2e -- --project=chromium --grep-invert "deployed"
 
   live-ui:
@@ -52,13 +56,13 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Wait for deployed app and run live UI suite
         shell: bash
-        # Runs the Claw spec against the deployed URL, exercising the
-        # login → primary feature → screenshot path.
+        # Runs the Claw spec against the deployed URL.
+        # /login was removed; /api/ready is the constant-time probe.
         # (PLAYWRIGHT_BASE_URL is set above, so this targets the deployed
         # app, not the local webServer.)
         run: |
           for attempt in {1..24}; do
-            if curl --fail --silent --show-error --max-time 10 "$PLAYWRIGHT_BASE_URL/login" >/dev/null; then
+            if curl --fail --silent --show-error --max-time 10 "$PLAYWRIGHT_BASE_URL/api/ready" >/dev/null; then
               if npx playwright test tests/e2e/claw.spec.ts --project=chromium; then
                 exit 0
               fi

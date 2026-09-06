@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aionStatus, aionConsult, aionCurriculum, aionN8n } from "../../lib/claw/aion.ts";
+import { aionStatus, aionConsult, aionCurriculum, aionN8n, aionExecute, aionContract, aionTools, aionAcceptanceForGoal, sanitizeAionToolResults, isToolfulGoal } from "../../lib/claw/aion.ts";
 
 const originalFetch = globalThis.fetch;
 const previousUrl = process.env.AION_BASE_URL;
@@ -25,23 +25,61 @@ test("status uses configured authentication and excludes global private state", 
     assert.equal(url, "http://aion-brain:10000/api/state");
     assert.equal((options?.headers as Record<string,string>)["X-AION-Key"], "test-only-key");
     assert.equal(options?.redirect, "error");
-    return Response.json({ok:true,app:"aion-brain",providers:["nvidia"],active_state:{private:"not-for-chat"}});
+    return Response.json({
+      ok:true,app:"aion-brain",providers:["nvidia"],
+      agent_model:"nvidia/nemotron-3-ultra-550b-a55b",
+      control_loop:{
+        phases:["SELF-OBSERVATION","ACTION"],
+        tools_configured:{tavily:true,composio:false},
+        composio_key_type:"ak_",
+        secret:"no"
+      },
+      active_state:{private:"not-for-chat"}
+    });
   };
   const status = await aionStatus();
   assert.equal(status.connected,true);
   assert.equal(status.echoOnly,false);
+  assert.equal(status.agentModel,"nvidia/nemotron-3-ultra-550b-a55b");
+  assert.deepEqual(status.controlLoop?.phases,["SELF-OBSERVATION","ACTION"]);
+  assert.deepEqual(status.controlLoop?.toolsConfigured,{tavily:true,composio:false});
+  assert.equal(status.controlLoop?.composioKeyType,"ak_");
   assert.ok(!JSON.stringify(status).includes("not-for-chat"));
+  assert.ok(!JSON.stringify(status).includes("\"secret\""));
+});
+test("consult includes SELF_STATE when the control loop provides it", async () => {
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options?.body as string);
+    assert.match(body.messages[0].content, /SELF_STATE/);
+    assert.match(body.messages[0].content, /LOOP_DETECTED/);
+    assert.match(body.messages[0].content, /Question/);
+    return stream([{type:"delta",text:"change strategy"},{type:"done",provider:"nvidia",model:"test"}]);
+  };
+  const result = await aionConsult("Question", { conversationId: "thread-one", selfState: "{\"health\":\"LOOP_DETECTED\"}" });
+  assert.equal(result.answer, "change strategy");
 });
 test("SSE handles byte boundaries, unicode, CRLF, fallbacks and stable sessions", async () => {
   globalThis.fetch = async (_url, options) => {
     const body = JSON.parse(options?.body as string);
     assert.equal(body.session_id,"claw:thread-one");
     assert.deepEqual(body.messages,[{role:"user",content:"Question"}]);
+    assert.equal("agentic" in body, false);
     return stream([{type:"error",message:"first provider unavailable"},{type:"decision",decision:{state:"GO"}},
       {type:"delta",text:"Hello 🌍"},{type:"done",provider:"nvidia",model:"test"},"[DONE]"],true);
   };
   const result = await aionConsult(" Question ",{conversationId:"thread-one"});
   assert.equal(result.answer,"Hello 🌍"); assert.equal(result.echoOnly,false);
+});
+test("consult sends agentic only when the caller opts in; SSE parser is unchanged", async () => {
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options?.body as string);
+    assert.equal(body.agentic, true);
+    assert.deepEqual(body.messages,[{role:"user",content:"Question"}]);
+    return stream([{type:"decision",decision:{state:"GO"}},{type:"delta",text:"looped"},{type:"done",provider:"nvidia",model:"ultra"}]);
+  };
+  const result = await aionConsult("Question",{conversationId:"thread-one",agentic:true});
+  assert.equal(result.answer,"looped");
+  assert.equal(result.echoOnly,false);
 });
 test("incomplete and failed streams are not successful answers", async () => {
   for (const events of [[{type:"error"},"[DONE]"],[{type:"delta",text:"partial"},"[DONE]"],[{type:"done"},"[DONE]"]]) {
@@ -84,6 +122,63 @@ test("full curriculum survives the tool preview limit and invalid payloads fail"
   await assert.rejects(aionCurriculum(["Python"],"json",{conversationId:"t"}),/invalid curriculum/);
 });
 
+test("execute posts the contract body to /api/claw/execute and whitelists evidence", async () => {
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "http://aion-brain:10000/api/claw/execute");
+    const body = JSON.parse(options?.body as string);
+    assert.equal(body.goal, "Search live news");
+    assert.deepEqual(body.acceptance, [{ id: "search", description: "live search ran", tool: "web_search" }]);
+    assert.equal(body.session_id, "claw:thread-one");
+    assert.equal(body.max_cycles, 8);
+    assert.equal(body.stream, false);
+    return Response.json({
+      ok: true, source: "aion-brain", status: "COMPLETE", complete: true, verified: true,
+      answer: "I searched.", session_id: "claw:thread-one",
+      self_state: { previous_tool_results: [{ tool: "web_search", ok: true, id: "ev1", preview: "hits" }], health: "HEALTHY", progress: 1, secret: "no" },
+      cycles: [{ health: "HEALTHY", issues: [], action: { kind: "tool", tool: "web_search", ok: true } }],
+      previous_tool_results: [{ tool: "web_search", ok: true, id: "ev1", preview: "hits" }]
+    });
+  };
+  const result = await aionExecute({
+    goal: "Search live news",
+    acceptance: [{ id: "search", description: "live search ran", tool: "web_search" }],
+    sessionId: "claw:thread-one",
+    maxCycles: 8
+  }, { conversationId: "thread-one" });
+  assert.equal(result.source, "aion-brain");
+  assert.equal(result.status, "COMPLETE");
+  assert.equal(result.complete, true);
+  assert.equal(result.verified, true);
+  assert.deepEqual(result.previous_tool_results, [{ name: "web_search", ok: true, preview: "hits", evidence_id: "ev1" }]);
+  assert.ok(!JSON.stringify(result).includes("secret"));
+});
+test("contract and tools GETs use the claw aliases", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/api/claw/contract")) {
+      return Response.json({ ok: true, contract: { version: "0.1.16", phases: ["ACTION"], health: ["HEALTHY"], completion: "tool evidence", anti_loop: ">=2" } });
+    }
+    assert.equal(url, "http://aion-brain:10000/api/claw/tools");
+    return Response.json({ ok: true, count: 1, tools: [{ name: "web_search", description: "search", key: "no" }] });
+  };
+  const contract = await aionContract();
+  assert.equal(contract.version, "0.1.16");
+  assert.deepEqual(contract.phases, ["ACTION"]);
+  globalThis.fetch = async (url) => {
+    assert.equal(url, "http://aion-brain:10000/api/claw/tools");
+    return Response.json({ ok: true, count: 1, tools: [{ name: "web_search", description: "search", key: "no" }] });
+  };
+  const tools = await aionTools();
+  assert.deepEqual(tools.tools, [{ name: "web_search", description: "search" }]);
+  assert.ok(!JSON.stringify(tools).includes("\"key\""));
+});
+test("acceptance helpers stay on documented brain tools", () => {
+  assert.deepEqual(aionAcceptanceForGoal("Please search the docket"), [{ id: "search", description: "live search ran", tool: "web_search" }]);
+  assert.equal(isToolfulGoal("search the docket"), true);
+  assert.equal(isToolfulGoal("run osint on the subject"), true);
+  assert.equal(isToolfulGoal("arxiv transformer papers"), true);
+  assert.deepEqual(aionAcceptanceForGoal("run osint on the subject"), []);
+  assert.deepEqual(sanitizeAionToolResults([{ tool: "datetime", ok: true, id: "t1" }]), [{ name: "datetime", ok: true, evidence_id: "t1" }]);
+});
 test("n8n bridge forwards exact read/write arguments to Aion's actual tool route", async () => {
   globalThis.fetch=async(url,options)=>{
     assert.equal(url,"http://aion-brain:10000/api/tools/n8n_aura");

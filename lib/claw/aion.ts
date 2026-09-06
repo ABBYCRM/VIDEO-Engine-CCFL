@@ -1,5 +1,35 @@
 // Server-side Aion-Brain bridge. Credentials and destination never come from tool arguments.
-export type AionContext = { conversationId?: string; signal?: AbortSignal };
+// Endpoint shapes match docs/claw-contract.md on Aion-Brain main (0613977). Do not invent fields.
+export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string; agentic?: boolean };
+
+export type AionAcceptance = { id: string; description: string; tool?: string };
+
+export type AionToolResult = {
+  name: string;
+  ok: boolean;
+  preview?: string;
+  evidence_id?: string;
+};
+
+export type AionExecuteInput = {
+  goal: string;
+  acceptance?: AionAcceptance[];
+  sessionId?: string;
+  maxCycles?: number;
+};
+
+export type AionExecuteResult = {
+  ok: boolean;
+  source: "aion-brain";
+  status: "COMPLETE" | "INCOMPLETE" | "BLOCKED" | string;
+  complete: boolean;
+  verified: boolean;
+  answer: string;
+  session_id: string;
+  self_state: { previous_tool_results: AionToolResult[]; health?: string; progress?: number };
+  cycles: Array<{ health?: string; issues?: unknown; action?: { kind?: string; tool?: string; ok?: boolean } }>;
+  previous_tool_results: AionToolResult[];
+};
 
 export async function aionN8n(action: unknown, args: unknown, context: AionContext = {}) {
   if (!["n8n_status", "n8n_tools", "n8n_workflows", "n8n_call", "n8n_aura"].includes(String(action))) throw new Error("Unknown n8n action.");
@@ -20,9 +50,13 @@ function config() {
   return { origin: url.origin, key };
 }
 
-async function request(path: string, context: AionContext, body?: unknown) {
+export function isAionConfigured(): boolean {
+  try { config(); return true; } catch { return false; }
+}
+
+async function request(path: string, context: AionContext, body?: unknown, timeoutMs?: number) {
   const { origin, key } = config();
-  const timeout = AbortSignal.timeout(body ? 120_000 : 10_000);
+  const timeout = AbortSignal.timeout(timeoutMs ?? (body ? 120_000 : 10_000));
   const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
   const response = await fetch(origin + path, {
     method: body ? "POST" : "GET",
@@ -38,14 +72,71 @@ async function request(path: string, context: AionContext, body?: unknown) {
   return response;
 }
 
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function booleanMap(value: unknown): Record<string, boolean> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof item === "boolean") out[key] = item;
+  }
+  return out;
+}
+
+export function sanitizeAionToolResults(raw: unknown): AionToolResult[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AionToolResult[] = [];
+  for (const item of raw.slice(0, 40)) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const name = asString(row.tool) || asString(row.name) || "unknown";
+    const evidence = asString(row.evidence_id) || asString(row.id);
+    const preview = asString(row.preview);
+    out.push({
+      name,
+      ok: row.ok === true,
+      ...(preview ? { preview: preview.slice(0, 400) } : {}),
+      ...(evidence ? { evidence_id: evidence } : {})
+    });
+  }
+  return out;
+}
+
+export function aionAcceptanceForGoal(goal: string): AionAcceptance[] {
+  const text = goal.toLowerCase();
+  if (/\b(search|research|look up)\b/.test(text)) {
+    return [{ id: "search", description: "live search ran", tool: "web_search" }];
+  }
+  if (/\b(scrape|browse)\b/.test(text) || /https?:\/\//i.test(goal)) {
+    return [{ id: "scrape", description: "live page scrape ran", tool: "steel_browser" }];
+  }
+  return [];
+}
+
+export function isToolfulGoal(text: string): boolean {
+  return /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint)\b/i.test(text);
+}
+
 export async function aionStatus(context: AionContext = {}) {
   const response = await request("/api/state", context);
   const state = await response.json();
   if (state.ok !== true || state.app !== "aion-brain") throw new Error("The configured server did not identify itself as Aion-Brain.");
   // Whitelist service health, not global active state or another session's context.
-  return { ok: true, connected: true, app: state.app, version: state.version,
-    primaryModel: state.primary_model, providers: state.providers,
-    echoOnly: Array.isArray(state.providers) && state.providers.every((p: string) => p === "echo") };
+  const loop = state.control_loop && typeof state.control_loop === "object" ? state.control_loop as Record<string, unknown> : undefined;
+  return {
+    ok: true, connected: true, app: state.app, version: state.version,
+    primaryModel: state.primary_model,
+    agentModel: asString(state.agent_model),
+    providers: state.providers,
+    echoOnly: Array.isArray(state.providers) && state.providers.every((p: string) => p === "echo"),
+    controlLoop: loop ? {
+      phases: Array.isArray(loop.phases) ? loop.phases.filter((p): p is string => typeof p === "string") : undefined,
+      toolsConfigured: booleanMap(loop.tools_configured),
+      composioKeyType: asString(loop.composio_key_type)
+    } : undefined
+  };
 }
 
 export async function aionCurriculum(topics: unknown, format: unknown = "markdown", context: AionContext = {}) {
@@ -83,9 +174,13 @@ export async function aionCurriculum(topics: unknown, format: unknown = "markdow
 export async function aionConsult(prompt: string, context: AionContext = {}) {
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 24_000) throw new Error("Aion prompt must contain 1–24,000 characters.");
   if (!context.conversationId) throw new Error("Aion consultation requires a Claw conversation.");
+  const content = context.selfState
+    ? `Claw SELF_STATE (no secrets; assumptions are not facts):\n${context.selfState}\n\n${prompt.trim()}`
+    : prompt.trim();
   const response = await request("/api/chat", context, {
-    messages: [{ role: "user", content: prompt.trim() }],
-    session_id: `claw:${context.conversationId}`, max_tokens: 2048, skills: false
+    messages: [{ role: "user", content }],
+    session_id: `claw:${context.conversationId}`, max_tokens: 2048, skills: false,
+    ...(context.agentic === true ? { agentic: true } : {})
   });
   if (!response.headers.get("content-type")?.includes("text/event-stream") || !response.body) {
     await response.body?.cancel();
@@ -128,4 +223,105 @@ export async function aionConsult(prompt: string, context: AionContext = {}) {
   if (!done || !answer.trim()) throw new Error("Aion-Brain did not complete an answer. Check its provider configuration and logs.");
   return { ok: true, source: "aion-brain", answer, provider: done.provider, model: done.model,
     echoOnly: done.provider === "echo", decision, lattice };
+}
+
+function sanitizeCycles(raw: unknown): AionExecuteResult["cycles"] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 24).map((item) => {
+    if (!item || typeof item !== "object") return {};
+    const row = item as Record<string, unknown>;
+    const action = row.action && typeof row.action === "object" ? row.action as Record<string, unknown> : undefined;
+    return {
+      health: asString(row.health),
+      issues: Array.isArray(row.issues) ? row.issues.slice(0, 8) : undefined,
+      action: action ? {
+        kind: asString(action.kind),
+        tool: asString(action.tool),
+        ok: action.ok === true
+      } : undefined
+    };
+  });
+}
+
+export async function aionExecute(input: AionExecuteInput, context: AionContext = {}): Promise<AionExecuteResult> {
+  const goal = input.goal.trim();
+  if (!goal || goal.length > 24_000) throw new Error("Aion execute goal must contain 1–24,000 characters.");
+  if (!context.conversationId && !input.sessionId) throw new Error("Aion execute requires a Claw conversation.");
+  const acceptance = Array.isArray(input.acceptance)
+    ? input.acceptance.filter((item) => item && typeof item.id === "string" && typeof item.description === "string").slice(0, 20)
+    : [];
+  const session_id = input.sessionId || `claw:${context.conversationId}`;
+  const max_cycles = Number.isFinite(input.maxCycles) ? Math.min(24, Math.max(1, Number(input.maxCycles))) : 8;
+  const response = await request("/api/claw/execute", context, {
+    goal,
+    ...(acceptance.length ? { acceptance } : {}),
+    session_id,
+    max_cycles,
+    stream: false
+  }, 180_000);
+  const body = await response.json() as Record<string, unknown>;
+  if (body.ok !== true || body.source !== "aion-brain") throw new Error("Aion-Brain did not return an execute payload.");
+  const selfState = body.self_state && typeof body.self_state === "object" ? body.self_state as Record<string, unknown> : {};
+  const previous = sanitizeAionToolResults(body.previous_tool_results ?? selfState.previous_tool_results);
+  const status = asString(body.status) || "INCOMPLETE";
+  return {
+    ok: true,
+    source: "aion-brain",
+    status,
+    complete: body.complete === true,
+    verified: body.verified === true,
+    answer: typeof body.answer === "string" ? body.answer : "",
+    session_id: asString(body.session_id) || session_id,
+    self_state: {
+      previous_tool_results: sanitizeAionToolResults(selfState.previous_tool_results) || previous,
+      health: asString(selfState.health),
+      progress: typeof selfState.progress === "number" ? selfState.progress : 0
+    },
+    cycles: sanitizeCycles(body.cycles),
+    previous_tool_results: previous
+  };
+}
+
+export async function aionContract(context: AionContext = {}) {
+  const response = await request("/api/claw/contract", context);
+  const body = await response.json() as Record<string, unknown>;
+  if (body.ok !== true) throw new Error("Aion-Brain did not return a claw contract.");
+  const contract = body.contract && typeof body.contract === "object" ? body.contract as Record<string, unknown> : {};
+  return {
+    ok: true,
+    source: "aion-brain",
+    version: asString(contract.version),
+    phases: Array.isArray(contract.phases) ? contract.phases.filter((p): p is string => typeof p === "string") : undefined,
+    endpoints: contract.endpoints && typeof contract.endpoints === "object" ? contract.endpoints : undefined,
+    execute_body: contract.execute_body && typeof contract.execute_body === "object" ? contract.execute_body : undefined,
+    health: Array.isArray(contract.health) ? contract.health.filter((p): p is string => typeof p === "string") : undefined,
+    epistemic: Array.isArray(contract.epistemic) ? contract.epistemic.filter((p): p is string => typeof p === "string") : undefined,
+    completion: asString(contract.completion),
+    anti_loop: asString(contract.anti_loop),
+    self_state_fields: Array.isArray(contract.self_state_fields) ? contract.self_state_fields.filter((p): p is string => typeof p === "string") : undefined
+  };
+}
+
+export async function aionTools(context: AionContext = {}) {
+  const response = await request("/api/claw/tools", context);
+  const body = await response.json() as Record<string, unknown>;
+  if (body.ok !== true) throw new Error("Aion-Brain did not return a tool catalog.");
+  const tools: Array<{ name: string; description?: string }> = [];
+  if (Array.isArray(body.tools)) {
+    for (const item of body.tools.slice(0, 200)) {
+      if (!item || typeof item !== "object") continue;
+      const name = asString((item as Record<string, unknown>).name);
+      if (!name) continue;
+      const description = asString((item as Record<string, unknown>).description);
+      tools.push(description ? { name, description } : { name });
+    }
+  }
+  return { ok: true, source: "aion-brain", count: typeof body.count === "number" ? body.count : tools.length, tools };
+}
+
+export async function aionTool(name: unknown, args: unknown, context: AionContext = {}) {
+  const tool = String(name || "").trim();
+  if (!/^[a-zA-Z0-9_]+$/.test(tool)) throw new Error("Aion tool name must be a single identifier.");
+  const response = await request(`/api/claw/tools/${tool}`, context, args && typeof args === "object" ? args : {});
+  return response.json();
 }

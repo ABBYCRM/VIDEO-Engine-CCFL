@@ -1,4 +1,5 @@
 import { Execution, parseToolCalls, awaitWithSignal, toolSucceeded } from "../../lib/claw/execution.ts";
+import { SelfStateController, createSelfState } from "../../lib/claw/self-state.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
@@ -26,6 +27,14 @@ async function runWithResult(payload: unknown) {
     renameConversation: () => {},
     readClawFileText: async () => "",
     toolsCatalog: () => "composio_action",
+    toolsAsOpenAI: () => [],
+    CLAW_TOOL_NAMES: ["composio_action"],
+    isAionConfigured: () => false,
+    isToolfulGoal: () => false,
+    aionAcceptanceForGoal: () => [],
+    aionExecute: async () => { throw new Error("aionExecute should not run"); },
+    SelfStateController,
+    createSelfState,
     executeClawTool: async () => payload,
     chatCompletionStream: async (request: any, onToken: (text: string) => void) => {
       requests.push(request);
@@ -76,6 +85,58 @@ test("long result keeps model payload intact while limiting the console preview"
   const expected = JSON.stringify({ evidenceId: "e1", revision: 1, ok: true, result: payload });
   assert.ok(messages.find(m => m.role === "tool").content.includes(expected));
   assert.equal(events.find(e => e.type === "tool_end").preview, expected.slice(0, 280) + "…");
+});
+
+test("native tool_calls execute, update previous_tool_results, and appear in SELF_STATE", async () => {
+  const messages: any[] = [];
+  const events: any[] = [];
+  const requests: any[] = [];
+  const context = vm.createContext({
+    AbortController, AbortSignal, setTimeout, clearTimeout, Execution, parseToolCalls, awaitWithSignal,
+    SelfStateController, createSelfState,
+    getClawModel: () => "nvidia/nemotron-3-ultra-550b-a55b",
+    isNvidiaEnabled: () => true,
+    getConversation: () => ({ title: "Existing thread" }),
+    listMessages: () => [...messages],
+    addMessage: (message: unknown) => messages.push(message),
+    renameConversation: () => {},
+    readClawFileText: async () => "",
+    toolsCatalog: () => "steel_scrape",
+    toolsAsOpenAI: () => [{ type: "function", function: { name: "steel_scrape", description: "scrape", parameters: { type: "object" } } }],
+    CLAW_TOOL_NAMES: ["steel_scrape"],
+    isAionConfigured: () => false,
+    isToolfulGoal: () => false,
+    aionAcceptanceForGoal: () => [],
+    aionExecute: async () => { throw new Error("aionExecute should not run"); },
+    executeClawTool: async () => ({ ok: true, via: "steel.dev", markdown: "# Example Domain" }),
+    chatCompletionStream: async (request: any, onToken: (text: string) => void) => {
+      requests.push(request);
+      if (requests.length === 1) {
+        return {
+          text: "",
+          finishReason: "tool_calls",
+          toolCalls: [{ id: "call_1", type: "function", function: { name: "steel_scrape", arguments: "{\"url\":\"https://example.com\"}" } }],
+          reasoningContent: "need the page"
+        };
+      }
+      onToken("Example Domain is a placeholder.");
+      return { text: "Example Domain is a placeholder.", finishReason: "stop", toolCalls: [], reasoningContent: "" };
+    },
+  });
+  vm.runInContext(executable, context);
+  const final = await context.runClawTurn({
+    conversationId: "test-thread",
+    text: "Summarize https://example.com",
+    onEvent: (event: unknown) => events.push(event),
+  });
+  assert.ok(requests[0].tools?.length);
+  assert.equal(events.find((e: any) => e.type === "tool_start")?.name, "steel_scrape");
+  assert.equal(events.find((e: any) => e.type === "tool_end")?.ok, true);
+  assert.ok(events.some((e: any) => e.type === "self_state"));
+  const checkpoint = messages.find((m: any) => m.toolJson?.name === "execution_checkpoint");
+  assert.ok(checkpoint?.toolJson?.execution || checkpoint?.content.includes("steel"));
+  assert.ok(messages.some((m: any) => m.role === "tool" && String(m.content).includes("steel.dev")));
+  assert.match(String(final), /Example Domain|placeholder/i);
 });
 
 test("unserializable result produces a tool error instead of losing the turn", async () => {
