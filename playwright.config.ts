@@ -18,9 +18,9 @@ export default defineConfig({
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: process.env.CI
-      ? "mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static && cp -R public .next/standalone/public && node .next/standalone/server.js"
+      ? "mkdir -p .next/standalone/.next && cp -R .next/static .next/standalone/.next/static && cp -R public .next/standalone/public && HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js"
       : "npm run dev",
-    url: "http://127.0.0.1:3000/login",
+    url: "http://127.0.0.1:3000/api/health",
     reuseExistingServer: !process.env.CI,
     timeout: 120000
   }

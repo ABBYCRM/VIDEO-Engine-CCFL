@@ -129,6 +129,7 @@ function ModelCommandPalette({
         disabled={disabled}
         onClick={() => !disabled && setOpen(o => !o)}
         className="flex items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[12px] text-[rgba(220,220,255,0.80)] backdrop-blur-md transition-all duration-200 hover:border-[rgba(180,180,255,0.30)] hover:bg-[rgba(255,255,255,0.10)] disabled:cursor-not-allowed disabled:opacity-40"
+        data-slot="model-selector-trigger"
         aria-label="Choose model"
       >
         <Zap size={11} className="text-[var(--claw-accent)]" />

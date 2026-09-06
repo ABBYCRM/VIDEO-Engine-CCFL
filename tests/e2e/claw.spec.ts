@@ -42,28 +42,28 @@ test("Claw is the operator chat with thread/file controls, model picker, and too
   await page.route("**/api/claw/chat", async route => {
     sent = true;
     // Deliberate delay so the busy-but-not-yet-streaming window (the AILoader
-    // "Thinking" indicator) is actually observable instead of racing past it.
+    // "Claw is thinking" indicator) is actually observable instead of racing past it.
     await new Promise((r) => setTimeout(r, 300));
     const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c1", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "steel_scrape", args: { url: "https://example.com" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "steel_scrape", ok: true, via: "steel.dev", preview: "Example Domain" })}\n\ndata: ${JSON.stringify({ type: "token", text: "Example Domain is a placeholder page." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "Example Domain is a placeholder page." })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
   await page.goto("/claw");
-  await expect(page.getByRole("link", { name: "Claw", exact: true })).toBeVisible();
-  await expect(page.getByText("Talk to Claw")).toBeVisible();
+  await expect(page.getByText("AI Operator Console")).toBeVisible();
+  await expect(page.getByText(/,\s*operator/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Research a public URL with Steel" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "New" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Upload files" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Attach files" })).toBeVisible();
 
   // Model picker reflects the mocked NVIDIA catalog, not a placeholder/demo model.
   await expect(page.locator("[data-slot='model-selector-trigger']")).toContainText("Llama 3.2 11B Vision Instruct");
 
-  await page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…").fill("Summarize https://example.com");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
-  await expect(page.getByText("Thinking").first()).toBeVisible();
-  await expect(page.getByText("Did steel_scrape")).toBeVisible();
-  await expect(page.getByText("via steel.dev")).toBeVisible();
+  await page.getByPlaceholder("What do you need?").fill("Summarize https://example.com");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByRole("button", { name: "Stop generating" })).toBeVisible();
+  await expect(page.getByText("Claw is thinking").first()).toBeVisible();
+  await expect(page.getByText("steel_scrape")).toBeVisible();
+  await expect(page.getByText("steel.dev")).toBeVisible();
   await expect(page.getByText("Example Domain is a placeholder page.")).toBeVisible();
-  await expect(page.getByText("Thinking")).toHaveCount(0);
+  await expect(page.getByText("Claw is thinking")).toHaveCount(0);
 });
