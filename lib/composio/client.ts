@@ -5,7 +5,7 @@
 //   - type-narrowed errors so the API routes can return meaningful messages
 //   - never throws on init (returns null if no key is configured)
 
-import { isConsumerKey, classifyComposioKey, composioKeyHint, listConsumerTools, callConsumerTool } from "./consumer";
+import { isConsumerKey, classifyComposioKey, composioProjectGate, listConsumerTools, callConsumerTool } from "./consumer";
 import { Composio } from "@composio/core";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
@@ -393,9 +393,9 @@ export type ComposioHealth = {
   live: boolean;
   toolkits: Array<{ id: string; label: string; status: string; lastSyncAt: string | null }>;
   note?: string;
-  mode?: "consumer" | "project";
+  mode?: "project";
   keyType?: string;
-  tools?: Array<{ name: string; description?: string }>;
+  code?: string;
 };
 
 export async function composioHealth(): Promise<ComposioHealth> {
@@ -409,17 +409,9 @@ export async function composioHealth(): Promise<ComposioHealth> {
     };
   }
   const keyType = classifyComposioKey(getComposioApiKey());
-  const hint = composioKeyHint(keyType);
-  if (keyType === "organization" || keyType === "user") {
-    return { configured: true, live: false, toolkits: [], keyType, note: hint };
-  }
-  if (isComposioConsumer()) {
-    try {
-      const tools = await listConsumerTools(getComposioApiKey());
-      return { configured: true, live: true, mode: "consumer", keyType, toolkits: [], tools: tools.map(t => ({ name: t.name, description: t.description?.slice(0, 160) })), note: "Composio Connect authenticated (ck_ consumer key). Call composio_tool_schema for an exact tool name, then use its inputSchema with composio_action; discover app actions through the search tool. App connections are managed by Connect." };
-    } catch (e) {
-      return { configured: true, live: false, mode: "consumer", toolkits: [], note: e instanceof Error ? e.message : String(e) };
-    }
+  const gate = composioProjectGate(keyType);
+  if (!gate.ok) {
+    return { configured: true, live: false, toolkits: [], keyType, note: gate.error, code: gate.code };
   }
   // ALWAYS sync before reading. The Integrations page calls sync on every load
   // and is served by the primary worker; Claw's app_status and composio_health
@@ -484,14 +476,9 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
     return { ok: false, slug, toolkit: toolkit || null, error: "Composio is not configured (COMPOSIO_API_KEY missing or composio_api_key setting empty)" };
   }
   const keyType = classifyComposioKey(getComposioApiKey());
-  const hint = composioKeyHint(keyType);
-  if (hint) return { ok: false, slug, toolkit: toolkit || null, error: hint, code: `composio_key_${keyType}` };
+  const gate = composioProjectGate(keyType);
+  if (!gate.ok) return { ok: false, slug, toolkit: toolkit || null, error: gate.error, code: gate.code };
   try {
-    if (isComposioConsumer()) {
-      const data = await callConsumerTool(getComposioApiKey(), slug, input.args || {});
-      if (data.isError) return { ok: false, slug, toolkit: toolkit || null, error: JSON.stringify(data) };
-      return { ok: true, slug, toolkit: toolkit || null, data };
-    }
     const composio: any = getComposio();
     // Resolve the connected account (if a toolkit was named) before
     // we send the call, so the upstream's "no connected account" error
@@ -529,8 +516,9 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
   }
 }
 
-export async function getComposioToolSchema(name: string) {
-  if (!isComposioConsumer()) return { error: "Tool schema discovery here is for Composio Connect consumer keys." };
-  const tools = await listConsumerTools(getComposioApiKey());
-  return tools.find(t => t.name === name) || { error: "Unknown MCP tool name", tools: tools.map(t => t.name) };
+export async function getComposioToolSchema(_name: string) {
+  if (!isComposioConfigured()) return { error: "Composio is not configured", code: "composio_missing" };
+  const gate = composioProjectGate(classifyComposioKey(getComposioApiKey()));
+  if (!gate.ok) return { error: gate.error, code: gate.code };
+  return { error: "Tool schema discovery is not used with project REST keys (ak_). Use composio_health then composio_action with an exact project slug.", code: "composio_schema_project" };
 }

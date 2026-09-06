@@ -29,6 +29,10 @@ async function runWithResult(payload: unknown) {
     toolsCatalog: () => "composio_action",
     toolsAsOpenAI: () => [],
     CLAW_TOOL_NAMES: ["composio_action"],
+    isAionConfigured: () => false,
+    isToolfulGoal: () => false,
+    aionAcceptanceForGoal: () => [],
+    aionExecute: async () => { throw new Error("aionExecute should not run"); },
     SelfStateController,
     createSelfState,
     executeClawTool: async () => payload,
@@ -100,6 +104,10 @@ test("native tool_calls execute, update previous_tool_results, and appear in SEL
     toolsCatalog: () => "steel_scrape",
     toolsAsOpenAI: () => [{ type: "function", function: { name: "steel_scrape", description: "scrape", parameters: { type: "object" } } }],
     CLAW_TOOL_NAMES: ["steel_scrape"],
+    isAionConfigured: () => false,
+    isToolfulGoal: () => false,
+    aionAcceptanceForGoal: () => [],
+    aionExecute: async () => { throw new Error("aionExecute should not run"); },
     executeClawTool: async () => ({ ok: true, via: "steel.dev", markdown: "# Example Domain" }),
     chatCompletionStream: async (request: any, onToken: (text: string) => void) => {
       requests.push(request);

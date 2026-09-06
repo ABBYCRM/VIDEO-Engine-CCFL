@@ -237,6 +237,18 @@ export class SelfStateController {
     this.intendedTools = names.filter(Boolean);
   }
 
+  ingestAionResults(results: Array<{ name: string; ok: boolean; preview?: string; evidence_id?: string }>) {
+    for (const result of results) {
+      this.recordTool({
+        name: result.name,
+        ok: result.ok,
+        preview: result.preview || (result.ok ? "Aion tool result" : "Aion tool failed"),
+        evidenceId: result.evidence_id,
+        strategy: "aion-execute"
+      });
+    }
+  }
+
   recordTool(input: { name: string; ok: boolean; preview: string; evidenceId?: string; strategy?: string }) {
     const record: ToolResultRecord = {
       name: input.name,
@@ -404,7 +416,7 @@ export class SelfStateController {
     const forbiddenStrategy = forbidRetry ? (this.lastAction || this.lastStrategy || this.state.current_strategy) : null;
     let instruction = `SELF_STATE health=${this.lastHealth} issue=${this.lastIssue} strategy=${this.state.current_strategy}.`;
     if (forbidRetry) {
-      instruction += ` LOOP_DETECTED: do not retry "${forbiddenStrategy}". Take a materially different action (different tool, different args, aion_consult, or execution_blocked).`;
+      instruction += ` LOOP_DETECTED: do not retry "${forbiddenStrategy}". Take a materially different action (different tool, different args, aion_execute, aion_consult, or execution_blocked).`;
     }
     if (forceTool && this.lastIssue !== "NONE") {
       instruction += " Intended tool actions are not completed until a tool_result exists. Call a tool this turn.";

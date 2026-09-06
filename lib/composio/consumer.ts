@@ -18,15 +18,27 @@ export function isConsumerKey(key: string): boolean {
 
 export function composioKeyHint(kind: ComposioKeyKind): string {
   if (kind === "organization") {
-    return "COMPOSIO_API_KEY is an organization key (oak_). Claw tools need a project key (ak_) or a Connect consumer key (ck_). Create a project key in the Composio dashboard (Organization → project → API key), not an org access token.";
+    return "COMPOSIO_API_KEY is an organization key (oak_). Claw tools require a project REST key (ak_). oak_ and ck_ fail soft and are not treated as live Composio.";
+  }
+  if (kind === "consumer") {
+    return "COMPOSIO_API_KEY is a Connect consumer key (ck_). Claw tools require a project REST key (ak_). ck_ and oak_ fail soft and are not treated as live Composio.";
   }
   if (kind === "user") {
-    return "COMPOSIO_API_KEY is a user key (uak_). Claw tools need a project key (ak_) or a Connect consumer key (ck_).";
+    return "COMPOSIO_API_KEY is a user key (uak_). Claw tools require a project REST key (ak_).";
   }
   if (kind === "unknown") {
-    return "COMPOSIO_API_KEY does not start with ak_, oak_, ck_, or uak_. Expected a project key (ak_) for the SDK or a consumer key (ck_) for Connect MCP.";
+    return "COMPOSIO_API_KEY does not start with ak_. Expected a project REST key (ak_). oak_ and ck_ are rejected.";
   }
   return "";
+}
+
+export function composioProjectGate(kind: ComposioKeyKind): { ok: true } | { ok: false; code: string; error: string } {
+  if (kind === "project") return { ok: true };
+  return {
+    ok: false,
+    code: `composio_key_${kind}`,
+    error: composioKeyHint(kind) || "COMPOSIO_API_KEY must be a project REST key (ak_)."
+  };
 }
 
 // Consumer keys belong to Composio Connect, not the project REST API.

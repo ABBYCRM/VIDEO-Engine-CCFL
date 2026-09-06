@@ -71,6 +71,20 @@ test("false COMPLETE is blocked until acceptance is verified", () => {
   assert.equal(ok.complete, true);
 });
 
+test("Aion previous_tool_results become local evidence without proving COMPLETE", () => {
+  const self = controller();
+  self.ingestAionResults([{ name: "web_search", ok: true, preview: "hits", evidence_id: "ev1" }]);
+  assert.equal(self.state.previous_tool_results[0].name, "web_search");
+  assert.equal(self.state.previous_tool_results[0].evidenceId, "ev1");
+  const refused = self.terminationCheck({
+    wantsComplete: true,
+    acceptanceVerified: false,
+    requiresAcceptance: true,
+    hasPendingToolIntent: false
+  });
+  assert.equal(refused.complete, false);
+});
+
 test("SELF_STATE snapshot includes every required control field", () => {
   const self = controller();
   const s = self.snapshot();

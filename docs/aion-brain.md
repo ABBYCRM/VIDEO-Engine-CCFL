@@ -1,10 +1,13 @@
 # Claw and Aion-Brain
 
-Claw can call the running Aion-Brain API directly with `aion_status` and
-`aion_consult`. This is separate from browsing its GitHub repository.
-Consultations use Aion's decision/lattice/memory pipeline at `/api/chat`;
-Claw remains the chat agent and executes its own tools. Aion is not a new
-entry in the NVIDIA model picker. Ask Claw to consult Aion when needed.
+Claw calls the running Aion-Brain API with the same keys (`AION_BASE_URL` +
+`AION_API_KEY`). For work that must use tools, Claw prefers
+`POST /api/claw/execute` (`aion_execute`; alias `/api/agent/run`).
+`aion_status` and `aion_consult` stay advice-only: consult still posts
+`/api/chat` without `"agentic"` unless the caller sets `agentic: true`.
+`previous_tool_results` are the only Aion evidence; Claw never marks a
+local execution verified from Aion prose. This is separate from browsing
+its GitHub repository. Aion is not a new entry in the NVIDIA model picker.
 Each Claw conversation gets a distinct Aion session. Only the question and
 context passed to the tool are sent; chat history is not automatically copied.
 

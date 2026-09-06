@@ -3,14 +3,10 @@
 // NVIDIA's build endpoint is OpenAI-compatible: POST /v1/chat/completions on
 // https://integrate.api.nvidia.com/v1/chat/completions.
 //
-// Agentic / tool-calling defaults (2026-09-06):
-//   Prefer models that emit native tool_calls and can preserve
-//   reasoning_content across turns. Hosted IDs verified against
-//   docs.api.nvidia.com:
-//     nvidia/nemotron-3-ultra-550b-a55b
-//     moonshotai/kimi-k3
-//     moonshotai/kimi-k2.6
-//   Fast fallback that still accepts tools: nvidia/nemotron-3-super-120b-a12b
+// Aion-Brain / VIDEO claw contract (do not invent):
+//   AGENT_MODEL  = nvidia/nemotron-3-ultra-550b-a55b   (Claw default)
+//   PRIMARY_MODEL = nvidia/nemotron-3-super-120b-a12b  (confirmed on integrate.api.nvidia.com)
+//   FALLBACK_MODELS = moonshotai/kimi-k2.6, super, nano-omni, …
 //
 // MULTI-KEY POOL (2026-09-03):
 //   All operator keys are stored as an encrypted JSON array in settings DB
@@ -48,11 +44,11 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
 }> = {
   "nvidia/nemotron-3-ultra-550b-a55b": {
     id: "nvidia/nemotron-3-ultra-550b-a55b",
-    label: "Nemotron 3 Ultra 550B ★ agentic default",
+    label: "Nemotron 3 Ultra 550B ★ agent default",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 1048576,
     costTier: "high",
-    notes: "DEFAULT agentic model. Native tool calling + reasoning. When tools are sent, chat_template_kwargs.enable_thinking and force_nonempty_content must be set. Slower than Super; use Super if Ultra 404s on the key pool.",
+    notes: "AGENT default. Native tool calling + reasoning. When tools are sent, chat_template_kwargs.enable_thinking and force_nonempty_content must be set. Falls back to PRIMARY Super if Ultra 404s on the key pool.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
@@ -81,11 +77,11 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
   },
   "nvidia/nemotron-3-super-120b-a12b": {
     id: "nvidia/nemotron-3-super-120b-a12b",
-    label: "Nemotron 3 Super 120B (fast tools fallback)",
+    label: "Nemotron 3 Super 120B ★ primary",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "mid",
-    notes: "FAST tool-capable fallback (384–606ms in 2026-09-03 pool tests). Use when Ultra / Kimi are unavailable on the key.",
+    notes: "PRIMARY model (confirmed on integrate.api.nvidia.com). Fast tool-capable fallback when Ultra is unreachable (384–606ms in 2026-09-03 pool tests).",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: true
@@ -191,8 +187,15 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
   }
 };
 
-export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3-ultra-550b-a55b";
-export const FALLBACK_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3-super-120b-a12b";
+export const AGENT_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3-ultra-550b-a55b";
+export const PRIMARY_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3-super-120b-a12b";
+export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = AGENT_CLAW_NVIDIA_MODEL;
+export const FALLBACK_CLAW_NVIDIA_MODEL: NvidiaModelId = PRIMARY_CLAW_NVIDIA_MODEL;
+export const FALLBACK_CLAW_NVIDIA_MODELS: NvidiaModelId[] = [
+  "moonshotai/kimi-k2.6",
+  "nvidia/nemotron-3-super-120b-a12b",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+];
 
 export const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
 
