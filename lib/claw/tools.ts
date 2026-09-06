@@ -32,10 +32,15 @@
 import { db } from "@/lib/db";
 import { aionStatus, aionConsult, aionCurriculum, aionN8n, type AionContext } from "@/lib/claw/aion";
 import { composioHealth, composioAction, getComposioToolSchema } from "@/lib/composio/client";
-import { isSteelConfigured, scrapeWithSteel } from "@/lib/steel";
-import { takeScreenshot } from "@/lib/screenshotone";
-import { webSearch } from "@/lib/web-search";
+import { isSteelConfigured } from "@/lib/steel";
+import { isFirecrawlConfigured, isScrapingBeeConfigured, isScrapflyConfigured, scrapePublicUrl } from "@/lib/scrape";
+import { isScreenshotOneConfigured, takeScreenshot } from "@/lib/screenshotone";
+import { isExaConfigured, isTavilyConfigured, webSearch } from "@/lib/web-search";
 import { analyzeImage } from "@/lib/nvidia/vision";
+import { githubRequest, isGithubConfigured } from "@/lib/github";
+import { isE2BConfigured, runE2BCommand } from "@/lib/e2b-sandbox";
+import { hedraStatus, isHedraConfigured } from "@/lib/hedra";
+import { isResendConfigured, sendResendEmail } from "@/lib/resend";
 import { searchDevSkills, searchDevSkillsReranked, getDevSkill, listDevSkillCategories } from "@/lib/claw/dev-skills";
 import {
   deleteClawFile, getFile as getClawFile,
@@ -126,9 +131,20 @@ export const CLAW_TOOLS: ToolDef[] = [
         conversationCount: conversations,
         messageCount: messages,
         fileCount: files,
+        toolCount: CLAW_TOOLS.length,
         external: {
           composio: { configured: composio.configured, live: composio.live, toolkits: composio.toolkits?.length || 0, note: composio.note },
-          steel: { configured: isSteelConfigured() }
+          steel: { configured: isSteelConfigured() },
+          firecrawl: { configured: isFirecrawlConfigured() },
+          scrapingbee: { configured: isScrapingBeeConfigured() },
+          scrapfly: { configured: isScrapflyConfigured() },
+          screenshotone: { configured: isScreenshotOneConfigured() },
+          exa: { configured: isExaConfigured() },
+          tavily: { configured: isTavilyConfigured() },
+          e2b: { configured: isE2BConfigured() },
+          hedra: { configured: isHedraConfigured() },
+          github: { configured: isGithubConfigured() },
+          resend: { configured: isResendConfigured() }
         }
       };
     }
@@ -165,12 +181,12 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Steel.dev (web scrape) ──────────────────────────────────────
   {
     name: "steel_scrape",
-    description: "Live-fetch a public URL through Steel.dev and return the markdown body. Steel is the operator's chosen scraper (per the 2026-08-30 'Claw only' directive). Use this for any public-web research; do NOT scrape via fetch() directly. If the URL is invalid (private host, file://, etc.) steel returns a 4xx and the chat sees the upstream message.",
+    description: "Live-fetch a public URL and return the markdown body. Tries Steel.dev first, then Firecrawl, ScrapingBee, Scrapfly — whichever keys are configured. Rejects local/private hosts. Do not fetch() URLs yourself.",
     args: "{\"url\":\"https://example.com\"}",
     handler: async (a) => {
       const url = str(a.url).trim();
       if (!url) return { error: "url is required" };
-      return scrapeWithSteel({ url });
+      return scrapePublicUrl({ url, delayMs: a.delayMs, useProxy: a.useProxy, screenshot: a.screenshot });
     }
   },
 
@@ -347,6 +363,30 @@ export const CLAW_TOOLS: ToolDef[] = [
       const files = listFiles(null);
       return { count: files.length, files: files.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size })) };
     }
+  },
+  {
+    name: "github_request",
+    description: "Call the GitHub REST API with the server GITHUB_PERSONAL_ACCESS_TOKEN. path is an api.github.com path starting with / (e.g. /repos/ABBYCRM/VIDEO-Engine-CCFL). Never send the token back to the operator.",
+    args: "{\"method\":\"GET\",\"path\":\"/repos/ABBYCRM/VIDEO-Engine-CCFL\"}",
+    handler: async (a) => githubRequest({ method: a.method, path: a.path, body: a.body })
+  },
+  {
+    name: "e2b_run",
+    description: "Run one shell command in an isolated E2B sandbox. Use for compile/test probes when E2B_API_KEY is set. This is not the production app host.",
+    args: "{\"command\":\"python3 -c 'print(2+2)'\"}",
+    handler: async (a) => runE2BCommand({ command: a.command, cwd: a.cwd })
+  },
+  {
+    name: "hedra_status",
+    description: "Report whether a Hedra v3 API key is configured. Does not start a video job — VIDEO-Engine's one-shot Hedra path stays separate.",
+    args: "{}",
+    handler: async () => hedraStatus()
+  },
+  {
+    name: "resend_email",
+    description: "Send one email through Resend when RESEND_API_KEY is set. Requires an operator-requested recipient. Never invent testimonials or client mail.",
+    args: "{\"from\":\"ops@example.com\",\"to\":\"ops@example.com\",\"subject\":\"Status\",\"text\":\"Body\"}",
+    handler: async (a) => sendResendEmail(a)
   }
 ];
 

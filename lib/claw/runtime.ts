@@ -1,6 +1,7 @@
 import { chatCompletionStream, getClawModel, isNvidiaEnabled, type ChatMessage } from "@/lib/nvidia/client";
 import { addMessage, getConversation, listMessages, readClawFileText, renameConversation, type ClawMessage } from "@/lib/claw/store";
 import { executeClawTool, toolsCatalog } from "@/lib/claw/tools";
+import { assistantToolPayload, getAssistantCalls, getAssistantReasoning, nvidiaToolDefinitions, parseNativeToolCalls, type ParsedToolCall } from "@/lib/claw/openai-tools";
 
 import { Execution, parseToolCalls, awaitWithSignal } from "./execution";
 
@@ -41,9 +42,10 @@ Check kinds: artifact (requires actual save_file/read_file evidence), command (s
 Tools:
 ${toolsCatalog()}
 
-To call a tool, emit one or more blocks and nothing else that round:
+You have native function calling. Prefer the tools array on this request (OpenAI/NIM tool_calls).
+If the provider does not emit native tool_calls, emit one or more XML blocks and nothing else that round:
 <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>
-After tool_result, either call more tools or answer the operator in plain English. Never invent tool results.
+After a tool_result, either call more tools or answer the operator in plain English. Never invent tool results. Do not narrate a tool call in prose — execute it.
 
 The composio_action tool is the granular passthrough: it takes an exact slug
 and an exact args dict and returns the raw upstream payload. Discover the available tools and their schemas before calling them.`;
@@ -52,9 +54,29 @@ and an exact args dict and returns the raw upstream payload. Discover the availa
 function toChat(messages: ClawMessage[]): ChatMessage[] {
   const out: ChatMessage[] = [{ role: "system", content: systemPrompt() }];
   for (const m of messages) {
-    if (m.role === "tool") out.push({ role: "user", content: `tool_result:\n${m.content}` });
-    else if (m.role === "system") continue;
-    else out.push({ role: m.role, content: m.content });
+    if (m.role === "tool") {
+      const meta = m.toolJson && typeof m.toolJson === "object" ? m.toolJson as { name?: string; toolCallId?: string } : {};
+      if (meta.toolCallId) {
+        out.push({ role: "tool", tool_call_id: meta.toolCallId, name: meta.name, content: m.content });
+      } else {
+        out.push({ role: "user", content: `tool_result:\n${m.content}` });
+      }
+    } else if (m.role === "system") continue;
+    else if (m.role === "assistant") {
+      const calls = getAssistantCalls(m.toolJson);
+      const reasoning = getAssistantReasoning(m.toolJson);
+      const native = calls.filter((c) => c.id).map((c) => ({
+        id: c.id as string,
+        type: "function" as const,
+        function: { name: c.name, arguments: JSON.stringify(c.args ?? {}) }
+      }));
+      const msg: ChatMessage = { role: "assistant", content: m.content || (native.length ? null : "") };
+      if (native.length) msg.tool_calls = native;
+      if (reasoning) msg.reasoning_content = reasoning;
+      out.push(msg);
+    } else {
+      out.push({ role: m.role, content: m.content });
+    }
   }
   return out;
 }
@@ -146,7 +168,16 @@ export async function runClawTurn(input: {
       let streamed = "";
       let result: Awaited<ReturnType<typeof chatCompletionStream>>;
       try {
-        result = await chatCompletionStream({ model, messages, temperature: 0.3, maxTokens: 6400, thinking: false, signal: turnSignal }, chunk => { streamed += chunk; });
+        result = await chatCompletionStream({
+          model,
+          messages,
+          temperature: 0.3,
+          maxTokens: 6400,
+          thinking: false,
+          tools: nvidiaToolDefinitions(),
+          toolChoice: "auto",
+          signal: turnSignal
+        }, chunk => { streamed += chunk; });
       } catch (error) {
         checkpoint(`Provider interrupted: ${error instanceof Error ? error.message : String(error)}. No incomplete tool calls executed.`);
         finalText = execution.report("Provider request stopped or failed. Work remains unverified; inspect the saved checkpoint before continuing.");
@@ -166,9 +197,17 @@ export async function runClawTurn(input: {
         break;
       }
       continuation = "";
-      let calls: ReturnType<typeof parseToolCalls>;
-      try { calls = parseToolCalls(text); }
-      catch (error) { checkpoint(String(error)); continue; }
+      let calls: ParsedToolCall[] = [];
+      try {
+        if (result.toolCalls?.length) calls = parseNativeToolCalls(result.toolCalls);
+        else calls = parseToolCalls(text);
+      } catch (error) { checkpoint(String(error)); continue; }
+      if (result.finishReason === "tool_calls" && !calls.length) {
+        checkpoint("Model signaled tool_calls but none were parsed. No actions from this response were executed.");
+        if (++correctionCount <= 2) continue;
+        finalText = execution.report("The model requested tools that could not be parsed. Work is not confirmed complete.");
+        break;
+      }
       if (!calls.length) {
         if ((requiresPlan && !execution.goal) || (execution.goal && !execution.verified)) {
           if (++correctionCount <= 2) {
@@ -181,7 +220,7 @@ export async function runClawTurn(input: {
         }
         break;
       }
-      addMessage({ conversationId: input.conversationId, role: "assistant", content: text, toolJson: calls });
+      addMessage({ conversationId: input.conversationId, role: "assistant", content: text, toolJson: assistantToolPayload(calls, result.reasoningContent) });
       for (const call of calls) {
         if (turnSignal.aborted) break;
         input.onEvent({ type: "tool_start", name: call.name, args: call.args });
@@ -203,11 +242,11 @@ export async function runClawTurn(input: {
           }
           const raw = serializeToolResult(value);
           const ok = !(value && typeof value === "object" && (value as { ok?: boolean }).ok === false);
-          addMessage({ conversationId: input.conversationId, role: "tool", content: `<tool_result name="${call.name}">${raw}</tool_result>`, toolJson: { name: call.name, ok } });
+          addMessage({ conversationId: input.conversationId, role: "tool", content: `<tool_result name="${call.name}">${raw}</tool_result>`, toolJson: { name: call.name, ok, toolCallId: call.id } });
           input.onEvent({ type: "tool_end", name: call.name, ok, preview: preview(raw) });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          addMessage({ conversationId: input.conversationId, role: "tool", content: `<tool_result name="${call.name}">ERROR: ${message}</tool_result>`, toolJson: { name: call.name, ok: false } });
+          addMessage({ conversationId: input.conversationId, role: "tool", content: `<tool_result name="${call.name}">ERROR: ${message}</tool_result>`, toolJson: { name: call.name, ok: false, toolCallId: call.id } });
           input.onEvent({ type: "tool_end", name: call.name, ok: false, preview: message });
         }
         if (finalText) break;

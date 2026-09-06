@@ -66,6 +66,57 @@ services:
       - key: NVIDIA_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: NVIDIA_API_KEYS
+        scope: RUN_TIME
+        type: SECRET
+      - key: STEEL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: FIRECRAWL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SCRAPINGBEE_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SCRAPFLY_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SCREENSHOTONE_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SCREENSHOTONE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: EXA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: TAVILY_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: COMPOSIO_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: E2B_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: HEDRA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_PERSONAL_ACCESS_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: RESEND_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: HELICONE_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: AION_BASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: AION_API_KEY
+        scope: RUN_TIME
+        type: SECRET
       - key: SESSION_SECRET
         scope: RUN_TIME
         type: SECRET

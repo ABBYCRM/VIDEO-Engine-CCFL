@@ -51,7 +51,14 @@ export function getIntegrationsStatus() {
     steel: { configured: isSteelConfigured() },
     screenshotone: { configured: isScreenshotOneConfigured() },
     exa: { configured: isExaConfigured() },
-    tavily: { configured: isTavilyConfigured() }
+    tavily: { configured: isTavilyConfigured() },
+    firecrawl: { configured: Boolean(process.env.FIRECRAWL_API_KEY?.trim()) },
+    scrapingbee: { configured: Boolean(process.env.SCRAPINGBEE_API_KEY?.trim()) },
+    scrapfly: { configured: Boolean(process.env.SCRAPFLY_API_KEY?.trim()) },
+    e2b: { configured: Boolean(process.env.E2B_API_KEY?.trim()) },
+    github: { configured: Boolean(process.env.GITHUB_PERSONAL_ACCESS_TOKEN?.trim()) },
+    hedra: { configured: Boolean(process.env.HEDRA_API_KEY?.trim()) },
+    resend: { configured: Boolean(process.env.RESEND_API_KEY?.trim()) }
   };
 }
 

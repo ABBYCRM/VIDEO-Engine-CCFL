@@ -55,6 +55,21 @@ test("stream EOF and DONE alone cannot masquerade as completion", () => {
   assert.equal(stream.text, "half");
   assert.deepEqual(chunks, ["half"]);
 });
+test("stream accumulates native tool_calls and strips reasoning from tokens", () => {
+  const chunks: string[] = [];
+  const stream = new StreamState(s => chunks.push(s));
+  stream.feed('data: {"choices":[{"delta":{"reasoning_content":"think","tool_calls":[{"index":0,"id":"call_1","function":{"name":"web_search","arguments":""}}]}}]}\n');
+  stream.feed('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"query\\":\\"x\\"}"}}]}}]}\n');
+  stream.feed('data: {"choices":[{"finish_reason":"tool_calls"}]}\n');
+  stream.end();
+  assert.equal(stream.finishReason, "tool_calls");
+  assert.equal(stream.text, "");
+  assert.equal(stream.reasoningContent, "think");
+  assert.deepEqual(chunks, []);
+  assert.equal(stream.toolCalls[0].id, "call_1");
+  assert.equal(stream.toolCalls[0].function.name, "web_search");
+  assert.equal(stream.toolCalls[0].function.arguments, '{"query":"x"}');
+});
 test("split SSE packets and a final line without newline retain length/stop", () => {
   const stream = new StreamState(() => {});
   stream.feed('data: {"choices":[{"delta":{"con');

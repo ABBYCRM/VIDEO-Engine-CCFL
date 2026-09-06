@@ -47,9 +47,29 @@ Calendar auto-post, Library **Post to Instagram**, split-screen publish, and **C
 
 On **Integrations**, connect Composio Instagram for the primary path. Its OAuth auth config must include the Meta scopes required by the actions you use. For the direct Graph fallback, save a long-lived token (scopes `instagram_basic` + `instagram_content_publish` + `instagram_manage_comments`; DMs also need `instagram_manage_messages`) and the numeric Instagram Business Account id. Same env names as the MCP: `INSTAGRAM_MCP_ACCESS_TOKEN`, `INSTAGRAM_MCP_IG_USER_ID`. `INSTAGRAM_MCP_DM_ENABLED=1` enables DMs only on the direct Graph path after App Review; it does not gate Composio. Both providers can send only within Meta's allowed window for an existing conversation. Instagram fetches published media itself, so `PUBLIC_BASE_URL` must be public https.
 
-**Claw** is the left-nav operator chat, using NVIDIA Nemotron 3.5 Lightning 30B A3B on DigitalOcean for low-latency agent and tool work. Override it with `CLAW_NVIDIA_MODEL`. It can generate, approve, post, read/reply comments, and DMs, with a Grok-style thread/file tray.
+**Claw** is the left-nav operator chat. It uses NVIDIA NIM (`https://integrate.api.nvidia.com/v1`) with native OpenAI tool calling (`tools` + `tool_choice=auto`). Default model: `nvidia/nemotron-3-super-120b-a12b` (Nemotron-3, confirmed on the operator pool). Override with `CLAW_NVIDIA_MODEL`. XML `<tool_call>` remains a fallback. Tool results are fed back as `role: tool` (native) or `tool_result:` user turns (XML) so the model can finish instead of looping. Thinking traces (`reasoning_content`) are stored and replayed, not shown as operator tokens.
 
-Set `STEEL_API_KEY` to let Claw research public web pages through Steel.dev. Claw receives clean Markdown, page metadata, links, and optional screenshots; local and private network targets are rejected.
+### Claw env vars (names only — never commit values)
+
+| Var | Used for |
+|---|---|
+| `NVIDIA_API_KEY` / `NVIDIA_API_KEYS` | NIM chat, vision, embed, rerank |
+| `CLAW_NVIDIA_MODEL` | Optional model override |
+| `STEEL_API_KEY`, `FIRECRAWL_API_KEY`, `SCRAPINGBEE_API_KEY`, `SCRAPFLY_API_KEY` | `steel_scrape` fallback chain |
+| `SCREENSHOTONE_ACCESS_KEY`, `SCREENSHOTONE_SECRET_KEY` | `web_screenshot` (HMAC if secret set) |
+| `EXA_API_KEY`, `TAVILY_API_KEY` | `web_search` |
+| `COMPOSIO_API_KEY` | `composio_*` — `ak_` project or `ck_` consumer. `oak_` keys fail soft |
+| `E2B_API_KEY` | `e2b_run` sandbox |
+| `HEDRA_API_KEY` | `hedra_status` only — does not start extra video jobs |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | `github_request` |
+| `RESEND_API_KEY` | `resend_email` |
+| `HELICONE_API_KEY` + `HELICONE_ENABLED` | Optional NIM observability |
+| `AION_BASE_URL` + `AION_API_KEY` | Aion-Brain (`aion_status` / `aion_consult` / `aion_curriculum` / `aion_n8n`) |
+| `CLAW_ENABLED` | Master kill switch (`false` disconnects every Claw outbound call) |
+
+`GET /api/health` and `GET /api/health/claw-state` report which tools/providers are configured. They never return secret values.
+
+Set `STEEL_API_KEY` (or a scrape fallback) to let Claw research public web pages. Local and private network targets are rejected.
 
 ## Local setup
 

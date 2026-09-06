@@ -1,12 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isConsumerKey, listConsumerTools, callConsumerTool } from "../../lib/composio/consumer.ts";
+import { classifyComposioKey, isConsumerKey, isOrgKey, listConsumerTools, callConsumerTool } from "../../lib/composio/consumer.ts";
 
 const key = "ck_test_fixture_not_a_real_key";
 
 test("consumer key detection leaves project keys on their existing path", () => {
   assert.equal(isConsumerKey("  ck_example  "), true);
   assert.equal(isConsumerKey("project-example"), false);
+  assert.equal(classifyComposioKey("oak_org_secret"), "org");
+  assert.equal(classifyComposioKey("ak_project"), "project");
+  assert.equal(isOrgKey("oak_x"), true);
+  assert.equal(isOrgKey("ak_x"), false);
 });
 
 test("MCP discovery initializes, uses consumer header, and follows pagination", async t => {

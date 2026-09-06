@@ -68,7 +68,7 @@ export class Execution {
     return `Status: ${this.verified ? "verified checks" : this.passed.size ? "partially verified" : "blocked / unverified"}. ${reason}\n` + this.checks.map(c => `- ${this.passed.has(c.id) ? "PASS" : "NOT VERIFIED"}: ${c.description}${this.passed.has(c.id) ? ` (${this.passed.get(c.id)!.evidence})` : ""}`).join("\n");
   }
 }
-const READ_ONLY = new Set(["read_file", "list_files", "repo_tree", "dev_search", "dev_skill_get", "dev_categories", "app_status", "composio_health", "composio_tool_schema", "steel_scrape", "web_search", "web_screenshot", "analyze_image"]);
+const READ_ONLY = new Set(["read_file", "list_files", "repo_tree", "repo_read_tree", "dev_search", "dev_skill_get", "dev_skill_list", "dev_categories", "app_status", "composio_health", "composio_tool_schema", "steel_scrape", "web_search", "web_screenshot", "analyze_image", "aion_status", "hedra_status"]);
 export function toolSucceeded(value: unknown): boolean {
   if (!value || typeof value !== "object") return true;
   const r = value as Record<string, unknown>;

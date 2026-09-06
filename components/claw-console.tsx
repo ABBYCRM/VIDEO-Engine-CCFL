@@ -22,11 +22,19 @@ type ClawFile = { id: string; name: string; mime: string; size: number; url: str
 type Theme = "light" | "dark";
 type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] };
 
-/* Working models — from NVIDIA speed tests 2026-09-03 */
+/* Agentic / tool-capable NIM models shown in the picker. */
 const WORKING_MODEL_PREFIXES = [
-  "meta/llama-3.2-11b-vision-instruct",
   "nvidia/nemotron-3-super-120b-a12b",
+  "nvidia/nemotron-3-nano-30b-a3b",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3-ultra-550b-a55b",
+  "moonshotai/kimi-k2-instruct",
+  "moonshotai/kimi-k2-thinking",
+  "moonshotai/kimi-k2.5",
+  "moonshotai/kimi-k2.6",
+  "moonshotai/kimi-k3",
+  "meta/llama-3.2-11b-vision-instruct",
   "deepseek-ai/deepseek-v4-pro-0813",
 ];
 

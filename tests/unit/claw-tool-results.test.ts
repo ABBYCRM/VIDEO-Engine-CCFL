@@ -27,6 +27,11 @@ async function runWithResult(payload: unknown) {
     readClawFileText: async () => "",
     toolsCatalog: () => "composio_action",
     executeClawTool: async () => payload,
+    nvidiaToolDefinitions: () => [],
+    parseNativeToolCalls: (c: any[] = []) => c.map((x, i) => ({ id: x.id || String(i), name: x.function?.name || x.name, args: {} })),
+    assistantToolPayload: (calls: unknown, reasoningContent?: string) => ({ kind: "assistant_turn", reasoningContent, calls }),
+    getAssistantCalls: (j: any) => Array.isArray(j) ? j : (j?.calls || []),
+    getAssistantReasoning: (j: any) => j?.reasoningContent,
     chatCompletionStream: async (request: any, onToken: (text: string) => void) => {
       requests.push(request);
       const text = requests.length === 1

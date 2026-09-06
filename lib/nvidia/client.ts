@@ -1,4 +1,5 @@
-import { StreamState } from "./stream-state";
+import { StreamState, type NativeToolCall } from "./stream-state";
+export type { NativeToolCall } from "./stream-state";
 // NVIDIA NIM HTTP client with multi-key failover.
 //
 // The build endpoint is OpenAI-compatible:
@@ -118,8 +119,13 @@ export function isClawModelEnvOverridden(): boolean {
   return Boolean(process.env.CLAW_NVIDIA_MODEL);
 }
 
+export function hasNvidiaApiKeys(): boolean {
+  try { return getNvidiaApiKeys().length > 0; }
+  catch { return false; }
+}
+
 export function isNvidiaEnabled(): boolean {
-  return getNvidiaModel() !== "disabled" && getNvidiaApiKeys().length > 0;
+  return getNvidiaModel() !== "disabled" && hasNvidiaApiKeys();
 }
 
 // ── Retryable error classification ─────────────────────────────────────────────
@@ -141,7 +147,19 @@ export type ChatContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string | ChatContentPart[] };
+export type ChatMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | ChatContentPart[] | null;
+  tool_calls?: NativeToolCall[];
+  tool_call_id?: string;
+  name?: string;
+  reasoning_content?: string;
+};
+
+export type OpenAITool = {
+  type: "function";
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+};
 
 export type ChatRequest = {
   model: NvidiaModelId;
@@ -151,6 +169,8 @@ export type ChatRequest = {
   maxTokens?: number;
   jsonMode?: boolean;
   thinking?: boolean;
+  tools?: OpenAITool[];
+  toolChoice?: "auto" | "none";
   signal?: AbortSignal;
 };
 
@@ -159,7 +179,43 @@ export type ChatResponse = {
   finishReason: string;
   usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
   rawModel: string;
+  toolCalls?: NativeToolCall[];
+  reasoningContent?: string;
 };
+
+function serializeMessages(messages: ChatMessage[]) {
+  return messages.map((m) => {
+    const out: Record<string, unknown> = { role: m.role, content: m.content };
+    if (m.tool_calls?.length) out.tool_calls = m.tool_calls;
+    if (m.tool_call_id) out.tool_call_id = m.tool_call_id;
+    if (m.name) out.name = m.name;
+    if (m.reasoning_content) out.reasoning_content = m.reasoning_content;
+    return out;
+  });
+}
+
+function attachTools(body: Record<string, unknown>, req: ChatRequest) {
+  if (req.tools?.length) {
+    body.tools = req.tools;
+    body.tool_choice = req.toolChoice ?? "auto";
+  }
+}
+
+function readToolCalls(message: { tool_calls?: unknown } | undefined): NativeToolCall[] | undefined {
+  if (!Array.isArray(message?.tool_calls)) return undefined;
+  const calls: NativeToolCall[] = [];
+  for (const [i, raw] of message.tool_calls.entries()) {
+    if (!raw || typeof raw !== "object") continue;
+    const c = raw as { id?: string; type?: string; function?: { name?: string; arguments?: string } };
+    if (!c.function?.name) continue;
+    calls.push({
+      id: typeof c.id === "string" && c.id ? c.id : `call_${i}`,
+      type: "function",
+      function: { name: c.function.name, arguments: typeof c.function.arguments === "string" ? c.function.arguments : "{}" }
+    });
+  }
+  return calls.length ? calls : undefined;
+}
 
 // ── Core request helper ────────────────────────────────────────────────────────
 
@@ -230,14 +286,15 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
 
   const body: Record<string, unknown> = {
     model: req.model,
-    messages: req.messages,
+    messages: serializeMessages(req.messages),
     temperature: req.temperature ?? 0.7,
     top_p: req.topP ?? 0.9,
     max_tokens: req.maxTokens ?? 1200,
     stream: false,
   };
   if (req.jsonMode) body.response_format = { type: "json_object" };
-  applyThinkingMode(body, req.thinking);
+  attachTools(body, req);
+  applyThinkingMode(body, req.thinking, req.model);
 
   const timeoutController = new AbortController();
   const t = setTimeout(() => timeoutController.abort(), 30_000);
@@ -278,10 +335,11 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
       clearTimeout(t);
       const json = result.bodyJson as {
         model?: string;
-        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+        choices?: Array<{ message?: { content?: string; tool_calls?: unknown; reasoning_content?: string }; finish_reason?: string }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       };
-      const text = json.choices?.[0]?.message?.content ?? "";
+      const message = json.choices?.[0]?.message;
+      const text = message?.content ?? "";
       return {
         text,
         finishReason: json.choices?.[0]?.finish_reason ?? "stop",
@@ -291,6 +349,8 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
           totalTokens: json.usage.total_tokens ?? 0,
         } : null,
         rawModel: json.model ?? req.model,
+        toolCalls: readToolCalls(message),
+        reasoningContent: typeof message?.reasoning_content === "string" ? message.reasoning_content : undefined,
       };
     } catch (e) {
       if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) {
@@ -317,13 +377,14 @@ export async function chatCompletionStream(
 
   const body: Record<string, unknown> = {
     model: req.model,
-    messages: req.messages,
+    messages: serializeMessages(req.messages),
     temperature: req.temperature ?? 0.3,
     top_p: req.topP ?? 0.9,
     max_tokens: req.maxTokens ?? 1600,
     stream: true,
   };
-  applyThinkingMode(body, req.thinking);
+  attachTools(body, req);
+  applyThinkingMode(body, req.thinking, req.model);
 
   const timeoutController = new AbortController();
   const t = setTimeout(() => timeoutController.abort(), 60_000);
@@ -401,7 +462,7 @@ export async function chatCompletionStream(
             clearTimeout(t);
             const fallback = await chatCompletion(req);
             for (const word of fallback.text.split(/(\s+)/)) { if (word) onToken(word); }
-            return { text: fallback.text, finishReason: fallback.finishReason, usage: null, rawModel: fallback.rawModel };
+            return { text: fallback.text, finishReason: fallback.finishReason, usage: null, rawModel: fallback.rawModel, toolCalls: fallback.toolCalls, reasoningContent: fallback.reasoningContent };
           } catch (fallbackErr) {
             if (i === keys.length - 1) throw new NvidiaUpstreamError(
               `NVIDIA stream + fallback both failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`, 502
@@ -416,7 +477,14 @@ export async function chatCompletionStream(
       }
 
       clearTimeout(t);
-      return { text: state.text, finishReason: state.finishReason, usage: null, rawModel: req.model };
+      return {
+        text: state.text,
+        finishReason: state.finishReason,
+        usage: null,
+        rawModel: req.model,
+        toolCalls: state.toolCalls.length ? state.toolCalls : undefined,
+        reasoningContent: state.reasoningContent || undefined,
+      };
     } catch (e) {
       if (signal.aborted) throw e;
       if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) {

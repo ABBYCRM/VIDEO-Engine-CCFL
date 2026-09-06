@@ -15,7 +15,7 @@
 
 import { chatCompletion, type ChatContentPart } from "./client";
 import { getClawModel } from "./client";
-import { NVIDIA_MODELS, DEFAULT_CLAW_NVIDIA_MODEL, type NvidiaModelId } from "./models";
+import { NVIDIA_MODELS, DEFAULT_VISION_NVIDIA_MODEL, type NvidiaModelId } from "./models";
 
 function pickVisionModel(): NvidiaModelId {
   const current = getClawModel();
@@ -24,7 +24,7 @@ function pickVisionModel(): NvidiaModelId {
   // text-only Nemotron/DeepSeek/Mistral variant) — fall back to the known
   // vision-capable default rather than sending an image to a model that
   // will just ignore or error on it.
-  return DEFAULT_CLAW_NVIDIA_MODEL;
+  return DEFAULT_VISION_NVIDIA_MODEL;
 }
 
 export async function analyzeImage(input: { imageUrl: string; question: string }): Promise<string> {

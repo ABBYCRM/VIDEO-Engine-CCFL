@@ -5,7 +5,7 @@
 //   - type-narrowed errors so the API routes can return meaningful messages
 //   - never throws on init (returns null if no key is configured)
 
-import { isConsumerKey, listConsumerTools, callConsumerTool } from "./consumer";
+import { classifyComposioKey, isConsumerKey, isOrgKey, listConsumerTools, callConsumerTool } from "./consumer";
 import { Composio } from "@composio/core";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
@@ -407,6 +407,17 @@ export async function composioHealth(): Promise<ComposioHealth> {
       note: "Composio is not configured. Set COMPOSIO_API_KEY in the app env, or save it under the composio_api_key setting."
     };
   }
+  try {
+    const keyType = classifyComposioKey(getComposioApiKey());
+    if (keyType === "org") {
+      return {
+        configured: true,
+        live: false,
+        toolkits: [],
+        note: "COMPOSIO_API_KEY looks like an org/OAuth key (oak_…), not a project API key (ak_…) or Connect consumer key (ck_…). Claw cannot execute Composio tools with this key type. Replace it and retry."
+      };
+    }
+  } catch { /* fall through */ }
   if (isComposioConsumer()) {
     try {
       const tools = await listConsumerTools(getComposioApiKey());
@@ -476,6 +487,9 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
     return { ok: false, slug, toolkit: toolkit || null, error: "Composio is not configured (COMPOSIO_API_KEY missing or composio_api_key setting empty)" };
   }
   try {
+    if (isOrgKey(getComposioApiKey())) {
+      return { ok: false, slug, toolkit: toolkit || null, error: "COMPOSIO_API_KEY is an oak_ org/OAuth key. Use an ak_ project key or ck_ consumer key." };
+    }
     if (isComposioConsumer()) {
       const data = await callConsumerTool(getComposioApiKey(), slug, input.args || {});
       if (data.isError) return { ok: false, slug, toolkit: toolkit || null, error: JSON.stringify(data) };

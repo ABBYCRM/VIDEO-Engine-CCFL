@@ -1,8 +1,22 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+export type ComposioKeyType = "consumer" | "project" | "org" | "unknown";
+
+export function classifyComposioKey(key: string): ComposioKeyType {
+  const trimmed = key.trim();
+  if (trimmed.startsWith("ck_")) return "consumer";
+  if (trimmed.startsWith("ak_")) return "project";
+  if (trimmed.startsWith("oak_")) return "org";
+  return "unknown";
+}
+
 export function isConsumerKey(key: string): boolean {
-  return key.trim().startsWith("ck_");
+  return classifyComposioKey(key) === "consumer";
+}
+
+export function isOrgKey(key: string): boolean {
+  return classifyComposioKey(key) === "org";
 }
 
 // Consumer keys belong to Composio Connect, not the project REST API.
