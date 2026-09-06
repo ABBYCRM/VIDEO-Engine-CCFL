@@ -11,7 +11,7 @@ export {
   type ChatResponse
 } from "./client";
 export type { NvidiaModelId } from "./models";
-export { NVIDIA_MODELS, DEFAULT_CLAW_NVIDIA_MODEL, isNvidiaModelId } from "./models";
+export { NVIDIA_MODELS, DEFAULT_CLAW_NVIDIA_MODEL, FALLBACK_CLAW_NVIDIA_MODEL, isNvidiaModelId, isToolCallingModel } from "./models";
 export { analyzeImage } from "./vision";
 export {
   rerankPassages,

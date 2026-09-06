@@ -1,5 +1,5 @@
 // Server-side Aion-Brain bridge. Credentials and destination never come from tool arguments.
-export type AionContext = { conversationId?: string; signal?: AbortSignal };
+export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string };
 
 export async function aionN8n(action: unknown, args: unknown, context: AionContext = {}) {
   if (!["n8n_status", "n8n_tools", "n8n_workflows", "n8n_call", "n8n_aura"].includes(String(action))) throw new Error("Unknown n8n action.");
@@ -83,8 +83,11 @@ export async function aionCurriculum(topics: unknown, format: unknown = "markdow
 export async function aionConsult(prompt: string, context: AionContext = {}) {
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 24_000) throw new Error("Aion prompt must contain 1–24,000 characters.");
   if (!context.conversationId) throw new Error("Aion consultation requires a Claw conversation.");
+  const content = context.selfState
+    ? `Claw SELF_STATE (no secrets; assumptions are not facts):\n${context.selfState}\n\n${prompt.trim()}`
+    : prompt.trim();
   const response = await request("/api/chat", context, {
-    messages: [{ role: "user", content: prompt.trim() }],
+    messages: [{ role: "user", content }],
     session_id: `claw:${context.conversationId}`, max_tokens: 2048, skills: false
   });
   if (!response.headers.get("content-type")?.includes("text/event-stream") || !response.body) {

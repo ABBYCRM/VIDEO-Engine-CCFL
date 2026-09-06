@@ -1,8 +1,32 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+export type ComposioKeyKind = "consumer" | "project" | "organization" | "user" | "unknown";
+
+export function classifyComposioKey(key: string): ComposioKeyKind {
+  const k = key.trim();
+  if (k.startsWith("ck_")) return "consumer";
+  if (k.startsWith("ak_")) return "project";
+  if (k.startsWith("oak_")) return "organization";
+  if (k.startsWith("uak_")) return "user";
+  return "unknown";
+}
+
 export function isConsumerKey(key: string): boolean {
-  return key.trim().startsWith("ck_");
+  return classifyComposioKey(key) === "consumer";
+}
+
+export function composioKeyHint(kind: ComposioKeyKind): string {
+  if (kind === "organization") {
+    return "COMPOSIO_API_KEY is an organization key (oak_). Claw tools need a project key (ak_) or a Connect consumer key (ck_). Create a project key in the Composio dashboard (Organization → project → API key), not an org access token.";
+  }
+  if (kind === "user") {
+    return "COMPOSIO_API_KEY is a user key (uak_). Claw tools need a project key (ak_) or a Connect consumer key (ck_).";
+  }
+  if (kind === "unknown") {
+    return "COMPOSIO_API_KEY does not start with ak_, oak_, ck_, or uak_. Expected a project key (ak_) for the SDK or a consumer key (ck_) for Connect MCP.";
+  }
+  return "";
 }
 
 // Consumer keys belong to Composio Connect, not the project REST API.

@@ -5,7 +5,7 @@
 //   - type-narrowed errors so the API routes can return meaningful messages
 //   - never throws on init (returns null if no key is configured)
 
-import { isConsumerKey, listConsumerTools, callConsumerTool } from "./consumer";
+import { isConsumerKey, classifyComposioKey, composioKeyHint, listConsumerTools, callConsumerTool } from "./consumer";
 import { Composio } from "@composio/core";
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
@@ -393,7 +393,8 @@ export type ComposioHealth = {
   live: boolean;
   toolkits: Array<{ id: string; label: string; status: string; lastSyncAt: string | null }>;
   note?: string;
-  mode?: "consumer";
+  mode?: "consumer" | "project";
+  keyType?: string;
   tools?: Array<{ name: string; description?: string }>;
 };
 
@@ -407,10 +408,15 @@ export async function composioHealth(): Promise<ComposioHealth> {
       note: "Composio is not configured. Set COMPOSIO_API_KEY in the app env, or save it under the composio_api_key setting."
     };
   }
+  const keyType = classifyComposioKey(getComposioApiKey());
+  const hint = composioKeyHint(keyType);
+  if (keyType === "organization" || keyType === "user") {
+    return { configured: true, live: false, toolkits: [], keyType, note: hint };
+  }
   if (isComposioConsumer()) {
     try {
       const tools = await listConsumerTools(getComposioApiKey());
-      return { configured: true, live: true, mode: "consumer", toolkits: [], tools: tools.map(t => ({ name: t.name, description: t.description?.slice(0, 160) })), note: "Composio Connect authenticated. Call composio_tool_schema for an exact tool name, then use its inputSchema with composio_action; discover app actions through the search tool. App connections are managed by Connect." };
+      return { configured: true, live: true, mode: "consumer", keyType, toolkits: [], tools: tools.map(t => ({ name: t.name, description: t.description?.slice(0, 160) })), note: "Composio Connect authenticated (ck_ consumer key). Call composio_tool_schema for an exact tool name, then use its inputSchema with composio_action; discover app actions through the search tool. App connections are managed by Connect." };
     } catch (e) {
       return { configured: true, live: false, mode: "consumer", toolkits: [], note: e instanceof Error ? e.message : String(e) };
     }
@@ -434,6 +440,8 @@ export async function composioHealth(): Promise<ComposioHealth> {
   return {
     configured: true,
     live: !syncNote,
+    mode: "project",
+    keyType,
     toolkits: rows.map((r) => {
       const meta = getToolkitMeta(r.toolkit);
       return { id: r.toolkit, label: meta.label, status: r.status, lastSyncAt: r.last_sync_at };
@@ -475,6 +483,9 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
   if (!isComposioConfigured()) {
     return { ok: false, slug, toolkit: toolkit || null, error: "Composio is not configured (COMPOSIO_API_KEY missing or composio_api_key setting empty)" };
   }
+  const keyType = classifyComposioKey(getComposioApiKey());
+  const hint = composioKeyHint(keyType);
+  if (hint) return { ok: false, slug, toolkit: toolkit || null, error: hint, code: `composio_key_${keyType}` };
   try {
     if (isComposioConsumer()) {
       const data = await callConsumerTool(getComposioApiKey(), slug, input.args || {});

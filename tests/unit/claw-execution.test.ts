@@ -45,6 +45,23 @@ test("malformed batch executes nothing and arguments are not repaired or guessed
   assert.throws(() => parseToolCalls('<tool_call name="x">[]</tool_call>'));
   assert.deepEqual(parseToolCalls('<tool_call name="x">{"id":1}</tool_call>'), [{ name: "x", args: { id: 1 } }]);
 });
+test("native NVIDIA tool_calls are preferred over XML and keep call ids", () => {
+  const native = [{ id: "call_1", function: { name: "steel_scrape", arguments: "{\"url\":\"https://example.com\"}" } }];
+  assert.deepEqual(parseToolCalls("I will steel_scrape later", native), [
+    { name: "steel_scrape", args: { url: "https://example.com" }, id: "call_1" }
+  ]);
+});
+test("stream accumulates tool_calls and reasoning_content", () => {
+  const stream = new StreamState(() => {});
+  stream.feed('data: {"choices":[{"delta":{"reasoning_content":"plan","tool_calls":[{"index":0,"id":"c1","function":{"name":"web_search","arguments":""}}]}}]}\n');
+  stream.feed('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"x\\"}"}}]},"finish_reason":"tool_calls"}]}\n');
+  stream.end();
+  assert.equal(stream.finishReason, "tool_calls");
+  assert.equal(stream.reasoning, "plan");
+  assert.equal(stream.toolCalls[0].id, "c1");
+  assert.equal(stream.toolCalls[0].function.name, "web_search");
+  assert.equal(stream.toolCalls[0].function.arguments, '{"q":"x"}');
+});
 test("stream EOF and DONE alone cannot masquerade as completion", () => {
   const chunks: string[] = [];
   const stream = new StreamState(s => chunks.push(s));

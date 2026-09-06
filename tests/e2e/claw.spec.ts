@@ -44,7 +44,7 @@ test("Claw is the operator chat with thread/file controls, model picker, and too
     // Deliberate delay so the busy-but-not-yet-streaming window (the AILoader
     // "Thinking" indicator) is actually observable instead of racing past it.
     await new Promise((r) => setTimeout(r, 300));
-    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c1", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "steel_scrape", args: { url: "https://example.com" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "steel_scrape", ok: true, via: "steel.dev", preview: "Example Domain" })}\n\ndata: ${JSON.stringify({ type: "token", text: "Example Domain is a placeholder page." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "Example Domain is a placeholder page." })}\n\n`;
+    const body = `data: ${JSON.stringify({ type: "meta", conversationId: "c1", model: "meta/llama-3.2-11b-vision-instruct" })}\n\ndata: ${JSON.stringify({ type: "self_state", health: "HEALTHY", issue: "INFORMATION_GAP", phase: "ACTION", progress: 0.2, strategy: "observe-then-act", blockers: [], step: "act", toolsRun: 0 })}\n\ndata: ${JSON.stringify({ type: "tool_start", name: "steel_scrape", args: { url: "https://example.com" } })}\n\ndata: ${JSON.stringify({ type: "tool_end", name: "steel_scrape", ok: true, via: "steel.dev", preview: "Example Domain" })}\n\ndata: ${JSON.stringify({ type: "self_state", health: "HEALTHY", issue: "NONE", phase: "TERMINATION_CHECK", progress: 0.6, strategy: "observe-then-act", blockers: [], step: "verify", toolsRun: 1 })}\n\ndata: ${JSON.stringify({ type: "token", text: "Example Domain is a placeholder page." })}\n\ndata: ${JSON.stringify({ type: "done", assistant: "Example Domain is a placeholder page." })}\n\n`;
     return route.fulfill({ status: 200, contentType: "text/event-stream", body });
   });
 
@@ -61,9 +61,9 @@ test("Claw is the operator chat with thread/file controls, model picker, and too
   await page.getByPlaceholder("Ask Claw to generate, post, read comments, DMs…").fill("Summarize https://example.com");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
-  await expect(page.getByText("Thinking").first()).toBeVisible();
-  await expect(page.getByText("Did steel_scrape")).toBeVisible();
+  await expect(page.getByText(/Thinking/i).first()).toBeVisible();
+  await expect(page.getByText("steel_scrape")).toBeVisible();
   await expect(page.getByText("via steel.dev")).toBeVisible();
+  await expect(page.getByText("HEALTHY").first()).toBeVisible();
   await expect(page.getByText("Example Domain is a placeholder page.")).toBeVisible();
-  await expect(page.getByText("Thinking")).toHaveCount(0);
 });

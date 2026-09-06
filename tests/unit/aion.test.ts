@@ -32,6 +32,17 @@ test("status uses configured authentication and excludes global private state", 
   assert.equal(status.echoOnly,false);
   assert.ok(!JSON.stringify(status).includes("not-for-chat"));
 });
+test("consult includes SELF_STATE when the control loop provides it", async () => {
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options?.body as string);
+    assert.match(body.messages[0].content, /SELF_STATE/);
+    assert.match(body.messages[0].content, /LOOP_DETECTED/);
+    assert.match(body.messages[0].content, /Question/);
+    return stream([{type:"delta",text:"change strategy"},{type:"done",provider:"nvidia",model:"test"}]);
+  };
+  const result = await aionConsult("Question", { conversationId: "thread-one", selfState: "{\"health\":\"LOOP_DETECTED\"}" });
+  assert.equal(result.answer, "change strategy");
+});
 test("SSE handles byte boundaries, unicode, CRLF, fallbacks and stable sessions", async () => {
   globalThis.fetch = async (_url, options) => {
     const body = JSON.parse(options?.body as string);

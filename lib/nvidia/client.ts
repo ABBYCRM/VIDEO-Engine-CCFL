@@ -21,6 +21,7 @@ import { StreamState } from "./stream-state";
 import { DEFAULT_CLAW_NVIDIA_MODEL, NVIDIA_BASE, isNvidiaModelId, type NvidiaModelId } from "./models";
 export { isNvidiaModelId } from "./models";
 import { applyThinkingMode } from "./request";
+import type { NativeToolCall } from "./stream-state";
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { heliconeRoute } from "./helicone";
@@ -141,7 +142,21 @@ export type ChatContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string | ChatContentPart[] };
+export type ChatToolCall = NativeToolCall;
+
+export type OpenAiTool = {
+  type: "function";
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+};
+
+export type ChatMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | ChatContentPart[] | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: ChatToolCall[];
+  reasoning_content?: string;
+};
 
 export type ChatRequest = {
   model: NvidiaModelId;
@@ -151,6 +166,8 @@ export type ChatRequest = {
   maxTokens?: number;
   jsonMode?: boolean;
   thinking?: boolean;
+  tools?: OpenAiTool[];
+  toolChoice?: "auto" | "none" | "required";
   signal?: AbortSignal;
 };
 
@@ -159,7 +176,74 @@ export type ChatResponse = {
   finishReason: string;
   usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
   rawModel: string;
+  toolCalls: ChatToolCall[];
+  reasoningContent: string;
 };
+
+function normalizeToolCalls(raw: unknown): ChatToolCall[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChatToolCall[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const fn = rec.function && typeof rec.function === "object" ? rec.function as Record<string, unknown> : {};
+    const name = typeof fn.name === "string" ? fn.name : "";
+    if (!name) continue;
+    out.push({
+      id: typeof rec.id === "string" && rec.id ? rec.id : `call_${out.length + 1}`,
+      type: "function",
+      function: { name, arguments: typeof fn.arguments === "string" ? fn.arguments : "{}" }
+    });
+  }
+  return out;
+}
+
+function extractAssistant(json: Record<string, unknown> | undefined, fallbackModel: string): ChatResponse {
+  const choice = (json?.choices as Array<Record<string, unknown>> | undefined)?.[0];
+  const message = (choice?.message ?? {}) as Record<string, unknown>;
+  const text = typeof message.content === "string" ? message.content : "";
+  const reasoning = typeof message.reasoning_content === "string" ? message.reasoning_content
+    : typeof message.reasoning === "string" ? message.reasoning : "";
+  const usage = json?.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+  return {
+    text,
+    finishReason: typeof choice?.finish_reason === "string" ? choice.finish_reason : "stop",
+    usage: usage ? {
+      promptTokens: usage.prompt_tokens ?? 0,
+      completionTokens: usage.completion_tokens ?? 0,
+      totalTokens: usage.total_tokens ?? 0
+    } : null,
+    rawModel: typeof json?.model === "string" ? json.model : fallbackModel,
+    toolCalls: normalizeToolCalls(message.tool_calls),
+    reasoningContent: reasoning
+  };
+}
+
+function buildChatBody(req: ChatRequest, stream: boolean): Record<string, unknown> {
+  const messages = req.messages.map((m) => {
+    const row: Record<string, unknown> = { role: m.role, content: m.content };
+    if (m.name) row.name = m.name;
+    if (m.tool_call_id) row.tool_call_id = m.tool_call_id;
+    if (m.tool_calls?.length) row.tool_calls = m.tool_calls;
+    if (m.reasoning_content) row.reasoning_content = m.reasoning_content;
+    return row;
+  });
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages,
+    temperature: req.temperature ?? (stream ? 0.3 : 0.7),
+    top_p: req.topP ?? 0.9,
+    max_tokens: req.maxTokens ?? (stream ? 1600 : 1200),
+    stream
+  };
+  if (req.jsonMode) body.response_format = { type: "json_object" };
+  if (req.tools?.length) {
+    body.tools = req.tools;
+    body.tool_choice = req.toolChoice ?? "auto";
+  }
+  applyThinkingMode(body, req.thinking, req.model);
+  return body;
+}
 
 // ── Core request helper ────────────────────────────────────────────────────────
 
@@ -228,16 +312,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
   if (req.model === "disabled") throw new NvidiaDisabledError();
   const keys = getNvidiaApiKeys();
 
-  const body: Record<string, unknown> = {
-    model: req.model,
-    messages: req.messages,
-    temperature: req.temperature ?? 0.7,
-    top_p: req.topP ?? 0.9,
-    max_tokens: req.maxTokens ?? 1200,
-    stream: false,
-  };
-  if (req.jsonMode) body.response_format = { type: "json_object" };
-  applyThinkingMode(body, req.thinking);
+  const body = buildChatBody(req, false);
 
   const timeoutController = new AbortController();
   const t = setTimeout(() => timeoutController.abort(), 30_000);
@@ -276,22 +351,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
 
       // Success
       clearTimeout(t);
-      const json = result.bodyJson as {
-        model?: string;
-        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-      };
-      const text = json.choices?.[0]?.message?.content ?? "";
-      return {
-        text,
-        finishReason: json.choices?.[0]?.finish_reason ?? "stop",
-        usage: json.usage ? {
-          promptTokens: json.usage.prompt_tokens ?? 0,
-          completionTokens: json.usage.completion_tokens ?? 0,
-          totalTokens: json.usage.total_tokens ?? 0,
-        } : null,
-        rawModel: json.model ?? req.model,
-      };
+      return extractAssistant(result.bodyJson, req.model);
     } catch (e) {
       if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) {
         // These are already meaningful — re-throw unless we have more keys
@@ -315,15 +375,7 @@ export async function chatCompletionStream(
   if (req.model === "disabled") throw new NvidiaDisabledError();
   const keys = getNvidiaApiKeys();
 
-  const body: Record<string, unknown> = {
-    model: req.model,
-    messages: req.messages,
-    temperature: req.temperature ?? 0.3,
-    top_p: req.topP ?? 0.9,
-    max_tokens: req.maxTokens ?? 1600,
-    stream: true,
-  };
-  applyThinkingMode(body, req.thinking);
+  const body = buildChatBody(req, true);
 
   const timeoutController = new AbortController();
   const t = setTimeout(() => timeoutController.abort(), 60_000);
@@ -401,7 +453,7 @@ export async function chatCompletionStream(
             clearTimeout(t);
             const fallback = await chatCompletion(req);
             for (const word of fallback.text.split(/(\s+)/)) { if (word) onToken(word); }
-            return { text: fallback.text, finishReason: fallback.finishReason, usage: null, rawModel: fallback.rawModel };
+            return fallback;
           } catch (fallbackErr) {
             if (i === keys.length - 1) throw new NvidiaUpstreamError(
               `NVIDIA stream + fallback both failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`, 502
@@ -416,7 +468,14 @@ export async function chatCompletionStream(
       }
 
       clearTimeout(t);
-      return { text: state.text, finishReason: state.finishReason, usage: null, rawModel: req.model };
+      return {
+        text: state.text,
+        finishReason: state.finishReason,
+        usage: null,
+        rawModel: req.model,
+        toolCalls: state.toolCalls.filter((c) => c.function.name),
+        reasoningContent: state.reasoning
+      };
     } catch (e) {
       if (signal.aborted) throw e;
       if (e instanceof NvidiaAuthError || e instanceof NvidiaUpstreamError) {

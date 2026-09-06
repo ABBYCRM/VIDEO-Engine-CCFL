@@ -68,16 +68,22 @@ export class Execution {
     return `Status: ${this.verified ? "verified checks" : this.passed.size ? "partially verified" : "blocked / unverified"}. ${reason}\n` + this.checks.map(c => `- ${this.passed.has(c.id) ? "PASS" : "NOT VERIFIED"}: ${c.description}${this.passed.has(c.id) ? ` (${this.passed.get(c.id)!.evidence})` : ""}`).join("\n");
   }
 }
-const READ_ONLY = new Set(["read_file", "list_files", "repo_tree", "dev_search", "dev_skill_get", "dev_categories", "app_status", "composio_health", "composio_tool_schema", "steel_scrape", "web_search", "web_screenshot", "analyze_image"]);
+const READ_ONLY = new Set([
+  "read_file", "list_files", "repo_tree", "repo_read_tree", "dev_search", "dev_skill_get", "dev_skill_list", "dev_categories",
+  "app_status", "composio_health", "composio_tool_schema", "steel_scrape", "firecrawl_scrape", "scrapingbee_scrape", "scrapfly_scrape",
+  "web_search", "web_screenshot", "analyze_image", "aion_status", "hedra_status", "helicone_status", "connector_status"
+]);
 export function toolSucceeded(value: unknown): boolean {
   if (!value || typeof value !== "object") return true;
   const r = value as Record<string, unknown>;
   if (r.ok === false || r.successful === false || r.success === false || r.isError === true || r.error) return false;
   return r.data && typeof r.data === "object" ? toolSucceeded(r.data) : true;
 }
-export function parseToolCalls(text: string) {
+export type ParsedToolCall = { name: string; args: Record<string, unknown>; id?: string };
+
+function parseXmlToolCalls(text: string): ParsedToolCall[] {
   const re = /<tool_call\s+name="([a-zA-Z0-9_]+)">([\s\S]*?)<\/tool_call>/gi;
-  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const calls: ParsedToolCall[] = [];
   let match: RegExpExecArray | null;
   while ((match = re.exec(text))) {
     const args: unknown = JSON.parse(match[2]);
@@ -86,6 +92,31 @@ export function parseToolCalls(text: string) {
   }
   if (text.replace(re, "").toLowerCase().includes("<tool_call")) throw new Error("Incomplete or malformed tool call. No calls from this response were executed.");
   return calls;
+}
+
+function parseNativeToolCalls(native: Array<{ id?: string; function?: { name?: string; arguments?: string } }> | undefined): ParsedToolCall[] {
+  if (!native?.length) return [];
+  const calls: ParsedToolCall[] = [];
+  for (const item of native) {
+    const name = item.function?.name?.trim();
+    if (!name) continue;
+    let args: unknown = {};
+    const raw = item.function?.arguments ?? "{}";
+    try { args = raw ? JSON.parse(raw) : {}; }
+    catch { throw new Error("Native tool arguments must be a JSON object."); }
+    if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Tool arguments must be a JSON object.");
+    calls.push({ name, args: args as Record<string, unknown>, id: item.id });
+  }
+  return calls;
+}
+
+export function parseToolCalls(
+  text: string,
+  native?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>
+): ParsedToolCall[] {
+  const fromNative = parseNativeToolCalls(native);
+  if (fromNative.length) return fromNative;
+  return parseXmlToolCalls(text || "");
 }
 
 export async function awaitWithSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {

@@ -10,7 +10,7 @@ import {
 import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
 import AILoader from "@/components/ui/ai-loader";
-import { ClawThinkingPanel, type ToolNode } from "@/components/ui/claw-thinking-panel";
+import { ClawThinkingPanel, type ToolNode, type SelfStateView } from "@/components/ui/claw-thinking-panel";
 
 
 /* ─────────────────────────────────────────────────────────
@@ -22,11 +22,14 @@ type ClawFile = { id: string; name: string; mime: string; size: number; url: str
 type Theme = "light" | "dark";
 type Suggestion = { label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] };
 
-/* Working models — from NVIDIA speed tests 2026-09-03 */
+/* Agentic / tool-calling NVIDIA NIM models plus known fallbacks */
 const WORKING_MODEL_PREFIXES = [
-  "meta/llama-3.2-11b-vision-instruct",
+  "nvidia/nemotron-3-ultra-550b-a55b",
+  "moonshotai/kimi-k3",
+  "moonshotai/kimi-k2.6",
   "nvidia/nemotron-3-super-120b-a12b",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "meta/llama-3.2-11b-vision-instruct",
   "deepseek-ai/deepseek-v4-pro-0813",
 ];
 
@@ -406,6 +409,7 @@ export function ClawConsole() {
   const [pendingFiles, setPendingFiles] = useState<ClawFile[]>([]);
   const [streaming, setStreaming] = useState("");
   const [tools, setTools] = useState<ToolNode[]>([]);
+  const [selfState, setSelfState] = useState<SelfStateView | null>(null);
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>(DEFAULT_SUGGESTIONS);
   const [error, setError] = useState<string | null>(null);
@@ -536,7 +540,7 @@ export function ClawConsole() {
     if (busy) return;
     const body = (overrideText ?? text).trim();
     if (!body && !pendingFiles.length) return;
-    setBusy(true); setError(null); setStreaming(""); setTools([]);
+    setBusy(true); setError(null); setStreaming(""); setTools([]); setSelfState(null);
     const ac = new AbortController();
     abortRef.current = ac;
     let convId = active;
@@ -570,8 +574,12 @@ export function ClawConsole() {
         if (done) break;
         sseParse(decoder.decode(value, { stream: true }), (e) => {
           if (e.type === "token") setStreaming(s => s + e.text);
-          if (e.type === "tool_start") setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now() }]);
+          if (e.type === "tool_start") setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now(), args: e.args ? JSON.stringify(e.args) : undefined }]);
           if (e.type === "tool_end") setTools(t => t.map(x => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", via: e.via, result: e.preview, finishedAt: Date.now() } : x));
+          if (e.type === "self_state") setSelfState({
+            health: e.health, issue: e.issue, phase: e.phase, progress: e.progress,
+            strategy: e.strategy, blockers: e.blockers, step: e.step, toolsRun: e.toolsRun
+          });
           if (e.type === "error") setError(e.error);
           if (e.type === "done") setStreaming("");
         }, carry);
@@ -592,7 +600,7 @@ export function ClawConsole() {
     const r = await fetch("/api/claw/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     const d = await r.json();
     setActive(d.conversation.id);
-    setMessages([]); setStreaming(""); setTools([]); setPendingFiles([]);
+    setMessages([]); setStreaming(""); setTools([]); setSelfState(null); setPendingFiles([]);
     setSidebarOpen(false);
     await loadConvs();
   }
@@ -898,15 +906,15 @@ export function ClawConsole() {
                       )}
 
                       {/* Thinking panel */}
-                      {(tools.length > 0 || busy) && (
-                        <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} />
+                      {(tools.length > 0 || busy || selfState) && (
+                        <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} selfState={selfState} />
                       )}
 
                       {/* Streaming response */}
                       {streaming && <AssistantBubble content={streaming} />}
 
                       {/* Early thinking loader */}
-                      {busy && !streaming && tools.length === 0 && (
+                      {busy && !streaming && tools.length === 0 && !selfState && (
                         <div className="flex items-center gap-3 animate-fade-up">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
                             <Bot size={15} className="text-[var(--claw-accent)]" />
