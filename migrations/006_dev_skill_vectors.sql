@@ -1,16 +1,14 @@
 -- 006_dev_skill_vectors.sql
 -- pgvector store for Claw's dev-skills RAG (stage-1 semantic retrieval).
 --
--- Runs against the DigitalOcean Managed Postgres bound as DATABASE_URL
--- (see .do/app.yaml). DO Managed Postgres supports the `vector` extension
--- (pgvector) on PG 14+. The application mirror of this DDL lives in
--- lib/claw/vector-store.ts::ensureVectorSchema so the admin index route
--- works even before migrations run; keep the two in sync.
+-- Runs against the DigitalOcean Managed Postgres bound as DATABASE_URL.
+-- The application mirror of this DDL lives in
+-- lib/claw/vector-store.ts::ensureVectorSchema; keep the two in sync.
 --
--- Dimension note: vector(1024) matches nvidia/nv-embedqa-e5-v5, the
--- default embedding model in lib/nvidia/embed.ts (EMBED_DIM). If you
--- switch to a model with a different dimension you MUST change 1024 here
--- and re-index.
+-- Dimension note: vector(2048) matches nvidia/nemotron-3-embed-1b, the
+-- active default embedding model in lib/nvidia/embed.ts (EMBED_DIM).
+-- Existing deployments created with vector(1024) are upgraded by migration
+-- 007 because pgvector dimensions are part of the column type.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -21,11 +19,10 @@ CREATE TABLE IF NOT EXISTS dev_skill_vectors (
   summary      TEXT NOT NULL,
   body         TEXT NOT NULL,
   content_hash TEXT NOT NULL,
-  embedding    vector(1024) NOT NULL,
+  embedding    vector(2048) NOT NULL,
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- HNSW index for fast approximate nearest-neighbour cosine search.
 CREATE INDEX IF NOT EXISTS idx_dev_skill_vectors_embedding
   ON dev_skill_vectors USING hnsw (embedding vector_cosine_ops);
 
