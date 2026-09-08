@@ -1,18 +1,9 @@
 // NVIDIA NIM model registry for Claw.
 //
-// NVIDIA's build endpoint is OpenAI-compatible: POST /v1/chat/completions on
-// https://integrate.api.nvidia.com/v1/chat/completions.
-//
-// Aion-Brain / VIDEO claw contract (do not invent):
-//   AGENT_MODEL  = nvidia/nemotron-3-ultra-550b-a55b   (Claw default)
-//   PRIMARY_MODEL = nvidia/nemotron-3-super-120b-a12b  (confirmed on integrate.api.nvidia.com)
-//   FALLBACK_MODELS = moonshotai/kimi-k2.6, super, nano-omni, …
-//
-// MULTI-KEY POOL (2026-09-03):
-//   All operator keys are stored as an encrypted JSON array in settings DB
-//   (key: nvidia_api_keys). The client cycles through keys on retryable errors
-//   (HTTP 429 rate limit, 529/503/504 server errors, network timeout, TypeError).
-//   HTTP 401/403 = bad key (skip); HTTP 404 = model not on this key (fail fast).
+// All model IDs below are routed through NVIDIA NIM at
+// https://integrate.api.nvidia.com/v1. Publisher prefixes such as
+// moonshotai/, meta/, deepseek-ai/, mistralai/, and ai21labs/ describe the
+// model publisher; they do not select a non-NVIDIA provider.
 
 export type NvidiaCapability = "chat" | "vision" | "json-mode" | "tools";
 
@@ -48,29 +39,29 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 1048576,
     costTier: "high",
-    notes: "AGENT default. Native tool calling + reasoning. When tools are sent, chat_template_kwargs.enable_thinking and force_nonempty_content must be set. Falls back to PRIMARY Super if Ultra 404s on the key pool.",
+    notes: "AGENT default. Native tool calling + reasoning. When tools are sent, chat_template_kwargs.enable_thinking and force_nonempty_content must be set. Falls back to PRIMARY Super if Ultra is unavailable on the key pool.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "moonshotai/kimi-k3": {
     id: "moonshotai/kimi-k3",
-    label: "Kimi K3 (Moonshot)",
+    label: "Kimi K3 (via NVIDIA NIM)",
     capabilities: ["chat", "vision", "json-mode", "tools"],
     contextWindow: 1048576,
     costTier: "high",
-    notes: "Native multimodal agentic model. MUST echo the full assistant message including reasoning_content + tool_calls on every follow-up turn.",
+    notes: "NVIDIA-hosted multimodal agentic model. Preserve reasoning_content + tool_calls on follow-up turns.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "moonshotai/kimi-k2.6": {
     id: "moonshotai/kimi-k2.6",
-    label: "Kimi K2.6 (Moonshot)",
+    label: "Kimi K2.6 (via NVIDIA NIM)",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 262144,
     costTier: "mid",
-    notes: "Agentic tool-calling fallback in the Kimi family. Preserve reasoning_content + tool_calls across turns. If the account returns 404, use kimi-k3 or Nemotron Ultra.",
+    notes: "NVIDIA-hosted agentic fallback. Preserve reasoning_content + tool_calls across turns; availability can vary by NVIDIA account.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
@@ -81,7 +72,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "mid",
-    notes: "PRIMARY model (confirmed on integrate.api.nvidia.com). Fast tool-capable fallback when Ultra is unreachable (384–606ms in 2026-09-03 pool tests).",
+    notes: "PRIMARY NVIDIA model. Fast tool-capable fallback when Ultra is unreachable.",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: true
@@ -92,51 +83,51 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "FAST reasoning model. Still receives native tools; XML <tool_call> is the fallback parser if the NIM does not emit tool_calls.",
+    notes: "Fast reasoning model. Availability can vary by NVIDIA account; XML <tool_call> remains the fallback parser if native tool_calls are absent.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "meta/llama-3.2-11b-vision-instruct": {
     id: "meta/llama-3.2-11b-vision-instruct",
-    label: "Llama 3.2 11B Vision Instruct",
+    label: "Llama 3.2 11B Vision Instruct (via NVIDIA NIM)",
     capabilities: ["chat", "vision", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "Fast vision fallback (262–460ms). Tool calling via OpenAI tools array; XML fallback if the model plans in prose.",
+    notes: "Vision-capable NVIDIA NIM model. Tool calling via the OpenAI-compatible tools array; XML fallback if needed.",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: false
   },
   "deepseek-ai/deepseek-v4-pro-0813": {
     id: "deepseek-ai/deepseek-v4-pro-0813",
-    label: "DeepSeek V4 Pro (0813)",
+    label: "DeepSeek V4 Pro (via NVIDIA NIM)",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "mid",
-    notes: "SLOWER — 2–8s latency. Emits reasoning_content. Preserve the full assistant payload across turns.",
+    notes: "NVIDIA-hosted model. Emits reasoning_content; preserve assistant payload across turns.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "deepseek-ai/deepseek-v4-flash-0731": {
     id: "deepseek-ai/deepseek-v4-flash-0731",
-    label: "DeepSeek V4 Flash (0731) ⚠️",
+    label: "DeepSeek V4 Flash (via NVIDIA NIM)",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "low",
-    notes: "[⚠️ NVIDIA 503 service down historically] DeepSeek Flash deployment has been overloaded. Prefer Super / Ultra / Kimi.",
+    notes: "NVIDIA-hosted fast model; runtime availability can vary, so the provider retry/fallback path must remain enabled.",
     emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "meta/llama-3.2-90b-vision-instruct": {
     id: "meta/llama-3.2-90b-vision-instruct",
-    label: "Llama 3.2 90B Vision Instruct",
+    label: "Llama 3.2 90B Vision Instruct (via NVIDIA NIM)",
     capabilities: ["chat", "vision", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "high",
-    notes: "[key: may be unavailable] Larger Llama 3.2. Not accessible on some NVIDIA_API_KEY pools (timeout).",
+    notes: "Larger NVIDIA-hosted vision model; availability can vary by key pool.",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: false
@@ -147,29 +138,29 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "high",
-    notes: "[key: may be unavailable] Older Ultra. Prefer nemotron-3-ultra-550b-a55b.",
+    notes: "Older Ultra model. Prefer Nemotron 3 Ultra 550B when available.",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "mistralai/mistral-large": {
     id: "mistralai/mistral-large",
-    label: "Mistral Large",
+    label: "Mistral Large (via NVIDIA NIM)",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 131072,
     costTier: "mid",
-    notes: "[key: may be unavailable] Strong multilingual. HTTP 404 on some key pools.",
+    notes: "NVIDIA-hosted multilingual model; availability can vary by key pool.",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: false
   },
   "ai21labs/jamba-1.5-large-instruct": {
     id: "ai21labs/jamba-1.5-large-instruct",
-    label: "AI21 Jamba 1.5 Large",
+    label: "AI21 Jamba 1.5 Large (via NVIDIA NIM)",
     capabilities: ["chat", "json-mode"],
     contextWindow: 256000,
     costTier: "mid",
-    notes: "[key: may be unavailable] Hybrid SSM-Transformer with 256K context.",
+    notes: "NVIDIA-hosted hybrid SSM-Transformer. No tool-calling capability is advertised here.",
     emitsReasoning: false,
     toolCalling: false,
     preserveAssistantPayload: false
@@ -200,7 +191,7 @@ export const FALLBACK_CLAW_NVIDIA_MODELS: NvidiaModelId[] = [
 export const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
 
 export function isNvidiaModelId(v: unknown): v is NvidiaModelId {
-  return typeof v === "string" && v in NVIDIA_MODELS;
+  return typeof v === "string" && Object.hasOwn(NVIDIA_MODELS, v);
 }
 
 export function listNvidiaModelIds(): NvidiaModelId[] {
