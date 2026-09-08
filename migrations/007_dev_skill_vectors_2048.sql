@@ -2,10 +2,10 @@
 -- Upgrade existing dev-skills vector indexes from the former 1024-dim
 -- embedding schema to nvidia/nemotron-3-embed-1b's native 2048 dimensions.
 --
--- dev_skill_vectors is a derived/rebuildable search index; its canonical
--- source is DEV_SKILLS. Recreating this table is therefore safer than trying
--- to cast incompatible pgvector dimensions in place. After migration,
--- POST /api/claw/skills/index with {"force":true} repopulates it.
+-- pgvector HNSW/IVFFlat indexes are capped at 2000 dimensions, so this
+-- table is created WITHOUT an ANN index. The corpus is 36 rows; cosine
+-- search (`<=>`) on an unindexed vector(2048) column is the correct plan.
+-- After migration, POST /api/claw/skills/index {"force":true} repopulates.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -21,9 +21,6 @@ CREATE TABLE dev_skill_vectors (
   embedding    vector(2048) NOT NULL,
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE INDEX idx_dev_skill_vectors_embedding
-  ON dev_skill_vectors USING hnsw (embedding vector_cosine_ops);
 
 CREATE INDEX idx_dev_skill_vectors_category
   ON dev_skill_vectors (category);

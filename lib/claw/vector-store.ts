@@ -100,10 +100,17 @@ export async function ensureVectorSchema(): Promise<void> {
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  await sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS idx_${TABLE}_embedding
-      ON ${TABLE} USING hnsw (embedding vector_cosine_ops)
-  `);
+  // pgvector HNSW/IVFFlat indexes cap at 2000 dimensions. Nemotron 3 Embed
+  // is 2048, so skip ANN and let the 36-row corpus seq-scan. Cosine search
+  // (`<=>`) still works on an unindexed vector column.
+  if (EMBED_DIM <= 2000) {
+    await sql.unsafe(`
+      CREATE INDEX IF NOT EXISTS idx_${TABLE}_embedding
+        ON ${TABLE} USING hnsw (embedding vector_cosine_ops)
+    `);
+  } else {
+    await sql.unsafe(`DROP INDEX IF EXISTS idx_${TABLE}_embedding`);
+  }
   await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_${TABLE}_category ON ${TABLE} (category)`);
 }
 
