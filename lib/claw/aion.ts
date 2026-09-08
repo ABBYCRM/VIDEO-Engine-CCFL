@@ -106,7 +106,7 @@ export function sanitizeAionToolResults(raw: unknown): AionToolResult[] {
 
 export function aionAcceptanceForGoal(goal: string): AionAcceptance[] {
   const text = goal.toLowerCase();
-  if (/\b(search|research|look up)\b/.test(text)) {
+  if (/\b(search|research|look up|rag|public records?|urls?)\b/.test(text)) {
     return [{ id: "search", description: "live search ran", tool: "web_search" }];
   }
   if (/\b(scrape|browse)\b/.test(text) || /https?:\/\//i.test(goal)) {
@@ -116,7 +116,7 @@ export function aionAcceptanceForGoal(goal: string): AionAcceptance[] {
 }
 
 export function isToolfulGoal(text: string): boolean {
-  return /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint)\b/i.test(text);
+  return /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint|rag|public records?)\b/i.test(text);
 }
 
 export async function aionStatus(context: AionContext = {}) {
