@@ -21,6 +21,7 @@ export type NvidiaModelId =
   | "moonshotai/kimi-k3"
   | "moonshotai/kimi-k2.6"
   | "nvidia/nemotron-3-super-120b-a12b"
+  | "nvidia/nemotron-3.5-lightning-30b-a3b"
   | "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
   | "meta/llama-3.2-11b-vision-instruct"
   | "deepseek-ai/deepseek-v4-pro-0813"
@@ -83,6 +84,17 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
     costTier: "mid",
     notes: "PRIMARY model (confirmed on integrate.api.nvidia.com). Fast tool-capable fallback when Ultra is unreachable (384–606ms in 2026-09-03 pool tests).",
     emitsReasoning: false,
+    toolCalling: true,
+    preserveAssistantPayload: true
+  },
+  "nvidia/nemotron-3.5-lightning-30b-a3b": {
+    id: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    label: "Nemotron 3.5 Lightning 30B",
+    capabilities: ["chat", "json-mode", "tools"],
+    contextWindow: 1048576,
+    costTier: "low",
+    notes: "Fast 30B MoE. Use when Super 401s or nano-30b is EOL.",
+    emitsReasoning: true,
     toolCalling: true,
     preserveAssistantPayload: true
   },
@@ -189,12 +201,13 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
 
 export const AGENT_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3-ultra-550b-a55b";
 export const PRIMARY_CLAW_NVIDIA_MODEL: NvidiaModelId = "nvidia/nemotron-3-super-120b-a12b";
-export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = AGENT_CLAW_NVIDIA_MODEL;
+export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = PRIMARY_CLAW_NVIDIA_MODEL;
 export const FALLBACK_CLAW_NVIDIA_MODEL: NvidiaModelId = PRIMARY_CLAW_NVIDIA_MODEL;
 export const FALLBACK_CLAW_NVIDIA_MODELS: NvidiaModelId[] = [
-  "moonshotai/kimi-k2.6",
   "nvidia/nemotron-3-super-120b-a12b",
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "moonshotai/kimi-k2.6"
 ];
 
 export const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
