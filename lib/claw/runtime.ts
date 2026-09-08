@@ -153,7 +153,8 @@ export async function runClawTurn(input: {
     : budget.signal;
 
   const codingWork = /\b(build|implement|fix|repair|create|code|make)\b/i.test(input.text) && /\b(app|code|software|website|scheduler|typescript|javascript|python|backend|frontend|repository|repo)\b/i.test(input.text);
-  const execution = new Execution(codingWork ? ["artifact", "command"] : []);
+  const needsCommandProof = /\b(deploy|pytest|unit test|ci\/cd|production build)\b/i.test(input.text);
+  const execution = new Execution(codingWork ? (needsCommandProof ? ["artifact", "command"] : ["artifact"]) : []);
   const requiresPlan = /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume)\b/i.test(input.text);
   if (/^\s*(continue|resume)\b/i.test(input.text)) {
     const previous = [...listMessages(input.conversationId, 60)].reverse().find(m => m.toolJson && typeof m.toolJson === "object" && (m.toolJson as { name?: string }).name === "execution_checkpoint");
@@ -194,9 +195,9 @@ export async function runClawTurn(input: {
           answer: ran.answer.slice(0, 2000), previous_tool_results: ran.previous_tool_results,
           note: "Do not mark Claw execution verified from Aion prose."
         })}</tool_result>`,
-        toolJson: { name: "aion_execute", ok: ran.ok }
+        toolJson: { name: "aion_execute", ok: ran.ok && ran.status !== "BLOCKED" }
       });
-      input.onEvent({ type: "tool_end", name: "aion_execute", ok: ran.ok, preview: preview(JSON.stringify({ status: ran.status, tools: ran.previous_tool_results.length })) });
+      input.onEvent({ type: "tool_end", name: "aion_execute", ok: ran.ok && ran.status !== "BLOCKED", preview: preview(JSON.stringify({ status: ran.status, tools: ran.previous_tool_results.length })) });
       emitSelf(input.onEvent, self.publicSnapshot(), "ACTION");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -338,7 +339,9 @@ export async function runClawTurn(input: {
             finalText = execution.report(`Blocker reported by model: ${call.args.reason}`);
             value = { ok: false, blocked: true, reason: call.args.reason };
           } else {
-            if (requiresPlan && !execution.goal) throw new Error("Record execution_plan before acting on this work request.");
+            if (requiresPlan && !execution.goal) {
+              try { execution.ensureDefaultPlan(userText); } catch { /* allow the tool */ }
+            }
             execution.begin(call.name);
             const resultValue = await awaitWithSignal(executeClawTool(call.name, call.args, {
               conversationId: input.conversationId,
