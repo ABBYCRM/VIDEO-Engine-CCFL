@@ -1,25 +1,19 @@
 // lib/nvidia/embed.ts — NVIDIA NIM text embeddings for Claw's dev-skills RAG.
 //
-// AUDIT 2026-09-03: both NVIDIA embed models are EOL:
-//   nv-embedqa-e5-v5        → 410 Gone (EOL 2026-08-25)
-//   llama-3.2-nv-embedqa-1b-v2 → 410 Gone (EOL 2026-05-18)
-//
-// The dev-skills RAG falls back to keyword-only search automatically
-// (lib/claw/dev-skills.ts). Embedding is not required for MVP operation.
-// When NVIDIA hosts a new embed model on this endpoint, re-enable here
-// and recreate the vector index.
-//
-// NVIDIA's hosted embedding endpoint (when re-enabled):
+// NVIDIA's hosted embedding endpoint:
 //   POST https://integrate.api.nvidia.com/v1/embeddings
 //   Authorization: Bearer $NVIDIA_API_KEY
-//   { "model": "<model>",
+//   { "model": "nvidia/nemotron-3-embed-1b",
 //     "input": ["passage 1", "passage 2", ...],
 //     "input_type": "passage" | "query",
-//     "truncate": "END" }
-// → { "data": [ { "index": 0, "embedding": [ ...dim floats ] }, ... ] }
+//     "truncate": "END",
+//     "dimensions": 2048 }
 //
-// When switching models, update the pgvector column dimension in
-// migrations/006_dev_skill_vectors.sql to match the new model's output dim.
+// Nemotron 3 Embed 1B returns native 2048-dimensional float embeddings.
+// The pgvector column dimension in migrations/006 and vector-store.ts MUST
+// remain aligned with EMBED_DIM. Legacy embed IDs are retained only so an
+// old persisted setting can be recognized and reported; they are not the
+// default and should not be selected for new indexing.
 
 import { NVIDIA_BASE } from "./models";
 import { getNvidiaApiKey, NvidiaAuthError, NvidiaUpstreamError } from "./client";
@@ -27,28 +21,41 @@ import { heliconeRoute } from "./helicone";
 import { db } from "@/lib/db";
 
 export type EmbedModelId =
+  | "nvidia/nemotron-3-embed-1b"
   | "nvidia/nv-embedqa-e5-v5"
   | "nvidia/llama-3.2-nv-embedqa-1b-v2";
 
-export const EMBED_MODELS: Record<EmbedModelId, { id: EmbedModelId; label: string; dim: number; notes: string }> = {
+export const EMBED_MODELS: Record<
+  EmbedModelId,
+  { id: EmbedModelId; label: string; dim: number; notes: string; active: boolean }
+> = {
+  "nvidia/nemotron-3-embed-1b": {
+    id: "nvidia/nemotron-3-embed-1b",
+    label: "Nemotron 3 Embed 1B ★ default",
+    dim: 2048,
+    notes: "Active NVIDIA text embedding model for semantic search and RAG. Native float output is 2048 dimensions.",
+    active: true
+  },
   "nvidia/nv-embedqa-e5-v5": {
     id: "nvidia/nv-embedqa-e5-v5",
-    label: "NV-EmbedQA E5 v5 (default) ⚠️",
+    label: "NV-EmbedQA E5 v5 (legacy)",
     dim: 1024,
-    notes: "[EOL 2026-08-25] 1024-dim QA retrieval embedding. Currently unavailable — dev-skills RAG uses keyword fallback."
+    notes: "Legacy model retained for persisted-setting compatibility. Do not use for new indexes.",
+    active: false
   },
   "nvidia/llama-3.2-nv-embedqa-1b-v2": {
     id: "nvidia/llama-3.2-nv-embedqa-1b-v2",
-    label: "Llama 3.2 NV-EmbedQA 1B v2 ⚠️",
+    label: "Llama 3.2 NV-EmbedQA 1B v2 (legacy)",
     dim: 2048,
-    notes: "[EOL 2026-05-18] 2048-dim. Currently unavailable — dev-skills RAG uses keyword fallback."
+    notes: "Legacy model retained for persisted-setting compatibility. Do not use for new indexes.",
+    active: false
   }
 };
 
-export const DEFAULT_CLAW_EMBED_MODEL: EmbedModelId = "nvidia/nv-embedqa-e5-v5";
+export const DEFAULT_CLAW_EMBED_MODEL: EmbedModelId = "nvidia/nemotron-3-embed-1b";
 
 /** The embedding vector dimension the default model produces. The
- *  pgvector column type (migrations/006) MUST match this. */
+ * pgvector column type MUST match this. */
 export const EMBED_DIM = EMBED_MODELS[DEFAULT_CLAW_EMBED_MODEL].dim;
 
 const EMBED_MODEL_KEY = "claw_embed_model";
@@ -58,19 +65,20 @@ function getRaw(key: string): string | null {
 }
 
 export function isEmbedModelId(v: unknown): v is EmbedModelId {
-  return typeof v === "string" && v in EMBED_MODELS;
+  return typeof v === "string" && Object.hasOwn(EMBED_MODELS, v);
 }
 
-/** Embedding model Claw uses. Env var wins, then persisted setting,
- *  then the 1024-dim default. Mirrors getClawModel()/getClawRerankModel(). */
+/** Embedding model Claw uses. Env var wins, then persisted setting, then
+ * the active 2048-dimensional default. Legacy configured IDs are accepted
+ * only when explicitly selected so existing installations fail visibly at
+ * the upstream instead of being silently rewritten. */
 export function getClawEmbedModel(): EmbedModelId {
   const raw = process.env.CLAW_EMBED_MODEL || getRaw(EMBED_MODEL_KEY);
   if (isEmbedModelId(raw)) return raw;
   return DEFAULT_CLAW_EMBED_MODEL;
 }
 
-/** Embeddings reuse the single NVIDIA key. Without it we can't embed,
- *  so the vector store stays empty and retrieval falls back to keyword. */
+/** Embeddings reuse the NVIDIA key. */
 export function isEmbedConfigured(): boolean {
   try {
     getNvidiaApiKey();
@@ -84,12 +92,26 @@ function redact(s: string, max = 280): string {
   return s.length <= max ? s : s.slice(0, max) + `… (+${s.length - max} chars)`;
 }
 
+function assertValidEmbedding(vector: unknown, expectedDim: number, index: number): asserts vector is number[] {
+  if (!Array.isArray(vector)) {
+    throw new NvidiaUpstreamError(`NVIDIA embedding response missing vector at index ${index}`);
+  }
+  if (vector.length !== expectedDim) {
+    throw new NvidiaUpstreamError(
+      `NVIDIA embedding dimension mismatch at index ${index}: expected ${expectedDim}, received ${vector.length}`
+    );
+  }
+  if (!vector.every((value) => typeof value === "number" && Number.isFinite(value))) {
+    throw new NvidiaUpstreamError(`NVIDIA embedding response contained non-finite values at index ${index}`);
+  }
+}
+
 /**
  * Embed one or more texts. `inputType` MUST be "passage" when indexing
- * documents and "query" when embedding a search query — nv-embedqa is
- * asymmetric and mixing them degrades recall. Returns one Float32-ish
- * number[] per input, in input order. Throws NvidiaAuthError (missing
- * key) or NvidiaUpstreamError (non-2xx) so callers can fall back.
+ * documents and "query" when embedding a search query. Returns one vector
+ * per input, in input order. Malformed or dimensionally inconsistent
+ * upstream responses fail closed instead of silently producing an invalid
+ * pgvector index.
  */
 export async function embedTexts(input: {
   texts: string[];
@@ -97,7 +119,7 @@ export async function embedTexts(input: {
   model?: EmbedModelId;
   signal?: AbortSignal;
 }): Promise<number[][]> {
-  const texts = (input.texts ?? []).filter((t) => typeof t === "string");
+  const texts = (input.texts ?? []).filter((t) => typeof t === "string" && t.trim().length > 0);
   if (texts.length === 0) return [];
 
   let key: string;
@@ -109,14 +131,14 @@ export async function embedTexts(input: {
   }
 
   const model = input.model ?? getClawEmbedModel();
-  const body = {
+  const meta = EMBED_MODELS[model];
+  const body: Record<string, unknown> = {
     model,
-    // Cap each input so a long skill body can't overflow the model's
-    // context; "END" truncation is the server-side backstop.
-    input: texts.map((t) => t.slice(0, 3000)),
+    input: texts.map((t) => t.slice(0, 12_000)),
     input_type: input.inputType,
-    truncate: "END" as const
+    truncate: "END"
   };
+  if (model === "nvidia/nemotron-3-embed-1b") body.dimensions = meta.dim;
 
   const timeoutController = new AbortController();
   const t = setTimeout(() => timeoutController.abort(new Error("NVIDIA embed timed out after 20s")), 20_000);
@@ -138,22 +160,35 @@ export async function embedTexts(input: {
     });
     if (!r.ok) {
       const text = await r.text();
-      // never log input content — it may include the operator's own material
       console.warn(`[nvidia] embed HTTP ${r.status} for model ${model} (body ${redact(text)})`);
-      if (r.status === 401 || r.status === 403) throw new NvidiaAuthError(`NVIDIA rejected the API key (HTTP ${r.status})`);
+      if (r.status === 401 || r.status === 403) {
+        throw new NvidiaAuthError(`NVIDIA rejected the API key (HTTP ${r.status})`);
+      }
       throw new NvidiaUpstreamError(`NVIDIA embed HTTP ${r.status}: ${redact(text)}`, r.status);
     }
-    const json = (await r.json()) as { data?: Array<{ index?: number; embedding?: number[] }> };
+
+    const json = (await r.json()) as { data?: Array<{ index?: number; embedding?: unknown }> };
     const rows = Array.isArray(json.data) ? json.data : [];
-    // Re-order defensively by `index` so we always align with `texts`.
-    const out: number[][] = new Array(texts.length);
-    rows.forEach((row, i) => {
-      const idx = typeof row.index === "number" ? row.index : i;
-      if (Array.isArray(row.embedding) && idx >= 0 && idx < texts.length) out[idx] = row.embedding;
+    if (rows.length !== texts.length) {
+      throw new NvidiaUpstreamError(
+        `NVIDIA embedding response count mismatch: expected ${texts.length}, received ${rows.length}`
+      );
+    }
+
+    const out: Array<number[] | undefined> = new Array(texts.length);
+    rows.forEach((row, responseIndex) => {
+      const idx = typeof row.index === "number" ? row.index : responseIndex;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= texts.length || out[idx]) {
+        throw new NvidiaUpstreamError(`NVIDIA embedding response contained invalid index ${String(idx)}`);
+      }
+      assertValidEmbedding(row.embedding, meta.dim, idx);
+      out[idx] = row.embedding;
     });
-    // Fill any gaps (shouldn't happen) so callers never hit undefined.
-    for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = [];
-    return out;
+
+    return out.map((vector, index) => {
+      assertValidEmbedding(vector, meta.dim, index);
+      return vector;
+    });
   } finally {
     clearTimeout(t);
   }
