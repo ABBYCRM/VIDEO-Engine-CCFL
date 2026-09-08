@@ -150,7 +150,7 @@ export const CLAW_TOOLS: ToolDef[] = [
         maxCycles: 8
       }, context);
       return {
-        ok: result.ok,
+        ok: result.ok && result.status !== "BLOCKED",
         source: result.source,
         status: result.status,
         complete: result.complete,
