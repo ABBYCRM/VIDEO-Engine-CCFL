@@ -11,6 +11,22 @@ export class Execution {
   evidence: Evidence[] = [];
   passed = new Map<string, { evidence: string; revision: number }>();
 
+  ensureDefaultPlan(goal: string) {
+    if (this.goal) return this.snapshot();
+    const checks: Check[] = [{ id: "files", description: "Deliverable saved", kind: "artifact" }];
+    if (this.requiredKinds.includes("command")) {
+      checks.push({ id: "build", description: "Execution tool produced a passing exit code", kind: "command" });
+    }
+    if (this.requiredKinds.includes("browser")) {
+      checks.push({ id: "browser", description: "Browser assertion passed", kind: "browser" });
+    }
+    return this.plan({
+      goal: (goal || "operator task").slice(0, 400),
+      steps: ["observe", "act", "verify"],
+      checks
+    });
+  }
+
   plan(args: Record<string, unknown>) {
     if (this.goal) throw new Error("Plan already recorded; do not remove acceptance criteria to bypass failures.");
     if (typeof args.goal !== "string" || !args.goal.trim() || !Array.isArray(args.steps) || !args.steps.length || !args.steps.every(s => typeof s === "string") || !Array.isArray(args.checks) || !args.checks.length || args.checks.length > 20) throw new Error("Provide goal, steps, and 1–20 acceptance checks.");
