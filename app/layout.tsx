@@ -15,16 +15,12 @@ export const metadata: Metadata = {
   }
 };
 
-// Mobile-first viewport. We let the device pick its natural width (so the layout
-// doesn't get clipped on Android Chrome which can ignore a fixed width hint), but
-// we disable user zoom so pinch-zoom doesn't re-flow the layout. The design is
-// built to look right between 360-430px; the MobileFrame component then puts the
-// app in a 430px window when viewed on a real desktop browser.
+// Keep the mobile-first viewport while allowing browser/user zoom. Preventing
+// zoom is an accessibility regression for low-vision users and is unnecessary
+// for the responsive 360–430px layout.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   themeColor: "#ffffff"
 };
