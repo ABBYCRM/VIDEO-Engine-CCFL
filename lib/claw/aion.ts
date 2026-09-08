@@ -1,5 +1,6 @@
 // Server-side Aion-Brain bridge. Credentials and destination never come from tool arguments.
 // Endpoint shapes match docs/claw-contract.md on Aion-Brain main (0613977). Do not invent fields.
+import { PRIMARY_CLAW_NVIDIA_MODEL } from "../nvidia/models.ts";
 export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string; agentic?: boolean };
 
 export type AionAcceptance = { id: string; description: string; tool?: string };
@@ -257,6 +258,7 @@ export async function aionExecute(input: AionExecuteInput, context: AionContext 
     ...(acceptance.length ? { acceptance } : {}),
     session_id,
     max_cycles,
+    model: PRIMARY_CLAW_NVIDIA_MODEL,
     stream: false
   }, 180_000);
   const body = await response.json() as Record<string, unknown>;
