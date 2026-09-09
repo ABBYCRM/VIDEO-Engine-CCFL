@@ -39,6 +39,9 @@ services:
         scope: RUN_AND_BUILD_TIME
         value: ${db.DATABASE_URL}
 
+      - key: BITDEER_API_KEY
+        scope: RUN_TIME
+        type: SECRET
       - key: NVIDIA_API_KEY
         scope: RUN_TIME
         type: SECRET
@@ -49,12 +52,27 @@ services:
         scope: RUN_TIME
         type: SECRET
 
+      - key: BITDEER_BASE_URL
+        scope: RUN_TIME
+        value: https://api-inference.bitdeer.ai/v1
+      - key: NVIDIA_BASE_URL
+        scope: RUN_TIME
+        value: https://api-inference.bitdeer.ai/v1
+      - key: CLAW_NVIDIA_MODEL
+        scope: RUN_TIME
+        value: mistralai/Mistral-Large-3-675B-Instruct-2512
+      - key: BITDEER_TEXT_MODEL
+        scope: RUN_TIME
+        value: mistralai/Mistral-Large-3-675B-Instruct-2512
+      - key: BITDEER_IMAGE_MODEL
+        scope: RUN_TIME
+        value: black-forest-labs/FLUX-2-pro
       - key: CLAW_EMBED_MODEL
         scope: RUN_TIME
-        value: nvidia/nemotron-3-embed-1b
+        value: nvidia/Nemotron-3-Embed-1B-BF16
       - key: CLAW_RERANK_MODEL
         scope: RUN_TIME
-        value: nvidia/llama-3.2-nv-rerankqa-1b-v2
+        value: BAAI/bge-reranker-v2-m3
 
 databases:
   - name: db
