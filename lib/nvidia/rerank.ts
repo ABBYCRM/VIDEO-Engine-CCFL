@@ -111,9 +111,10 @@ export async function rerankPassages(input: {
     }
     const json = (await r.json()) as {
       results?: Array<{ index?: number; relevance_score?: number; logit?: number }>;
-      rankings?: Array<{ index?: number; logit?: number }>;
+      rankings?: Array<{ index?: number; relevance_score?: number; logit?: number }>;
     };
-    const rows = Array.isArray(json.results) ? json.results : (Array.isArray(json.rankings) ? json.rankings : []);
+    const rows: Array<{ index?: number; relevance_score?: number; logit?: number }> =
+      Array.isArray(json.results) ? json.results : (Array.isArray(json.rankings) ? json.rankings : []);
     const cleaned = rows
       .filter((x) => typeof x.index === "number" && x.index >= 0 && x.index < passages.length)
       .map((x) => ({
