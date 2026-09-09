@@ -1,25 +1,4 @@
-// Optional Helicone (helicone.ai) LLM observability proxy in front of the
-// NVIDIA NIM calls in lib/nvidia/client.ts.
-//
-// Verified against Helicone's own Gateway docs (2026-08-29): route through
-// https://gateway.helicone.ai instead of the provider's own base URL, with
-// headers Helicone-Auth: Bearer <key>, Helicone-Target-Url: <real
-// upstream URL>, Helicone-Target-Provider: <label>. The original provider
-// auth header (Authorization: Bearer NVIDIA_KEY) still goes through too —
-// Helicone forwards it to the target.
-//
-// Deliberately NOT auto-enabled just because HELICONE_API_KEY is present,
-// unlike every other provider key in this app. Reason: Helicone's docs
-// state that a custom/unapproved target domain (NVIDIA's
-// integrate.api.nvidia.com is not one of their pre-approved providers) is
-// capped at 1 request/second and 10,000/day on their gateway. Claw is a
-// real-time chat a real operator uses live; silently routing every one of
-// its NVIDIA calls through an undocumented rate limit the moment a key
-// exists would be a bad trade with no warning. Requires a second,
-// explicit HELICONE_ENABLED=true (or the equivalent Settings toggle)
-// before it activates. Get in touch with Helicone (or check their current
-// docs) about approving the domain before relying on this for real
-// traffic volume.
+// Optional Helicone LLM observability proxy in front of Bitdeer calls.
 
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
@@ -52,11 +31,6 @@ export function isHeliconeEnabled(): boolean {
   return explicitlyEnabled && Boolean(getHeliconeApiKey());
 }
 
-/**
- * Given the real upstream URL this call would otherwise hit, returns
- * either that same URL unchanged (Helicone off) or the Helicone gateway
- * URL + the extra headers needed to route it there.
- */
 export function heliconeRoute(upstreamUrl: string): { url: string; extraHeaders: Record<string, string> } {
   if (!isHeliconeEnabled()) return { url: upstreamUrl, extraHeaders: {} };
   const key = getHeliconeApiKey()!;
@@ -66,7 +40,7 @@ export function heliconeRoute(upstreamUrl: string): { url: string; extraHeaders:
     extraHeaders: {
       "Helicone-Auth": `Bearer ${key}`,
       "Helicone-Target-Url": upstreamUrl,
-      "Helicone-Target-Provider": "nvidia"
+      "Helicone-Target-Provider": "bitdeer"
     }
   };
 }
