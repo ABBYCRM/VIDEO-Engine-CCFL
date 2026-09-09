@@ -69,7 +69,7 @@ export function connectorInventory() {
     hedra: { configured: Boolean(secret("hedra_api_key", "HEDRA_API_KEY")), when: "Hedra v3 status / image models. Does not start video jobs." },
     resend: { configured: Boolean(secret("resend_api_key", "RESEND_API_KEY")), when: "Transactional email (resend_send)." },
     github: { configured: Boolean(secret("github_personal_access_token", "GITHUB_PERSONAL_ACCESS_TOKEN")), when: "GitHub REST (github_request)." },
-    nvidia: { configured: Boolean(process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), when: "Claw chat, vision, embed, rerank." },
+    nvidia: { configured: Boolean(process.env.BITDEER_API_KEY || process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), when: "Claw chat, vision, embed, rerank via Bitdeer." },
     aion: { configured: Boolean(process.env.AION_BASE_URL && process.env.AION_API_KEY), when: "Connected brain — prefer aion_execute for toolful work; aion_status / aion_consult stay advice-only." },
     gdy: { configured: isGdyConfigured(), when: "OSINT RAG (gdy_search, gdy_rag_context, gdy_categories, gdy_tools). Fail-soft if GDY_API_KEY is missing." },
     arxiv: { configured: true, when: "Public preprint search (arxiv_search). No key." }
@@ -219,9 +219,9 @@ export function heliconeStatus() {
     configured,
     enabled,
     hint: !configured
-      ? "Set HELICONE_API_KEY and HELICONE_ENABLED=true to proxy NVIDIA calls. A key alone does not enable the proxy."
+      ? "Set HELICONE_API_KEY and HELICONE_ENABLED=true to proxy Bitdeer calls. A key alone does not enable the proxy."
       : enabled
-        ? "Helicone gateway is wrapping NVIDIA NIM requests."
-        : "Key is present but HELICONE_ENABLED is off — Claw talks to integrate.api.nvidia.com directly."
+        ? "Helicone gateway is wrapping Bitdeer inference requests."
+        : "Key is present but HELICONE_ENABLED is off — Claw talks to api-inference.bitdeer.ai directly."
   };
 }

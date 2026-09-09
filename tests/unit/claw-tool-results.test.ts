@@ -94,7 +94,7 @@ test("native tool_calls execute, update previous_tool_results, and appear in SEL
   const context = vm.createContext({
     AbortController, AbortSignal, setTimeout, clearTimeout, Execution, parseToolCalls, awaitWithSignal,
     SelfStateController, createSelfState,
-    getClawModel: () => "nvidia/nemotron-3-ultra-550b-a55b",
+    getClawModel: () => "mistralai/Mistral-Large-3-675B-Instruct-2512",
     isNvidiaEnabled: () => true,
     getConversation: () => ({ title: "Existing thread" }),
     listMessages: () => [...messages],

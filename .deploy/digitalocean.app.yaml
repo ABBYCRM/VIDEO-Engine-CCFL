@@ -69,14 +69,42 @@ services:
         scope: RUN_TIME
         type: SECRET
         value: "REPLACE_WITH_COMPOSIO_KEY"
+      - key: BITDEER_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: "REPLACE_WITH_BITDEER_KEY"
       - key: NVIDIA_API_KEY
         scope: RUN_TIME
         type: SECRET
-        value: "REPLACE_WITH_NVIDIA_KEY"
+        value: "REPLACE_WITH_BITDEER_KEY"
+      - key: NVIDIA_BASE_URL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "https://api-inference.bitdeer.ai/v1"
+      - key: BITDEER_BASE_URL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "https://api-inference.bitdeer.ai/v1"
       - key: CLAW_NVIDIA_MODEL
         scope: RUN_TIME
         type: GENERAL
-        value: "nvidia/nemotron-3.5-lightning-30b-a3b"
+        value: "mistralai/Mistral-Large-3-675B-Instruct-2512"
+      - key: BITDEER_TEXT_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "mistralai/Mistral-Large-3-675B-Instruct-2512"
+      - key: BITDEER_IMAGE_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "black-forest-labs/FLUX-2-pro"
+      - key: CLAW_RERANK_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "BAAI/bge-reranker-v2-m3"
+      - key: CLAW_EMBED_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "nvidia/Nemotron-3-Embed-1B-BF16"
       - key: GEMINI_API_KEY
         scope: RUN_TIME
         type: SECRET

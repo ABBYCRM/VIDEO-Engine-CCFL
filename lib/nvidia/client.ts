@@ -54,8 +54,8 @@ export function getNvidiaApiKeys(): string[] {
     try {
       const decrypted = decryptSecret(encryptedPool);
       const keys = JSON.parse(decrypted) as unknown[];
-      if (Array.isArray(keys) && keys.every((k) => typeof k === "string" && k.startsWith("nvapi-")))
-        return keys as string[];
+      if (Array.isArray(keys) && keys.every((k) => typeof k === "string" && k.trim().length >= 8))
+        return keys.map((k) => String(k).trim()) as string[];
     } catch { /* corrupt or old — fall through */ }
   }
   // 2. Legacy single key from settings DB
@@ -65,17 +65,17 @@ export function getNvidiaApiKeys(): string[] {
       return [decryptSecret(encrypted)];
     } catch { /* fall through */ }
   }
-  // 3. NVIDIA_API_KEYS env var (JSON array)
-  if (process.env.NVIDIA_API_KEYS) {
+  const envPool = process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEYS;
+  if (envPool) {
     try {
-      const keys = JSON.parse(process.env.NVIDIA_API_KEYS) as unknown[];
-      if (Array.isArray(keys) && keys.every((k) => typeof k === "string" && k.startsWith("nvapi-")))
-        return keys as string[];
+      const keys = JSON.parse(envPool) as unknown[];
+      if (Array.isArray(keys) && keys.every((k) => typeof k === "string" && k.trim().length >= 8))
+        return keys.map((k) => String(k).trim()) as string[];
     } catch { /* invalid JSON — fall through */ }
   }
-  // 4. NVIDIA_API_KEY env var (single key, legacy)
-  if (process.env.NVIDIA_API_KEY) return [process.env.NVIDIA_API_KEY];
-  throw new NvidiaAuthError("NVIDIA API key(s) are not configured");
+  const envOne = process.env.BITDEER_API_KEY || process.env.NVIDIA_API_KEY;
+  if (envOne) return [envOne];
+  throw new NvidiaAuthError("Bitdeer API key(s) are not configured (BITDEER_API_KEY)");
 }
 
 // Persist the full key pool (all 11) as an encrypted JSON array.
@@ -103,7 +103,7 @@ export function getNvidiaModel(): NvidiaModelId {
 const CLAW_MODEL_KEY = "claw_nvidia_model";
 
 export function getClawModel(): NvidiaModelId {
-  const raw = process.env.CLAW_NVIDIA_MODEL || getRaw(CLAW_MODEL_KEY);
+  const raw = process.env.CLAW_NVIDIA_MODEL || process.env.BITDEER_TEXT_MODEL || getRaw(CLAW_MODEL_KEY);
   if (isNvidiaModelId(raw) && raw !== "disabled") return raw;
   return DEFAULT_CLAW_NVIDIA_MODEL;
 }
@@ -116,7 +116,7 @@ export function setClawModel(model: NvidiaModelId): void {
 }
 
 export function isClawModelEnvOverridden(): boolean {
-  return Boolean(process.env.CLAW_NVIDIA_MODEL);
+  return Boolean(process.env.CLAW_NVIDIA_MODEL || process.env.BITDEER_TEXT_MODEL);
 }
 
 export function isNvidiaEnabled(): boolean {
@@ -201,9 +201,9 @@ function normalizeToolCalls(raw: unknown): ChatToolCall[] {
 function extractAssistant(json: Record<string, unknown> | undefined, fallbackModel: string): ChatResponse {
   const choice = (json?.choices as Array<Record<string, unknown>> | undefined)?.[0];
   const message = (choice?.message ?? {}) as Record<string, unknown>;
-  const text = typeof message.content === "string" ? message.content : "";
   const reasoning = typeof message.reasoning_content === "string" ? message.reasoning_content
     : typeof message.reasoning === "string" ? message.reasoning : "";
+  const text = typeof message.content === "string" && message.content.length > 0 ? message.content : reasoning;
   const usage = json?.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
   return {
     text,
@@ -328,7 +328,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
         const status = result.status;
         // Non-retryable: bad key or model not on this key
         if (status === 401 || status === 403) {
-          console.warn(`[nvidia] key ${i + 1}/${keys.length} returned ${status} — key may be invalid: ${redact(result.bodyText ?? "")}`);
+          console.warn(`[bitdeer] key ${i + 1}/${keys.length} returned ${status} — key may be invalid: ${redact(result.bodyText ?? "")}`);
           if (i === keys.length - 1) throw new NvidiaAuthError(`NVIDIA rejected the API key (HTTP ${status})`);
           continue;
         }
@@ -338,7 +338,7 @@ export async function chatCompletion(req: ChatRequest): Promise<ChatResponse> {
         }
         // Retryable: 429/529/503/timeout/TypeError → try next key
         if (isRetryableNvidiaError(status) || result.timedOut) {
-          console.warn(`[nvidia] key ${i + 1}/${keys.length} returned ${status}${result.timedOut ? " (timeout)" : ""} — trying next key`);
+          console.warn(`[bitdeer] key ${i + 1}/${keys.length} returned ${status}${result.timedOut ? " (timeout)" : ""} — trying next key`);
           if (i === keys.length - 1) throw new NvidiaUpstreamError(
             `All ${keys.length} NVIDIA keys exhausted (last: HTTP ${status}). Try again shortly.`,
             status
@@ -404,13 +404,13 @@ export async function chatCompletionStream(
       if (!r.ok) {
         const text = await r.text();
         if (r.status === 401 || r.status === 403) {
-          console.warn(`[nvidia] stream key ${i + 1}/${keys.length} HTTP ${r.status}`);
+          console.warn(`[bitdeer] stream key ${i + 1}/${keys.length} HTTP ${r.status}`);
           if (i === keys.length - 1) throw new NvidiaAuthError(`NVIDIA rejected the API key (HTTP ${r.status})`);
           continue;
         }
         if (r.status === 404) throw new NvidiaUpstreamError(`Model ${req.model} not found on this key (HTTP 404)`, 404);
         if (isRetryableNvidiaError(r.status)) {
-          console.warn(`[nvidia] stream key ${i + 1}/${keys.length} HTTP ${r.status} — trying next key`);
+          console.warn(`[bitdeer] stream key ${i + 1}/${keys.length} HTTP ${r.status} — trying next key`);
           if (i === keys.length - 1) throw new NvidiaUpstreamError(
             `All ${keys.length} NVIDIA keys exhausted (last: HTTP ${r.status}). Try again shortly.`, r.status
           );
@@ -446,7 +446,7 @@ export async function chatCompletionStream(
       } catch (streamErr) {
         state.finishReason = "interrupted";
         if (req.signal?.aborted) throw req.signal.reason ?? new Error("Stopped");
-        console.warn(`[nvidia] stream watchdog/network error on key ${i + 1}/${keys.length}:`, streamErr instanceof Error ? streamErr.message : streamErr);
+        console.warn(`[bitdeer] stream watchdog/network error on key ${i + 1}/${keys.length}:`, streamErr instanceof Error ? streamErr.message : streamErr);
         if (!state.text && !signal.aborted) {
           // Try non-stream on this key as fallback
           try {
@@ -486,7 +486,7 @@ export async function chatCompletionStream(
       lastError = e as Error;
       // Network/timeout on this key → try next
       if (i < keys.length - 1) {
-        console.warn(`[nvidia] stream key ${i + 1}/${keys.length} network error — trying next key`);
+        console.warn(`[bitdeer] stream key ${i + 1}/${keys.length} network error — trying next key`);
         continue;
       }
     }

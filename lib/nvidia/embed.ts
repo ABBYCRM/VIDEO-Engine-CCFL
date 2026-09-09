@@ -21,6 +21,7 @@ import { heliconeRoute } from "./helicone";
 import { db } from "@/lib/db";
 
 export type EmbedModelId =
+  | "nvidia/Nemotron-3-Embed-1B-BF16"
   | "nvidia/nemotron-3-embed-1b"
   | "nvidia/nv-embedqa-e5-v5"
   | "nvidia/llama-3.2-nv-embedqa-1b-v2";
@@ -29,12 +30,19 @@ export const EMBED_MODELS: Record<
   EmbedModelId,
   { id: EmbedModelId; label: string; dim: number; notes: string; active: boolean }
 > = {
+  "nvidia/Nemotron-3-Embed-1B-BF16": {
+    id: "nvidia/Nemotron-3-Embed-1B-BF16",
+    label: "Nemotron 3 Embed 1B (Bitdeer) ★ default",
+    dim: 2048,
+    notes: "Bitdeer-hosted Nemotron 3 Embed 1B. Native float output is 2048 dimensions.",
+    active: true
+  },
   "nvidia/nemotron-3-embed-1b": {
     id: "nvidia/nemotron-3-embed-1b",
-    label: "Nemotron 3 Embed 1B ★ default",
+    label: "Nemotron 3 Embed 1B (legacy id)",
     dim: 2048,
-    notes: "Active NVIDIA text embedding model for semantic search and RAG. Native float output is 2048 dimensions.",
-    active: true
+    notes: "Legacy NVIDIA.com model id. Rewritten to nvidia/Nemotron-3-Embed-1B-BF16 on Bitdeer.",
+    active: false
   },
   "nvidia/nv-embedqa-e5-v5": {
     id: "nvidia/nv-embedqa-e5-v5",
@@ -52,7 +60,10 @@ export const EMBED_MODELS: Record<
   }
 };
 
-export const DEFAULT_CLAW_EMBED_MODEL: EmbedModelId = "nvidia/nemotron-3-embed-1b";
+export const DEFAULT_CLAW_EMBED_MODEL: EmbedModelId = "nvidia/Nemotron-3-Embed-1B-BF16";
+const LEGACY_TO_BITDEER: Partial<Record<EmbedModelId, EmbedModelId>> = {
+  "nvidia/nemotron-3-embed-1b": "nvidia/Nemotron-3-Embed-1B-BF16"
+};
 
 /** The embedding vector dimension the default model produces. The
  * pgvector column type MUST match this. */
@@ -94,16 +105,16 @@ function redact(s: string, max = 280): string {
 
 function assertValidEmbedding(vector: unknown, expectedDim: number, index: number): asserts vector is number[] {
   if (!Array.isArray(vector)) {
-    throw new NvidiaUpstreamError(`NVIDIA embedding response missing vector at index ${index}`, 502);
+    throw new NvidiaUpstreamError(`Bitdeer embedding response missing vector at index ${index}`, 502);
   }
   if (vector.length !== expectedDim) {
     throw new NvidiaUpstreamError(
-      `NVIDIA embedding dimension mismatch at index ${index}: expected ${expectedDim}, received ${vector.length}`,
+      `Bitdeer embedding dimension mismatch at index ${index}: expected ${expectedDim}, received ${vector.length}`,
       502
     );
   }
   if (!vector.every((value) => typeof value === "number" && Number.isFinite(value))) {
-    throw new NvidiaUpstreamError(`NVIDIA embedding response contained non-finite values at index ${index}`, 502);
+    throw new NvidiaUpstreamError(`Bitdeer embedding response contained non-finite values at index ${index}`, 502);
   }
 }
 
@@ -131,18 +142,16 @@ export async function embedTexts(input: {
     throw new NvidiaAuthError(e instanceof Error ? e.message : String(e));
   }
 
-  const model = input.model ?? getClawEmbedModel();
-  const meta = EMBED_MODELS[model];
+  const requested = input.model ?? getClawEmbedModel();
+  const model = LEGACY_TO_BITDEER[requested] || requested;
+  const meta = EMBED_MODELS[model] ?? EMBED_MODELS[DEFAULT_CLAW_EMBED_MODEL];
   const body: Record<string, unknown> = {
     model,
-    input: texts.map((t) => t.slice(0, 12_000)),
-    input_type: input.inputType,
-    truncate: "END"
+    input: texts.map((t) => t.slice(0, 12_000))
   };
-  if (model === "nvidia/nemotron-3-embed-1b") body.dimensions = meta.dim;
 
   const timeoutController = new AbortController();
-  const t = setTimeout(() => timeoutController.abort(new Error("NVIDIA embed timed out after 20s")), 20_000);
+  const t = setTimeout(() => timeoutController.abort(new Error("Bitdeer embed timed out after 20s")), 20_000);
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutController.signal]) : timeoutController.signal;
 
   try {
@@ -161,18 +170,18 @@ export async function embedTexts(input: {
     });
     if (!r.ok) {
       const text = await r.text();
-      console.warn(`[nvidia] embed HTTP ${r.status} for model ${model} (body ${redact(text)})`);
+      console.warn(`[bitdeer] embed HTTP ${r.status} for model ${model} (body ${redact(text)})`);
       if (r.status === 401 || r.status === 403) {
-        throw new NvidiaAuthError(`NVIDIA rejected the API key (HTTP ${r.status})`);
+        throw new NvidiaAuthError(`Bitdeer rejected the API key (HTTP ${r.status})`);
       }
-      throw new NvidiaUpstreamError(`NVIDIA embed HTTP ${r.status}: ${redact(text)}`, r.status);
+      throw new NvidiaUpstreamError(`Bitdeer embed HTTP ${r.status}: ${redact(text)}`, r.status);
     }
 
     const json = (await r.json()) as { data?: Array<{ index?: number; embedding?: unknown }> };
     const rows = Array.isArray(json.data) ? json.data : [];
     if (rows.length !== texts.length) {
       throw new NvidiaUpstreamError(
-        `NVIDIA embedding response count mismatch: expected ${texts.length}, received ${rows.length}`,
+        `Bitdeer embedding response count mismatch: expected ${texts.length}, received ${rows.length}`,
         502
       );
     }
@@ -181,7 +190,7 @@ export async function embedTexts(input: {
     rows.forEach((row, responseIndex) => {
       const idx = typeof row.index === "number" ? row.index : responseIndex;
       if (!Number.isInteger(idx) || idx < 0 || idx >= texts.length || out[idx]) {
-        throw new NvidiaUpstreamError(`NVIDIA embedding response contained invalid index ${String(idx)}`, 502);
+        throw new NvidiaUpstreamError(`Bitdeer embedding response contained invalid index ${String(idx)}`, 502);
       }
       assertValidEmbedding(row.embedding, meta.dim, idx);
       out[idx] = row.embedding;

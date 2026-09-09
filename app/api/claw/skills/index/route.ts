@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     return json({ error: "No vector DB configured. Set VECTOR_DATABASE_URL or DATABASE_URL." }, 503);
   }
   if (!isEmbedConfigured()) {
-    return json({ error: "NVIDIA API key not configured — cannot embed skills. Set NVIDIA_API_KEY or the nvidia_api_key setting." }, 503);
+    return json({ error: "Bitdeer API key not configured — cannot embed skills. Set BITDEER_API_KEY." }, 503);
   }
 
   let force = false;

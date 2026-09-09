@@ -83,7 +83,7 @@ function NvidiaPanel() {
         setSelectedModel(d.model || "");
       }
     } catch {
-      setFlash({ kind: "error", msg: "Failed to load NVIDIA state." });
+      setFlash({ kind: "error", msg: "Failed to load Bitdeer state." });
     } finally {
       setLoading(false);
     }
@@ -93,8 +93,8 @@ function NvidiaPanel() {
 
   async function addKey() {
     const key = newKey.trim();
-    if (!key.startsWith("nvapi-")) {
-      setFlash({ kind: "error", msg: "NVIDIA API keys start with nvapi-." });
+    if (key.trim().length < 8) {
+      setFlash({ kind: "error", msg: "Bitdeer API key looks too short." });
       return;
     }
     setSaving(true);
@@ -258,7 +258,7 @@ function NvidiaPanel() {
           })}
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Working models verified 2026-09-03: Llama 3.2 11B Vision (fastest), Nemotron Super 120B, Nemotron Nano Omni (reasoning), DeepSeek V4 Pro (variable).
+          Bitdeer models: Mistral Large 3 675B (agent default), GLM-5 (primary/fallback). Image = FLUX-2-pro. Rerank = BGE v2-m3.
         </p>
       </div>
 
@@ -283,7 +283,7 @@ function NvidiaPanel() {
               value={newKey}
               onChange={e => setNewKey(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && newKey.trim()) void addKey(); }}
-              placeholder="nvapi-xxxxxxxxxxxxxxxxxxxxxxxx"
+              placeholder="Bitdeer API key"
               className="w-full rounded-xl border border-border bg-[hsl(var(--background))] px-3.5 py-2.5 pr-10 text-[13px] text-foreground placeholder:text-muted-foreground outline-none transition focus:border-[rgba(180,180,255,0.40)]"
             />
             <button
