@@ -18,7 +18,7 @@ export async function planTasks(opts: {
   limits: SwarmLimits;
   gateway: ModelGateway;
   signal?: AbortSignal;
-}): Promise<{ tasks: PlannedTask[]; via: "planner" | "fallback"; raw?: string; error?: string }> {
+}): Promise<{ tasks: PlannedTask[]; via: "planner" | "fallback"; raw?: string; error?: string; usage?: { promptTokens: number; completionTokens: number }; model?: string }> {
   const fallback = defaultPlan(opts.objective, opts.limits.maxAgents);
   if (!opts.gateway.available) return { tasks: fallback, via: "fallback", error: opts.gateway.note };
   try {
@@ -36,7 +36,13 @@ export async function planTasks(opts: {
       ],
     });
     const tasks = parsePlannerOutput(result.text, opts.limits);
-    return { tasks, via: "planner", raw: result.text.slice(0, 2000) };
+    return {
+      tasks,
+      via: "planner",
+      raw: result.text.slice(0, 2000),
+      usage: result.usage,
+      model: result.model,
+    };
   } catch (e) {
     return {
       tasks: fallback,

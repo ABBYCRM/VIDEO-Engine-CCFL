@@ -28,6 +28,8 @@ describe("swarm policy", () => {
     assert.equal(guardFetchUrl("http://127.0.0.1/secret").ok, false);
     assert.equal(guardFetchUrl("http://169.254.169.254/latest/meta-data").ok, false);
     assert.equal(guardFetchUrl("https://example.com").ok, true);
+    assert.equal(guardFetchUrl("http://[::1]/secret").ok, false);
+    assert.equal(guardFetchUrl("http://localhost/x").ok, false);
   });
 
   it("default plan always has a leader and respects maxAgents", () => {
@@ -50,8 +52,15 @@ describe("swarm policy", () => {
       parseLimits({ maxAgents: 4 }),
     );
     assert.equal(cycle.ok, false);
-    const big = validatePlan(defaultPlan("obj", 4), parseLimits({ maxAgents: 2 }));
-    assert.equal(big.ok, false);
+    const twoLeaders = validatePlan(
+      [
+        { id: "a", role: "researcher", objective: "a", dependsOn: [] },
+        { id: "s1", role: "synthesizer", objective: "s1", dependsOn: ["a"] },
+        { id: "s2", role: "synthesizer", objective: "s2", dependsOn: ["a"] },
+      ],
+      parseLimits({ maxAgents: 4 }),
+    );
+    assert.equal(twoLeaders.ok, false);
   });
 
   it("parses planner JSON even when fenced", () => {

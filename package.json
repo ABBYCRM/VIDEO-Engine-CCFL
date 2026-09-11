@@ -9,11 +9,12 @@
     "start:e2e": "bash scripts/e2e-webserver.sh",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --test tests/unit/*.test.ts",
+    "test:unit": "npx tsx --test tests/unit/*.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "token:key": "node scripts/generate-encryption-key.mjs",
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "swarm:worker": "npx tsx workers/swarm-worker.ts"
   },
   "dependencies": {
     "@composio/core": "^0.17.0",

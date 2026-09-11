@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { emptyUsage } from "./policy";
+import { queueSwarmMirror } from "./pg-mirror";
 import type { PlannedTask, PublicSwarmRun, SwarmEvent, SwarmLimits, SwarmMessage, SwarmRun, SwarmTask } from "./types";
 
 const controllers = new Map<string, AbortController>();
@@ -73,6 +74,9 @@ CREATE TABLE IF NOT EXISTS swarm_task_results (
   PRIMARY KEY (run_id, task_id)
 );
 `);
+
+try { db.exec("ALTER TABLE swarm_tasks ADD COLUMN lease_owner TEXT"); } catch { /* exists */ }
+try { db.exec("ALTER TABLE swarm_tasks ADD COLUMN lease_until INTEGER"); } catch { /* exists */ }
 
 type RunRow = {
   id: string;
@@ -251,6 +255,7 @@ export function snapshot(runId: string): PublicSwarmRun | null {
       provider: t.provider,
       model: t.model,
       result: t.result,
+      evidence: t.evidence,
       error: t.error,
       usage: t.usage,
       startedAt: t.startedAt,
@@ -457,6 +462,33 @@ export function patchTask(runId: string, taskId: string, patch: Partial<SwarmTas
   return next;
 }
 
+export function claimTask(runId: string, taskId: string, owner: string, ttlMs = 45_000): boolean {
+  const until = Date.now() + ttlMs;
+  const nowMs = Date.now();
+  const res = db.prepare(
+    `UPDATE swarm_tasks SET state='leased', lease_owner=?, lease_until=?
+     WHERE run_id=? AND id=? AND (
+       state IN ('ready','pending')
+       OR (state IN ('leased','running') AND (lease_until IS NULL OR lease_until < ?))
+     )`,
+  ).run(owner, until, runId, taskId, nowMs);
+  return res.changes > 0;
+}
+
+export function heartbeatTask(runId: string, taskId: string, ttlMs = 45_000) {
+  db.prepare(
+    `UPDATE swarm_tasks SET lease_until=? WHERE run_id=? AND id=? AND state IN ('leased','running')`,
+  ).run(Date.now() + ttlMs, runId, taskId);
+}
+
+export function recoverExpiredLeases() {
+  const n = Date.now();
+  db.prepare(
+    `UPDATE swarm_tasks SET state='ready', lease_owner=NULL, lease_until=NULL
+     WHERE state IN ('leased','running') AND lease_until IS NOT NULL AND lease_until < ?`,
+  ).run(n);
+}
+
 export function readyTasks(runId: string): SwarmTask[] {
   const rows = getTasks(runId);
   const done = new Set(rows.filter((t) => t.state === "completed").map((t) => t.id));
@@ -481,6 +513,7 @@ export function appendEvent(runId: string, taskId: string | null, type: string, 
     `INSERT INTO swarm_events (id, run_id, task_id, type, at, data_json) VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(nid("evt"), runId, taskId, type, now(), JSON.stringify(data));
   db.prepare("UPDATE swarm_runs SET updated_at = ? WHERE id = ?").run(now(), runId);
+  queueSwarmMirror();
 }
 
 export function markCancelled(runId: string, reason = "Cancelled") {
@@ -517,6 +550,6 @@ export function swarmStoreStatus() {
     live: true,
     active: activeRunCount(),
     stored: (db.prepare("SELECT COUNT(*) AS n FROM swarm_runs").get() as { n: number }).n,
-    transport: "sqlite durable tasks",
+    transport: process.env.DATABASE_URL ? "postgres mirror + sqlite working set" : "sqlite durable tasks",
   };
 }

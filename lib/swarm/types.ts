@@ -115,7 +115,7 @@ export type SwarmRun = {
 
 export type PublicSwarmTask = Pick<
   SwarmTask,
-  "id" | "role" | "objective" | "dependsOn" | "state" | "attempt" | "provider" | "model" | "result" | "error" | "usage" | "startedAt" | "completedAt"
+  "id" | "role" | "objective" | "dependsOn" | "state" | "attempt" | "provider" | "model" | "result" | "evidence" | "error" | "usage" | "startedAt" | "completedAt"
 >;
 
 export type PublicSwarmRun = SwarmRun & {
@@ -156,6 +156,6 @@ export const SWARM_CONTRACT = {
     "Does not farm CAPTCHAs or rotate residential proxies",
     "Does not expose subagent chain-of-thought — only task outputs and the leader answer",
   ],
-  transport: "SQLite durable tasks; Claw-led spawn/wait/message; SSE /api/swarm/:id/events",
+  transport: "SQLite working set mirrored to Managed PostgreSQL when DATABASE_URL is set; leases + recovery; Claw-led spawn/wait/message; SSE /api/swarm/:id/events",
   providers: "Bitdeer: planner/critic/leader = Mistral Large 3 675B; researcher = GLM-5 with Mistral fallback",
 } as const;

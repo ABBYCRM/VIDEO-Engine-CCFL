@@ -23,7 +23,20 @@ export const SWARM_MAX_TOKENS = {
 const WORKER_ROLES = new Set<Exclude<SwarmRole, "planner">>(["researcher", "critic", "synthesizer"]);
 
 const PRIVATE_HOST =
-  /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)$/i;
+  /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|::1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)$/i;
+
+function isBlockedHost(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (PRIVATE_HOST.test(h)) return true;
+  if (h.endsWith(".local") || h.endsWith(".internal")) return true;
+  if (h === "169.254.169.254" || h === "metadata.google.internal" || h === "metadata.google.com") return true;
+  if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("ff")) return true;
+  if (h.startsWith("::ffff:")) {
+    const mapped = h.slice("::ffff:".length);
+    return isBlockedHost(mapped);
+  }
+  return false;
+}
 
 export function emptyUsage(): TokenUsage {
   return { promptTokens: 0, completionTokens: 0, calls: 0 };
@@ -75,12 +88,8 @@ export function guardFetchUrl(raw: unknown): { ok: true; url: string } | { ok: f
     return { ok: false, error: "Invalid URL" };
   }
   if (!/^https?:$/.test(url.protocol)) return { ok: false, error: "Only http(s) URLs are allowed" };
-  const host = url.hostname;
-  if (PRIVATE_HOST.test(host) || host.endsWith(".local") || host.endsWith(".internal")) {
+  if (isBlockedHost(url.hostname)) {
     return { ok: false, error: "Private and local network targets are blocked" };
-  }
-  if (host === "169.254.169.254" || host === "metadata.google.internal") {
-    return { ok: false, error: "Cloud metadata endpoints are blocked" };
   }
   return { ok: true, url: url.toString() };
 }
@@ -157,6 +166,9 @@ export function validatePlan(
   }
   if (!cleaned.some((t) => t.role === "synthesizer")) {
     return { ok: false, error: "Plan must include a synthesizer (leader)" };
+  }
+  if (cleaned.filter((t) => t.role === "synthesizer").length !== 1) {
+    return { ok: false, error: "Plan must include exactly one synthesizer (leader)" };
   }
   return { ok: true, tasks: cleaned };
 }

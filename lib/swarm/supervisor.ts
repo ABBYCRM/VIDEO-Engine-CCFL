@@ -4,10 +4,12 @@ import { planTasks } from "./planner";
 import {
   activeRunCount,
   appendEvent,
+  claimTask,
   createRunRecord,
   getController,
   getRun,
   getTasks,
+  heartbeatTask,
   insertTask,
   listMessages,
   listOpenRuns,
@@ -16,12 +18,14 @@ import {
   patchRun,
   patchTask,
   postMessage,
+  recoverExpiredLeases,
   readyTasks,
   saveTaskResult,
   seedTasks,
   snapshot,
   swarmStoreStatus,
 } from "./store";
+import { hydrateSwarmFromPg } from "./pg-mirror";
 import { collectUpstream, runWorker } from "./worker";
 import type { ModelGateway, PublicSwarmRun, SwarmLimits } from "./types";
 import { SWARM_CONTRACT } from "./types";
@@ -206,14 +210,15 @@ export function completeSwarm(input: { runId: string; answer?: string }): Public
 
 let resumed = false;
 export function resumeOpenSwarm(gateway?: ModelGateway) {
-  if (resumed) return;
-  resumed = true;
+  recoverExpiredLeases();
+  void hydrateSwarmFromPg().catch(() => undefined);
   try {
     const gw = gateway ?? productionGateway();
     if (!gw.available) return;
     for (const run of listOpenRuns()) {
       void executeRun(run.id, gw).catch(() => undefined);
     }
+    resumed = true;
   } catch {
     resumed = false;
   }
@@ -232,9 +237,13 @@ export async function executeRun(runId: string, gateway: ModelGateway) {
       appendEvent(runId, null, "planning.started", {});
 
       const planned = await planTasks({ objective: run.objective, limits: run.limits, gateway, signal });
-      const usage0 = addUsage(run.usage, { promptTokens: 0, completionTokens: 0, calls: planned.via === "planner" ? 1 : 0 });
+      const usage0 = addUsage(run.usage, {
+        promptTokens: planned.usage?.promptTokens ?? 0,
+        completionTokens: planned.usage?.completionTokens ?? 0,
+        calls: planned.via === "planner" ? 1 : 0,
+      });
       patchRun(runId, { usage: usage0 });
-      seedTasks(runId, planned.tasks, gateway.name, planned.via === "planner" ? "planner" : "fallback-plan");
+      seedTasks(runId, planned.tasks, gateway.name, planned.model || (planned.via === "planner" ? "planner" : "fallback-plan"));
       appendEvent(runId, null, "planning.done", { via: planned.via, error: planned.error ?? null, count: planned.tasks.length });
 
       if (signal?.aborted) {
@@ -249,6 +258,7 @@ export async function executeRun(runId: string, gateway: ModelGateway) {
     let fetchesLeft = run.limits.maxFetches;
 
     while (true) {
+      recoverExpiredLeases();
       const current = getRun(runId);
       if (!current) return;
       if (current.status === "completed") return;
@@ -301,6 +311,9 @@ export async function executeRun(runId: string, gateway: ModelGateway) {
         work.map(async (task) => {
           const live = getRun(runId);
           if (!live || live.status === "cancelled" || live.status === "cancelling" || signal?.aborted) return;
+          const owner = `web-${process.pid}-${task.id}`;
+          if (!claimTask(runId, task.id, owner)) return;
+          heartbeatTask(runId, task.id);
           patchTask(runId, task.id, {
             state: "running",
             attempt: task.attempt + 1,
