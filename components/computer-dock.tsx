@@ -36,6 +36,7 @@ export function ComputerDock({
   const [steelNote, setSteelNote] = useState<string | null>(null);
   const [steelBusy, setSteelBusy] = useState(false);
   const screenRef = useRef<HTMLImageElement | null>(null);
+  const typeRef = useRef<HTMLInputElement | null>(null);
   const [screenBox, setScreenBox] = useState({ width: 1280, height: 800 });
 
   async function call(op: string, extra: Record<string, unknown> = {}) {
@@ -97,7 +98,9 @@ export function ComputerDock({
     const rect = e.currentTarget.getBoundingClientRect();
     const mapped = mapContainedClick({ clientX: e.clientX, clientY: e.clientY, rect });
     if (!mapped) return;
-    void call("action", { actor: "human", action: { type: "click", x: mapped.x, y: mapped.y } });
+    void call("action", { actor: "human", action: { type: "click", x: mapped.x, y: mapped.y } }).then(() => {
+      typeRef.current?.focus();
+    });
   }
 
   async function typeAsHuman() {
@@ -215,7 +218,7 @@ export function ComputerDock({
               ref={screenRef}
               alt={session.title || "Computer"}
               src={`data:image/jpeg;base64,${session.screenshotJpeg}`}
-              className={`absolute inset-0 h-full w-full touch-manipulation object-fill ${human ? "cursor-crosshair" : ""}`}
+              className={`absolute inset-0 h-full w-full touch-manipulation object-contain object-top ${human ? "cursor-crosshair" : ""}`}
               onPointerDown={onScreenPointer}
               onLoad={measure}
               draggable={false}
@@ -237,8 +240,11 @@ export function ComputerDock({
         {human && session?.handoffReason && (
           <div className="pointer-events-none absolute inset-x-3 top-3 rounded-lg border border-[rgba(214,181,109,0.4)] bg-[rgba(8,8,20,0.92)] px-3 py-2 text-[12px] text-[#d6b56d]">
             <p className="pointer-events-none">
-              Claw paused: {session.handoffReason}. Tap the puzzle on the screen
-              {session.handoffReason === "captcha" ? " (the duck square), skip it with Steel, or open Forge (no solver)." : ", then return control."}
+              {session.handoffReason === "captcha"
+                ? "Claw paused: CAPTCHA. Tap the puzzle on the screen, skip it with Steel, or return control."
+                : session.handoffReason === "password"
+                  ? "Login page. Tap the field, type below, or return control so Claw can keep filling what you already gave it."
+                  : `Claw paused: ${session.handoffReason}. Finish this step, then return control.`}
             </p>
             {session.handoffReason === "captcha" && (
               <div className="pointer-events-auto mt-2 flex flex-wrap gap-2">
@@ -287,19 +293,27 @@ export function ComputerDock({
 
       {human && (
         <form
-          className="flex gap-2 border-t border-[rgba(180,180,255,0.08)] p-2"
+          className="flex shrink-0 flex-col gap-2 border-t border-[rgba(180,180,255,0.08)] p-2 sm:flex-row sm:items-center"
           onSubmit={(e) => {
             e.preventDefault();
             void typeAsHuman();
           }}
         >
           <input
+            ref={typeRef}
             value={typeBuf}
             onChange={(e) => setTypeBuf(e.target.value)}
-            placeholder="Type into the focused field"
-            className="h-10 flex-1 rounded-lg border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-3 text-[13px] text-[rgba(220,220,255,0.9)] outline-none"
+            placeholder="Tap the field on the screen, then type here"
+            autoComplete="off"
+            autoCorrect="off"
+            enterKeyHint="go"
+            inputMode="text"
+            className="h-12 min-h-12 w-full flex-1 rounded-lg border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-3 text-[16px] text-[rgba(220,220,255,0.9)] outline-none"
           />
-          <button type="submit" className="rounded-lg bg-[var(--claw-accent)] px-3 text-[12px] font-medium text-[rgba(5,5,15,0.95)]">
+          <button
+            type="submit"
+            className="h-12 min-h-12 w-full shrink-0 rounded-lg bg-[var(--claw-accent)] px-4 text-[14px] font-semibold text-[rgba(5,5,15,0.95)] sm:w-auto"
+          >
             Type
           </button>
         </form>

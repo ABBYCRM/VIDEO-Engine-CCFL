@@ -524,7 +524,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_open",
-    description: "Start the live Chromium session the operator can see and take over. Optionally navigate to a public URL. Never solve CAPTCHA tiles or type passwords — call computer_handoff. For web search that hits a bot check, computer_search will use Steel's solver in a separate cloud browser and return results.",
+    description: "Start the live Chromium session the operator can see. Optionally navigate to a public URL. Type emails/passwords the operator just gave you. Handoff only for CAPTCHA tiles, passkeys, payments, or MFA without a code.",
     args: "{\"url\":\"https://example.com\"}",
     when: "Operator wants you to browse, search, click, or use a website as a person would. Prefer this over steel_scrape for interactive work.",
     handler: async (a) => {
@@ -581,7 +581,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_type",
-    description: "Type ordinary non-secret text into the focused field. 6-digit OTP and password-shaped strings force human takeover.",
+    description: "Type into the focused field. Use this for search, emails, usernames, AND passwords/OTPs the operator just provided. Do not hand off a login form if they gave you the credentials.",
     args: "{\"text\":\"hello\"}",
     handler: async (a) => {
       try {
@@ -670,7 +670,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_fill",
-    description: "Fill a labeled field on the live page. field is the visible label, placeholder, or name. Never use this for passwords — call computer_handoff.",
+    description: "Fill a labeled field on the live page. field is the visible label, placeholder, or name. Use this for email, username, password, and OTP when the operator supplied the value.",
     args: "{\"field\":\"Full name\",\"text\":\"Jane Doe\"}",
     handler: async (a) => {
       try {
@@ -723,7 +723,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_handoff",
-    description: "Pause Claw and give the operator the SAME Chrome session (cookies, tabs, page). Use for captcha, password, MFA, passkey, payment, consent. Do not solve those yourself.",
+    description: "Pause Claw and give the operator the SAME Chrome session. Use for captcha puzzles, passkey, payment, or MFA when you do not have the code. Do NOT use this for a normal email/password login if the operator already gave you the credentials — type them instead.",
     args: "{\"reason\":\"captcha\"}",
     handler: async (a) => {
       try {

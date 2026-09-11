@@ -64,7 +64,10 @@ export function detectHandoffFromText(text: string): HandoffReason[] {
   return [...new Set(hits)];
 }
 
-export function evaluateAction(action: ComputerAction): {
+export function evaluateAction(
+  action: ComputerAction,
+  actor: "agent" | "human" = "agent",
+): {
   decision: PolicyDecision;
   reason?: HandoffReason;
   error?: string;
@@ -97,7 +100,6 @@ export function evaluateAction(action: ComputerAction): {
     case "fill": {
       const text = action.text ?? "";
       if (!text) return { decision: "DENY", error: "text is required" };
-      if (looksLikeSecret(text)) return { decision: "HUMAN_REQUIRED", reason: "password" };
       return { decision: "ALLOW" };
     }
     case "upload": {
@@ -112,11 +114,10 @@ export function evaluateAction(action: ComputerAction): {
   }
 }
 
-function looksLikeSecret(text: string): boolean {
-  if (/^(otp|2fa|mfa)[:\s]/i.test(text)) return true;
-  if (/password\s*[:=]/i.test(text)) return true;
-  if (/^\d{6}$/.test(text.trim())) return true;
-  return false;
+export const AUTO_HANDOFF_REASONS: HandoffReason[] = ["captcha", "mfa", "payment", "passkey"];
+
+export function shouldAutoHandoff(reasons: HandoffReason[]): HandoffReason | null {
+  return AUTO_HANDOFF_REASONS.find((r) => reasons.includes(r)) ?? null;
 }
 
 export function classifyPageForHandoff(input: {

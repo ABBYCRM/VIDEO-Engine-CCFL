@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename } from "../../lib/browser-computer/policy.ts";
+import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename, shouldAutoHandoff } from "../../lib/browser-computer/policy.ts";
 
 describe("computer policy", () => {
   it("allows public https and fixture loopback", () => {
@@ -16,10 +16,10 @@ describe("computer policy", () => {
     assert.equal(isSafePublicUrl("file:///etc/passwd").ok, false);
   });
 
-  it("requires human for secret-looking type", () => {
-    const r = evaluateAction({ type: "type", text: "123456" });
-    assert.equal(r.decision, "HUMAN_REQUIRED");
-    assert.equal(r.reason, "password");
+  it("allows typing operator-supplied passwords and OTPs", () => {
+    assert.equal(evaluateAction({ type: "type", text: "123456" }).decision, "ALLOW");
+    assert.equal(evaluateAction({ type: "type", text: "hunter2!" }).decision, "ALLOW");
+    assert.equal(evaluateAction({ type: "fill", field: "Password", text: "hunter2!" }).decision, "ALLOW");
   });
 
   it("detects captcha copy", () => {
@@ -31,6 +31,19 @@ describe("computer policy", () => {
       captchaFrame: true
     });
     assert.ok(hits.includes("captcha"));
+    assert.equal(shouldAutoHandoff(hits), "captcha");
+  });
+
+  it("does not auto-pause a normal login form", () => {
+    const hits = classifyPageForHandoff({
+      url: "https://accounts.google.com",
+      title: "Sign in",
+      bodyText: "Sign in to continue to Gmail. Email or phone. Password. Forgot email? Next.",
+      passwordFieldVisible: true,
+      captchaFrame: false,
+    });
+    assert.ok(hits.includes("password"));
+    assert.equal(shouldAutoHandoff(hits), null);
   });
 
   it("allows click, search, and rejects path traversal uploads", () => {

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import type { Browser, BrowserContext, Page } from "playwright";
-import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename } from "./policy";
+import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename, shouldAutoHandoff } from "./policy";
 import { initScriptFor } from "../forge/stealth";
 import type {
   ActionResult,
@@ -312,12 +312,12 @@ export async function runAction(
     return { ok: false, decision: "DENY", error: "Computer is not running" };
   }
 
-  const policy = evaluateAction(action);
+  const policy = evaluateAction(action, actor);
   if (policy.decision === "DENY") {
     pushEvent(session, actor, "deny", policy.error || action.type);
     return { ok: false, decision: "DENY", error: policy.error };
   }
-  if (policy.decision === "HUMAN_REQUIRED") {
+  if (policy.decision === "HUMAN_REQUIRED" && actor !== "human") {
     requestHandoff(session, policy.reason ?? "manual", policy.error || "Sensitive input");
     await refresh(session);
     return {
@@ -474,17 +474,19 @@ export async function runAction(
   await refresh(session);
 
   if (actor === "agent" && session.snapshot?.suspicious.length) {
-    const reason = session.snapshot.suspicious[0];
-    requestHandoff(session, reason, `Page requires human: ${reason}`);
-    return {
-      ok: true,
-      decision: "HUMAN_REQUIRED",
-      handoffReason: reason,
-      snapshot: session.snapshot,
-      screenshotJpeg: session.screenshotJpeg ?? undefined,
-      artifacts: session.artifacts,
-      note: "Paused. Same Chrome session is waiting for you.",
-    };
+    const reason = shouldAutoHandoff(session.snapshot.suspicious);
+    if (reason) {
+      requestHandoff(session, reason, `Page requires human: ${reason}`);
+      return {
+        ok: true,
+        decision: "HUMAN_REQUIRED",
+        handoffReason: reason,
+        snapshot: session.snapshot,
+        screenshotJpeg: session.screenshotJpeg ?? undefined,
+        artifacts: session.artifacts,
+        note: "Paused. Same Chrome session is waiting for you.",
+      };
+    }
   }
 
   return {
