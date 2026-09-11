@@ -35,6 +35,7 @@ type LiveSession = {
   downloadsDir: string;
   uploadsDir: string;
   profileDir: string;
+  lastSearchQuery: string | null;
   context?: BrowserContext;
   page?: Page;
   browser?: Browser;
@@ -140,6 +141,7 @@ function toPublic(session: LiveSession): PublicSession {
     snapshot: session.snapshot,
     artifacts: session.artifacts,
     events: session.events,
+    lastSearchQuery: session.lastSearchQuery,
   };
 }
 
@@ -208,6 +210,7 @@ export async function ensureSession(): Promise<PublicSession> {
     downloadsDir,
     uploadsDir,
     profileDir,
+    lastSearchQuery: null,
   };
 
   const { chromium } = await import("playwright");
@@ -417,8 +420,9 @@ export async function runAction(
         break;
       }
       case "search": {
-        const q = encodeURIComponent(action.text ?? "");
-        await page.goto(`https://duckduckgo.com/?q=${q}`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+        session.lastSearchQuery = (action.text ?? "").trim();
+        const q = encodeURIComponent(session.lastSearchQuery);
+        await page.goto(`https://html.duckduckgo.com/html/?q=${q}`, { waitUntil: "domcontentloaded", timeout: 25_000 });
         await page.waitForTimeout(600);
         break;
       }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureSession, getActiveSession, runAction, setControlOwner, takeOver, resetSession, stageUpload } from "@/lib/browser-computer";
 import type { ComputerAction } from "@/lib/browser-computer";
+import { searchViaSteel } from "@/lib/steel-search";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,19 @@ export async function POST(req: Request) {
     if (op === "reset") return NextResponse.json({ ok: true, session: await resetSession() });
     if (op === "takeover") return NextResponse.json({ ok: true, session: await takeOver() });
     if (op === "resume") return NextResponse.json({ ok: true, session: await setControlOwner("AGENT") });
+    if (op === "steel_search") {
+      const query = String(body.query || getActiveSession()?.lastSearchQuery || "").trim();
+      const steel = await searchViaSteel(query);
+      return NextResponse.json({
+        ok: steel.ok,
+        via: steel.via,
+        solvedCaptcha: steel.solvedCaptcha,
+        results: steel.results,
+        markdown: steel.markdown,
+        error: steel.error,
+        session: getActiveSession(),
+      });
+    }
     if (op === "upload") {
       const filename = String(body.filename || "");
       const raw = String(body.base64 || "");

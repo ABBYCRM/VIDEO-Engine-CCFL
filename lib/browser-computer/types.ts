@@ -104,6 +104,7 @@ export type PublicSession = {
   snapshot: PageSnapshot | null;
   artifacts: SessionArtifact[];
   events: Array<{ actor: string; eventType: string; note: string; at: string }>;
+  lastSearchQuery: string | null;
 };
 
 export type ChatTurn = {

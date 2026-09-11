@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, Maximize2, Monitor, Pause, Play, RotateCcw, X } from "lucide-react";
+import { mapContainedClick, pointerOffset } from "@/lib/browser-computer/screen-map";
+
+type SteelHit = { title: string; url: string; snippet?: string };
 
 type Session = {
   id: string;
@@ -13,6 +16,7 @@ type Session = {
   screenshotJpeg: string | null;
   handoffReason: string | null;
   lastAction: string | null;
+  lastSearchQuery?: string | null;
   pointer: { x: number; y: number } | null;
   events?: Array<{ actor: string; eventType: string; note: string }>;
 };
@@ -28,6 +32,11 @@ export function ComputerDock({
   const [error, setError] = useState<string | null>(null);
   const [typeBuf, setTypeBuf] = useState("");
   const [booting, setBooting] = useState(true);
+  const [steelHits, setSteelHits] = useState<SteelHit[]>([]);
+  const [steelNote, setSteelNote] = useState<string | null>(null);
+  const [steelBusy, setSteelBusy] = useState(false);
+  const screenRef = useRef<HTMLImageElement | null>(null);
+  const [screenBox, setScreenBox] = useState({ width: 1280, height: 800 });
 
   async function call(op: string, extra: Record<string, unknown> = {}) {
     const res = await fetch("/api/computer", {
@@ -36,7 +45,7 @@ export function ComputerDock({
       body: JSON.stringify({ op, ...extra }),
     });
     const body = await res.json();
-    if (!body.ok) setError(body.error || "failed");
+    if (!body.ok && !body.results) setError(body.error || "failed");
     else setError(null);
     if (body.session) setSession(body.session);
     return body;
@@ -74,12 +83,21 @@ export function ComputerDock({
   const human = session?.controlOwner === "HUMAN";
   const agent = session?.controlOwner === "AGENT";
 
-  async function onScreenClick(e: React.MouseEvent<HTMLImageElement>) {
+  function measure() {
+    const el = screenRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setScreenBox({ width: r.width, height: r.height });
+  }
+
+  function onScreenPointer(e: React.PointerEvent<HTMLImageElement>) {
     if (!human || !session) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1280);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * 800);
-    await call("action", { actor: "human", action: { type: "click", x, y } });
+    const mapped = mapContainedClick({ clientX: e.clientX, clientY: e.clientY, rect });
+    if (!mapped) return;
+    void call("action", { actor: "human", action: { type: "click", x: mapped.x, y: mapped.y } });
   }
 
   async function typeAsHuman() {
@@ -88,7 +106,39 @@ export function ComputerDock({
     setTypeBuf("");
   }
 
+  async function steelSearch() {
+    const q =
+      session?.lastSearchQuery ||
+      session?.events?.find((ev) => ev.eventType === "search")?.note?.replace(/^search\s+"|"$/g, "") ||
+      "";
+    if (!q.trim()) {
+      setError("No search query on this session yet");
+      return;
+    }
+    setSteelBusy(true);
+    try {
+      const body = await call("steel_search", { query: q.trim() });
+      const hits = Array.isArray(body.results) ? body.results : [];
+      setSteelHits(hits);
+      setSteelNote(
+        body.via
+          ? `Steel ${body.via}${body.solvedCaptcha ? " solved the puzzle in a cloud browser" : " used a proxy"}. Chrome is still on this tab.`
+          : body.error || "Steel returned no results",
+      );
+      if (!body.ok && body.error) setError(body.error);
+    } finally {
+      setSteelBusy(false);
+    }
+  }
+
+  async function openHit(url: string) {
+    await call("action", { actor: "human", action: { type: "navigate", url } });
+  }
+
   const steps = (session?.events ?? []).filter((ev) => ev.actor === "agent").slice(0, 6);
+  const pin = session?.pointer
+    ? pointerOffset(session.pointer.x, session.pointer.y, screenBox)
+    : null;
 
   return (
     <div className={`flex min-h-0 flex-col ${variant === "page" ? "min-h-[70vh]" : "h-full"}`}>
@@ -149,28 +199,27 @@ export function ComputerDock({
         )}
       </div>
 
-      <div className="relative min-h-0 flex-1 bg-black">
+      <div className="relative min-h-0 flex-1 overflow-auto bg-black">
         {booting && (
           <div className="absolute inset-0 grid place-items-center text-[rgba(220,220,255,0.4)]">
             <Loader2 className="size-5 animate-spin" />
           </div>
         )}
         {session?.screenshotJpeg ? (
-          <div className="relative h-full">
+          <div className="relative w-full" style={{ aspectRatio: "1280 / 800" }}>
             <img
+              ref={screenRef}
               alt={session.title || "Computer"}
               src={`data:image/jpeg;base64,${session.screenshotJpeg}`}
-              className={`h-full w-full object-contain object-top ${human ? "cursor-crosshair" : ""}`}
-              onClick={onScreenClick}
+              className={`absolute inset-0 h-full w-full touch-manipulation object-fill ${human ? "cursor-crosshair" : ""}`}
+              onPointerDown={onScreenPointer}
+              onLoad={measure}
+              draggable={false}
             />
-            {session.pointer && (
+            {pin && (
               <span
                 className="pointer-events-none absolute size-3 rounded-full border-2 border-[var(--claw-accent)] bg-[var(--claw-accent)]/40"
-                style={{
-                  left: `${(session.pointer.x / 1280) * 100}%`,
-                  top: `${(session.pointer.y / 800) * 100}%`,
-                  transform: "translate(-50%, -50%)",
-                }}
+                style={{ left: pin.left, top: pin.top, transform: "translate(-50%, -50%)" }}
               />
             )}
           </div>
@@ -182,17 +231,51 @@ export function ComputerDock({
           )
         )}
         {human && session?.handoffReason && (
-          <div className="absolute inset-x-3 top-3 rounded-lg border border-[rgba(214,181,109,0.4)] bg-[rgba(8,8,20,0.9)] px-3 py-2 text-[12px] text-[#d6b56d]">
-            Claw paused: {session.handoffReason}. Click the screen, then return control.
+          <div className="pointer-events-none absolute inset-x-3 top-3 rounded-lg border border-[rgba(214,181,109,0.4)] bg-[rgba(8,8,20,0.92)] px-3 py-2 text-[12px] text-[#d6b56d]">
+            <p className="pointer-events-none">
+              Claw paused: {session.handoffReason}. Tap the puzzle on the screen
+              {session.handoffReason === "captcha" ? " (the duck square), or skip it with Steel." : ", then return control."}
+            </p>
+            {session.handoffReason === "captcha" && (
+              <button
+                type="button"
+                className="pointer-events-auto mt-2 rounded-md bg-[#d6b56d] px-3 py-1.5 text-[12px] font-medium text-[#1a1408]"
+                onClick={() => void steelSearch()}
+                disabled={steelBusy}
+              >
+                {steelBusy ? "Steel searching…" : "Skip puzzle — search with Steel"}
+              </button>
+            )}
           </div>
         )}
         {agent && (
-          <div className="absolute inset-x-3 top-3 rounded-lg border border-[rgba(143,191,163,0.3)] bg-[rgba(8,8,20,0.88)] px-3 py-1.5 text-[11px] text-[#8fbfa3]">
+          <div className="pointer-events-none absolute inset-x-3 top-3 rounded-lg border border-[rgba(143,191,163,0.3)] bg-[rgba(8,8,20,0.88)] px-3 py-1.5 text-[11px] text-[#8fbfa3]">
             Claw is using the computer
             {session?.lastAction ? ` · ${session.lastAction}` : ""}
           </div>
         )}
       </div>
+
+      {steelNote && (
+        <div className="border-t border-[rgba(180,180,255,0.08)] px-3 py-2 text-[12px] text-[rgba(220,220,255,0.7)]">
+          {steelNote}
+          {steelHits.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {steelHits.map((hit) => (
+                <li key={hit.url}>
+                  <button
+                    type="button"
+                    className="text-left text-[12px] text-[var(--claw-accent)] underline"
+                    onClick={() => void openHit(hit.url)}
+                  >
+                    {hit.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {error && <p className="px-3 py-1.5 text-[12px] text-rose-400">{error}</p>}
 

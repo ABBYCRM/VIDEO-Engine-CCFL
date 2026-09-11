@@ -34,6 +34,7 @@ import { aionStatus, aionConsult, aionCurriculum, aionN8n, aionExecute, aionCont
 import { composioHealth, composioAction, getComposioToolSchema } from "@/lib/composio/client";
 import { isSteelConfigured } from "@/lib/steel";
 import { scrapePublicUrl } from "@/lib/scrape";
+import { searchViaSteel } from "@/lib/steel-search";
 import { takeScreenshot } from "@/lib/screenshotone";
 import { webSearch } from "@/lib/web-search";
 import { analyzeImage } from "@/lib/nvidia/vision";
@@ -267,7 +268,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Steel.dev (web scrape) ──────────────────────────────────────
   {
     name: "steel_scrape",
-    description: "One-shot markdown of a known public URL (Steel, then Firecrawl/ScrapingBee/Scrapfly). Local/private URLs are rejected. For interactive browsing — search, click, type, CAPTCHA handoff — use computer_open / computer_click. Do NOT fetch() the URL yourself. Steel remains until Computer e2e is the default path.",
+    description: "One-shot markdown of a known public URL (Steel, then Firecrawl/ScrapingBee/Scrapfly). Local/private URLs are rejected. Interactive browsing uses computer_*. If Chrome hits a CAPTCHA, call computer_search — it automatically runs Steel (proxy + CAPTCHA solver) for the query. Do NOT solve CAPTCHA tiles yourself.",
     args: "{\"url\":\"https://example.com\"}",
     when: "Operator asks to read/summarize/research a known public URL.",
     handler: async (a) => {
@@ -316,7 +317,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_open",
-    description: "Start the live Chromium session the operator can see and take over (Grok-style computer: screenshot + click/type/scroll). Optionally navigate to a public URL. Never solve CAPTCHA or type passwords — call computer_handoff.",
+    description: "Start the live Chromium session the operator can see and take over. Optionally navigate to a public URL. Never solve CAPTCHA tiles or type passwords — call computer_handoff. For web search that hits a bot check, computer_search will use Steel's solver in a separate cloud browser and return results.",
     args: "{\"url\":\"https://example.com\"}",
     when: "Operator wants you to browse, search, click, or use a website as a person would. Prefer this over steel_scrape for interactive work.",
     handler: async (a) => {
@@ -426,13 +427,35 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_search",
-    description: "Search the web in the live Chrome session (DuckDuckGo) like a person would.",
-    args: "{\"text\":\"DigitalOcean Droplets\"}",
-    when: "Operator wants a web search performed in the visible computer, not a one-shot scrape.",
+    description: "Search the web. Opens the query in live Chrome (operator can watch). If DuckDuckGo shows a CAPTCHA, does NOT click the puzzle — Steel runs the same query on a proxied cloud browser with CAPTCHA solving and those results are returned. Continue from results. Do not call execution_blocked for a search CAPTCHA.",
+    args: "{\"text\":\"US motor vehicle accident lead providers India\"}",
+    when: "Operator wants a web search. Prefer this over guessing URLs. Steel covers datacenter CAPTCHA.",
     handler: async (a) => {
       try {
-        const result = await runAction({ type: "search", text: str(a.text) }, "agent");
-        return computerObserve(getActiveSession(), result);
+        const text = str(a.text).trim();
+        if (!text) return { ok: false, error: "text is required" };
+        await ensureSession();
+        const result = await runAction({ type: "search", text }, "agent");
+        const session = getActiveSession();
+        const captcha = result.handoffReason === "captcha" || session?.handoffReason === "captcha" || result.decision === "HUMAN_REQUIRED";
+        if (captcha) {
+          const steel = await searchViaSteel(text);
+          return {
+            ...computerObserve(session, result),
+            ok: steel.ok,
+            captcha: true,
+            chrome: "paused on CAPTCHA — same tab, operator can tap it. Claw does not click puzzle tiles.",
+            results_via: steel.via,
+            solvedCaptcha: steel.solvedCaptcha,
+            results: steel.results,
+            markdown: (steel.markdown || "").slice(0, 4000),
+            steel_error: steel.error,
+            note: steel.ok
+              ? `Chrome hit a bot check. Steel (${steel.via}) ran the query${steel.solvedCaptcha ? " with CAPTCHA solving" : " via proxy"}. Continue from results. Do not click CAPTCHA tiles. Do not call execution_blocked.`
+              : `Chrome hit a bot check and Steel search failed: ${steel.error || "no results"}. Operator can tap the puzzle, or retry computer_search.`,
+          };
+        }
+        return computerObserve(session, result);
       } catch (e: any) {
         return { ok: false, error: e?.message || "search failed" };
       }

@@ -71,3 +71,57 @@ export async function scrapeWithSteel(input: {
     links: result.links.slice(0, MAX_LINKS).map((link) => ({ text: link.text, url: link.url }))
   };
 }
+
+export type SteelCaptchaSession = { id: string; connectUrl: string; viewerUrl: string | null };
+
+function steelRestBase(): string {
+  return (process.env.STEEL_BASE_URL?.trim() || "https://api.steel.dev").replace(/\/$/, "");
+}
+
+/** Cloud Chrome with residential proxy + Steel CAPTCHA solver. Not the operator-visible Chromium. */
+export async function createCaptchaSession(): Promise<SteelCaptchaSession> {
+  const client = getSteelClient() as {
+    sessions?: { create: (body: Record<string, unknown>) => Promise<Record<string, unknown>> };
+  };
+  let raw: Record<string, unknown> | null = null;
+  if (client.sessions?.create) {
+    raw = await client.sessions.create({
+      solveCaptcha: true,
+      useProxy: true,
+      timeout: 120_000,
+    });
+  } else {
+    const res = await fetch(`${steelRestBase()}/v1/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "steel-api-key": getSteelApiKey() },
+      body: JSON.stringify({ solveCaptcha: true, useProxy: true, timeout: 120000 }),
+    });
+    raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) throw new Error(`Steel session HTTP ${res.status}: ${JSON.stringify(raw).slice(0, 240)}`);
+  }
+  const id = String(raw.id || "");
+  if (!id) throw new Error("Steel session did not return an id");
+  const connectUrl = String(raw.websocketUrl || raw.websocket_url || "")
+    || `wss://connect.steel.dev?apiKey=${encodeURIComponent(getSteelApiKey())}&sessionId=${id}`;
+  const viewerUrl = raw.sessionViewerUrl ? String(raw.sessionViewerUrl) : null;
+  return { id, connectUrl, viewerUrl };
+}
+
+export async function releaseCaptchaSession(id: string): Promise<void> {
+  const client = getSteelClient() as {
+    sessions?: { release: (sessionId: string) => Promise<unknown> };
+  };
+  try {
+    if (client.sessions?.release) {
+      await client.sessions.release(id);
+      return;
+    }
+  } catch {
+    /* REST below */
+  }
+  await fetch(`${steelRestBase()}/v1/sessions/${id}/release`, {
+    method: "POST",
+    headers: { "steel-api-key": getSteelApiKey() },
+  }).catch(() => undefined);
+}
+
