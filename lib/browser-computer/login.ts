@@ -64,6 +64,34 @@ export function findPasswordLoginSwitch(elements: InteractiveNode[]): Interactiv
   return elements.find((el) => /log in with password|use password|sign in with password/i.test(el.text));
 }
 
+export type AuthState =
+  | "NONE"
+  | "AUTH_DISCOVERY"
+  | "IDENTITY_ENTRY"
+  | "PASSWORD_ENTRY"
+  | "MFA"
+  | "PASSKEY"
+  | "CAPTCHA"
+  | "SSO_BLOCKED"
+  | "AUTHENTICATED";
+
+export function classifyAuthState(snap: Pick<PageSnapshot, "title" | "text" | "url" | "elements" | "suspicious">): AuthState {
+  const blob = `${snap.title}\n${snap.text}`.toLowerCase();
+  if (/couldn'?t sign you in|browser or app may not be secure|disallowed_useragent|try using a different browser/.test(blob)) {
+    return "SSO_BLOCKED";
+  }
+  if (snap.suspicious?.includes("captcha") || /i'm not a robot|select all images/.test(blob)) return "CAPTCHA";
+  if (snap.suspicious?.includes("passkey") || /passkey|security key|webauthn/.test(blob)) return "PASSKEY";
+  if (snap.suspicious?.includes("mfa") || /authenticator|verification code|one[- ]time/.test(blob)) return "MFA";
+  const hasPassword = snap.elements.some(fieldLooksLikePassword);
+  const hasIdentity = snap.elements.some((el) => fieldLooksLikeEmail(el) || fieldLooksLikePhone(el));
+  if (hasPassword) return "PASSWORD_ENTRY";
+  if (hasIdentity || findGoogleSso(snap.elements) || findEmailLoginSwitch(snap.elements)) return "IDENTITY_ENTRY";
+  if (/sign in|log in|login/.test(blob)) return "AUTH_DISCOVERY";
+  if (/inbox|dashboard|home|account|logout|sign out/.test(blob) && !/sign in|log in/.test(blob)) return "AUTHENTICATED";
+  return "NONE";
+}
+
 export function loginHints(snap: Pick<PageSnapshot, "title" | "text" | "elements">, value?: string): string[] {
   const hints: string[] = [];
   const kind = value ? classifyValue(value) : "text";

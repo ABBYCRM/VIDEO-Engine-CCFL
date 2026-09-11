@@ -1,7 +1,9 @@
 import { chatCompletionStream, getClawModel, isNvidiaEnabled, type ChatMessage } from "@/lib/nvidia/client";
 import { addMessage, getConversation, listMessages, readClawFileText, renameConversation, type ClawMessage } from "@/lib/claw/store";
 import { executeClawTool, toolsAsOpenAI, toolsCatalog, CLAW_TOOL_NAMES } from "@/lib/claw/tools";
-import { aionAcceptanceForGoal, aionExecute, isAionConfigured, isToolfulGoal } from "@/lib/claw/aion";
+import { aionAcceptanceForGoal, aionExecute, aionStatus, isAionConfigured, isToolfulGoal } from "@/lib/claw/aion";
+import { composioHealth } from "@/lib/composio/client";
+import { connectorInventory } from "@/lib/claw/connectors";
 import { Execution, parseToolCalls, awaitWithSignal, type ParsedToolCall } from "./execution";
 import { SelfStateController, createSelfState, type PublicSelfState } from "./self-state";
 
@@ -46,7 +48,13 @@ save_file stores artifacts only; it is not a shell. Discover execution tools thr
 Tool results have runtime evidence IDs. Use execution_verify only against actual current evidence.
 Exhausted budget, missing tools, interrupted output or absent evidence means blocked/partial, never Done.
 
-Aion-Brain is the connected brain. Prefer aion_execute for work that must use brain tools (search, scrape, n8n, live research). Keep aion_status / aion_consult / aion_n8n as advice. Treat previous_tool_results as the only Aion evidence. Never mark local work verified from Aion prose or complete=true.
+Aion-Brain is the connected brain. Prefer aion_execute for work that must use brain tools (search, scrape, n8n, live research). Keep aion_status / aion_consult / aion_n8n as advice. Treat previous_tool_results as the only Aion evidence. Never mark local work verified from Aion prose or complete=true. If Aion is configured, call it — do not pretend it is offline.
+
+Composio is the integration bus. You can use EVERY connected app. Flow: composio_health → composio_list_tools(toolkit or search) → composio_tool_schema if args are unclear → composio_action(exact slug). Never invent slugs. Never tell the operator to open Integrations unless health says nothing is connected.
+
+Email / contact people: when they ask you to email, contact, reach, or follow up — write a professional email (specific subject, relevant body, no fluff, match their intent) then SEND it. Prefer resend_send. If Resend API is missing, composio_list_tools toolkit=resend (or gmail) then composio_action. Do not reply that you cannot send mail. Do not claim sent without a tool result ok:true.
+
+When you cannot do something, or a tool fails: web_search the current error/docs, or aion_execute the same question, then retry with a different tool or slug. LOOP_DETECTED means change strategy, not repeat.
 
 Claw is a Grok-style supervisor. The operator talks ONLY to you in this chat.
 You choose the specialist, you build it, you task it. Never tell them to open /computer, /forge, or /swarm, or to click New session, Probe lab, Scrape, Run swarm, or Take over.
@@ -79,8 +87,42 @@ Fallback: emit one or more XML blocks and nothing else that round:
 After tool_result, either call more tools or answer the operator in plain English. Never invent tool results.`;
 }
 
-function toChat(messages: ClawMessage[]): ChatMessage[] {
+async function liveOperatorSurface(): Promise<string> {
+  const inv = connectorInventory();
+  let composioLine = "Composio: unknown";
+  try {
+    const h = await composioHealth();
+    const kits = (h.toolkits || []).map((t: { id: string }) => t.id).join(", ") || "none connected";
+    composioLine = h.configured
+      ? `Composio ${h.live ? "live" : "stale"} — toolkits: ${kits}. Use composio_list_tools then composio_action.`
+      : "Composio not configured";
+  } catch (e) {
+    composioLine = `Composio health failed: ${e instanceof Error ? e.message : String(e)}`;
+  }
+  let aionLine = "Aion-Brain: not configured";
+  if (isAionConfigured()) {
+    try {
+      const s = await aionStatus();
+      aionLine = `Aion-Brain connected app=${s.app} v${s.version ?? "?"} model=${s.primaryModel ?? "?"}${s.echoOnly ? " (echo test mode — not a live model)" : ""}. Prefer aion_execute for brain-tool work.`;
+    } catch (e) {
+      aionLine = `Aion-Brain configured but unreachable: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  const resend = inv.resend.configured
+    ? "Resend ready — resend_send is the email path"
+    : "Resend API key missing — try composio_list_tools toolkit=resend";
+  const search = inv.exa.configured || inv.tavily.configured ? "web_search ready" : "no web_search key";
+  return `Live operator surface (facts for this turn):
+- ${aionLine}
+- ${composioLine}
+- ${resend}
+- ${search}
+If they asked to email or contact people, draft a professional message and send it this turn. If a capability is missing, search then retry.`;
+}
+
+function toChat(messages: ClawMessage[], liveSurface?: string): ChatMessage[] {
   const out: ChatMessage[] = [{ role: "system", content: systemPrompt() }];
+  if (liveSurface) out.push({ role: "system", content: liveSurface });
   for (const m of messages) {
     if (m.role === "tool") {
       const meta = m.toolJson && typeof m.toolJson === "object" ? m.toolJson as { name?: string; tool_call_id?: string } : {};
@@ -224,6 +266,8 @@ export async function runClawTurn(input: {
     }
   }
 
+  const liveSurface = await liveOperatorSurface();
+
   let finalText = "";
   let continuation = "";
   let continuations = 0;
@@ -244,7 +288,7 @@ export async function runClawTurn(input: {
       emitSelf(input.onEvent, cycle.public, "ACTION");
 
       const history = listMessages(input.conversationId, 60);
-      const messages = toChat(history);
+      const messages = toChat(history, liveSurface);
       messages.push({
         role: "system",
         content: `SELF_STATE: ${self.compactPrompt()}. Current execution checkpoint: ${JSON.stringify(execution.snapshot())}. ${requiresPlan && !execution.goal ? "This is a work request: execution_plan is required before any action or final claim." : ""} ${cycle.instruction}`

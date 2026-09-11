@@ -170,23 +170,24 @@ export async function githubRequest(input: { method?: string; path?: string; bod
   return { ok: true, via: "github", status: res.status, data };
 }
 
-export async function resendSend(input: { to?: string; subject?: string; text?: string; html?: string; from?: string }) {
+export async function resendSend(input: { to?: string | string[]; subject?: string; text?: string; html?: string; from?: string }) {
   const key = secret("resend_api_key", "RESEND_API_KEY");
   if (!key) return missing("Resend", "RESEND_API_KEY", "send a transactional email the operator requested");
-  const to = String(input.to || "").trim();
+  const rawTo = Array.isArray(input.to) ? input.to.join(",") : String(input.to || "");
+  const to = rawTo.split(/[,\s;]+/).map((s) => s.trim()).filter((s) => s.includes("@"));
   const subject = String(input.subject || "").trim();
   const text = String(input.text || input.html || "").trim();
-  if (!to || !subject || !text) return { ok: false, error: "to, subject, and text are required" };
+  if (!to.length || !subject || !text) return { ok: false, error: "to, subject, and text are required" };
   const from = String(input.from || process.env.RESEND_FROM || "").trim();
   if (!from) return { ok: false, error: "from is required (pass from or set RESEND_FROM)", hint: "Resend requires a verified from address." };
   const res = await timedFetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text, html: input.html ? String(input.html) : undefined })
+    body: JSON.stringify({ from, to, subject, text, html: input.html ? String(input.html) : undefined })
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: `Resend HTTP ${res.status}`, hint: String(body?.message || "").slice(0, 200) };
-  return { ok: true, via: "resend", id: body?.id || null };
+  return { ok: true, via: "resend", id: body?.id || null, to };
 }
 
 export async function hedraStatus() {

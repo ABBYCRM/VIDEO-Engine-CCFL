@@ -5,7 +5,7 @@ import type { Browser, BrowserContext, Page } from "playwright";
 import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename, shouldAutoHandoff } from "./policy";
 import { initScriptFor } from "../forge/stealth";
 import { launchComputerContext } from "./chrome";
-import { classifyValue, fieldAccepts, findEmailLoginSwitch, loginHints } from "./login";
+import { classifyValue, fieldAccepts, findEmailLoginSwitch, classifyAuthState } from "./login";
 import type {
   ActionResult,
   ComputerAction,
@@ -38,6 +38,8 @@ type LiveSession = {
   uploadsDir: string;
   profileDir: string;
   lastSearchQuery: string | null;
+  fingerprints: string[];
+  ssoBlocked: boolean;
   context?: BrowserContext;
   page?: Page;
   browser?: Browser;
@@ -215,6 +217,8 @@ export async function ensureSession(): Promise<PublicSession> {
     uploadsDir,
     profileDir,
     lastSearchQuery: null,
+    fingerprints: [],
+    ssoBlocked: false,
   };
 
   const launched = await launchComputerContext(profileDir, VIEWPORT);
@@ -254,6 +258,34 @@ async function requireAgent(session: LiveSession) {
     session.status = "AGENT_RUNNING";
     pushEvent(session, "agent", "lease", "control_owner=AGENT");
   }
+}
+
+function pageFingerprint(session: LiveSession): string {
+  const snap = session.snapshot;
+  return `${snap?.url ?? ""}|${snap?.title ?? ""}|${(snap?.text ?? "").slice(0, 120)}`;
+}
+
+async function semanticClick(page: Page, label: string): Promise<boolean> {
+  const needle = label.trim();
+  if (!needle) return false;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(escaped, "i");
+  for (const loc of [
+    page.getByRole("button", { name: re }),
+    page.getByRole("link", { name: re }),
+    page.getByLabel(re),
+    page.getByText(re, { exact: false }),
+  ]) {
+    try {
+      if ((await loc.count()) > 0) {
+        await loc.first().click({ timeout: 2500 });
+        return true;
+      }
+    } catch {
+      /* try next locator */
+    }
+  }
+  return false;
 }
 
 function requestHandoff(session: LiveSession, reason: HandoffReason, note: string) {
@@ -420,6 +452,14 @@ export async function runAction(
         await page.mouse.move(action.x ?? 0, action.y ?? 0);
         break;
       case "click": {
+        const label = (action.text ?? "").trim();
+        if (session.ssoBlocked && /try again/i.test(label)) {
+          return { ok: false, decision: "DENY", error: "Google SSO is blocked this session. Use email/password on the site instead of Try again." };
+        }
+        if (label && (await semanticClick(page, label))) {
+          await page.waitForTimeout(400);
+          break;
+        }
         const point = resolveClick(session, action);
         if (!point) return { ok: false, decision: "DENY", error: "No matching control to click" };
         session.pointer = point;
@@ -509,6 +549,13 @@ export async function runAction(
   pushEvent(session, actor, action.type, summarize(action));
   await refresh(session);
 
+  const auth = session.snapshot ? classifyAuthState(session.snapshot) : "NONE";
+  if (auth === "SSO_BLOCKED") session.ssoBlocked = true;
+  const fp = pageFingerprint(session);
+  session.fingerprints.unshift(fp);
+  if (session.fingerprints.length > 8) session.fingerprints.length = 8;
+  const looped = session.fingerprints.filter((x) => x === fp).length >= 3;
+
   if (actor === "agent" && session.snapshot?.suspicious.length) {
     const reason = shouldAutoHandoff(session.snapshot.suspicious);
     if (reason) {
@@ -525,12 +572,27 @@ export async function runAction(
     }
   }
 
+  if (looped) {
+    return {
+      ok: false,
+      decision: "DENY",
+      error: session.ssoBlocked
+        ? "Same page after 3 actions and Google SSO is blocked. Switch to email/password or hand off."
+        : "Loop detected: the page did not change. Try a different control (email login, password login) — do not repeat the last click.",
+      snapshot: session.snapshot ?? undefined,
+      screenshotJpeg: session.screenshotJpeg ?? undefined,
+      artifacts: session.artifacts,
+      note: `authState=${auth}`,
+    };
+  }
+
   return {
     ok: true,
     decision: "ALLOW",
     snapshot: session.snapshot ?? undefined,
     screenshotJpeg: session.screenshotJpeg ?? undefined,
     artifacts: session.artifacts,
+    note: `authState=${auth}`,
   };
 }
 

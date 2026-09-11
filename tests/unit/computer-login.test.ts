@@ -5,6 +5,7 @@ import {
   fieldAccepts,
   isGoogleEmail,
   loginHints,
+  classifyAuthState,
 } from "../../lib/browser-computer/login.ts";
 import type { InteractiveNode } from "../../lib/browser-computer/types.ts";
 
@@ -81,5 +82,15 @@ describe("computer login routing", () => {
       elements: [],
     });
     assert.ok(hints.some((h) => /rejected/i.test(h)));
+    assert.equal(
+      classifyAuthState({
+        url: "https://accounts.google.com",
+        title: "Couldn't sign you in",
+        text: "This browser or app may not be secure.",
+        elements: [],
+        suspicious: [],
+      }),
+      "SSO_BLOCKED",
+    );
   });
 });

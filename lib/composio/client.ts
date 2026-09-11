@@ -516,9 +516,112 @@ export async function composioAction(input: ComposioActionInput): Promise<Compos
   }
 }
 
-export async function getComposioToolSchema(_name: string) {
+export async function listComposioTools(input: {
+  toolkit?: string;
+  search?: string;
+  limit?: number;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  code?: string;
+  toolkit?: string | null;
+  tools: Array<{ slug: string; name: string; description: string; toolkit: string }>;
+  connected: string[];
+  hint?: string;
+}> {
+  if (!isComposioConfigured()) {
+    return { ok: false, error: "Composio is not configured", code: "composio_missing", tools: [], connected: [] };
+  }
+  const gate = composioProjectGate(classifyComposioKey(getComposioApiKey()));
+  if (!gate.ok) return { ok: false, error: gate.error, code: gate.code, tools: [], connected: [] };
+
+  const connected = (
+    db.prepare(`SELECT toolkit FROM connected_accounts WHERE UPPER(status)='ACTIVE' ORDER BY toolkit ASC`).all() as Array<{ toolkit: string }>
+  ).map((r) => r.toolkit);
+
+  const toolkit = input.toolkit?.trim().toLowerCase() || undefined;
+  const search = input.search?.trim() || undefined;
+  const limit = Math.min(40, Math.max(5, Number(input.limit) || 20));
+
+  try {
+    const composio: any = getComposio();
+    const query: Record<string, unknown> = { limit };
+    if (toolkit) query.toolkits = [toolkit];
+    else if (search) query.search = search;
+    else if (connected.length) query.toolkits = connected.slice(0, 8);
+    else query.search = "email send";
+
+    const raw: unknown = await withTimeout(
+      composio.tools.getRawComposioTools(query),
+      DEFAULT_TIMEOUT_MS,
+      "tools.getRawComposioTools",
+    );
+    const items: any[] = Array.isArray(raw) ? raw : ((raw as any)?.items ?? (raw as any)?.data ?? []);
+    const tools = items
+      .map((t) => {
+        const slug = String(t?.slug ?? t?.name ?? "").trim();
+        if (!slug) return null;
+        return {
+          slug,
+          name: String(t?.name ?? slug),
+          description: String(t?.description ?? t?.schema?.description ?? "").slice(0, 180),
+          toolkit: String(t?.toolkit?.slug ?? t?.toolkit ?? toolkit ?? "").toLowerCase(),
+        };
+      })
+      .filter((x): x is { slug: string; name: string; description: string; toolkit: string } => Boolean(x))
+      .slice(0, limit);
+
+    return {
+      ok: true,
+      toolkit: toolkit ?? null,
+      tools,
+      connected,
+      hint: tools.length
+        ? "Call composio_action with an exact slug from this list. Do not invent slugs."
+        : connected.length
+          ? "No tools matched. Pass toolkit (e.g. resend, gmail, github) or search (e.g. send email)."
+          : "No Composio apps are connected. Operator must connect one under Integrations.",
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      tools: [],
+      connected,
+    };
+  }
+}
+
+export async function getComposioToolSchema(name: string) {
+  const slug = String(name || "").trim();
+  if (!slug) return { error: "name is required", code: "composio_schema_missing" };
   if (!isComposioConfigured()) return { error: "Composio is not configured", code: "composio_missing" };
   const gate = composioProjectGate(classifyComposioKey(getComposioApiKey()));
   if (!gate.ok) return { error: gate.error, code: gate.code };
-  return { error: "Tool schema discovery is not used with project REST keys (ak_). Use composio_health then composio_action with an exact project slug.", code: "composio_schema_project" };
+  try {
+    const composio: any = getComposio();
+    const raw: unknown = await withTimeout(
+      composio.tools.getRawComposioTools({ tools: [slug] }),
+      DEFAULT_TIMEOUT_MS,
+      "tools.getRawComposioTools.one",
+    );
+    const items: any[] = Array.isArray(raw) ? raw : ((raw as any)?.items ?? (raw as any)?.data ?? []);
+    const tool = items.find((t) => String(t?.slug ?? "").toUpperCase() === slug.toUpperCase()) ?? items[0];
+    if (!tool) {
+      return {
+        error: `No Composio tool named ${slug}. Call composio_list_tools with a toolkit or search.`,
+        code: "composio_schema_unknown",
+      };
+    }
+    return {
+      ok: true,
+      slug: tool.slug,
+      name: tool.name,
+      description: tool.description,
+      toolkit: tool.toolkit?.slug ?? tool.toolkit,
+      parameters: tool.inputParameters ?? tool.schema ?? tool.parameters ?? null,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e), code: "composio_schema_failed" };
+  }
 }
