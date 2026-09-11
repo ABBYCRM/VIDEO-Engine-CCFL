@@ -1,12 +1,11 @@
-import { getSwarm } from "@/lib/swarm";
-import { getEvents } from "@/lib/swarm/store";
+import { getEvents, snapshot } from "@/lib/swarm/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const run = getSwarm(id);
+  const run = snapshot(id);
   if (!run) return new Response(JSON.stringify({ ok: false, error: "Unknown run" }), { status: 404 });
 
   const encoder = new TextEncoder();
@@ -23,7 +22,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           last = event.at;
           send({ type: "event", event });
         }
-        const live = getSwarm(id);
+        const live = snapshot(id);
         if (live && ["completed", "failed", "cancelled"].includes(live.status)) {
           send({ type: "done", run: live });
           break;

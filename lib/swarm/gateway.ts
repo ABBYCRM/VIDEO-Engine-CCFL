@@ -27,7 +27,12 @@ export function routeLabel(role: SwarmRole): string {
 }
 
 export function productionGateway(): ModelGateway {
-  const available = isNvidiaEnabled();
+  let available = false;
+  try {
+    available = isNvidiaEnabled();
+  } catch {
+    available = false;
+  }
   return {
     name: "bitdeer",
     available,

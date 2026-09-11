@@ -32,11 +32,11 @@ const WORKING_MODEL_PREFIXES = [
 ];
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [
-  { label: "Drive the Computer", prompt: "Choose the Computer agent, open https://example.com, look at the screen, and tell me the exact title and first visible heading. Click using visible labels. Do not tell me to open /computer.", source: "tool" },
-  { label: "Probe Forge fingerprint", prompt: "Choose Forge, build a session, and probe the fingerprint lab. Report webdriver, HeadlessChrome, anomaly score, and that Forge does not solve CAPTCHAs. Do not tell me to click New session or Probe lab.", source: "tool" },
-  { label: "Run a Swarm", prompt: "Choose Swarm and task it: Compare SQLite vs managed Postgres for a single-node DigitalOcean agent orchestrator that already runs Chromium. Recommend one for MVP. Poll until the leader answer is ready. Do not tell me to click Run swarm.", source: "tool" },
-  { label: "Research a URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
-  { label: "Browse dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
+  { label: "Drive Chrome", prompt: "Open https://example.com, look at the screen, and tell me the exact title and first visible heading.", source: "tool" },
+  { label: "Fingerprint check", prompt: "Build a Forge session and probe the fingerprint lab. Report webdriver, HeadlessChrome, and the anomaly score.", source: "tool" },
+  { label: "Research it", prompt: "Compare SQLite vs managed Postgres for a single-node DigitalOcean agent orchestrator that already runs Chromium. Recommend one for MVP.", source: "tool" },
+  { label: "Read a URL", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the site actually says.", source: "tool" },
+  { label: "Browse skills", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
 ];
 
 /* ─────────────────────────────────────────────────────────
@@ -879,7 +879,7 @@ export function ClawConsole() {
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
                         <p className="text-[14px] text-muted-foreground">
-                          Talk to me. I choose Computer, Forge, or Swarm, build the agent, and task it. You do not click New session or Probe.
+                          Talk to me. I choose the agent, build it, and task it.
                         </p>
                       </div>
                     </div>

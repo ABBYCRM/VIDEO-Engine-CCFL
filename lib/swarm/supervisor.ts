@@ -29,6 +29,7 @@ import { SWARM_CONTRACT } from "./types";
 const executing = new Set<string>();
 
 export function swarmStatus(gateway?: ModelGateway) {
+  resumeOpenSwarm(gateway);
   const gw = gateway ?? productionGateway();
   return {
     ok: true as const,
@@ -57,6 +58,7 @@ export function startSwarmRun(input: {
   limits?: Partial<SwarmLimits>;
   gateway?: ModelGateway;
 }): { ok: true; run: PublicSwarmRun } | { ok: false; error: string } {
+  resumeOpenSwarm(input.gateway);
   const objective = sanitizeObjective(input.objective);
   if (!objective.ok) return objective;
   if (activeRunCount() >= SWARM_MAX_CONCURRENT_RUNS) {
@@ -206,14 +208,16 @@ let resumed = false;
 export function resumeOpenSwarm(gateway?: ModelGateway) {
   if (resumed) return;
   resumed = true;
-  const gw = gateway ?? productionGateway();
-  if (!gw.available) return;
-  for (const run of listOpenRuns()) {
-    void executeRun(run.id, gw).catch(() => undefined);
+  try {
+    const gw = gateway ?? productionGateway();
+    if (!gw.available) return;
+    for (const run of listOpenRuns()) {
+      void executeRun(run.id, gw).catch(() => undefined);
+    }
+  } catch {
+    resumed = false;
   }
 }
-
-resumeOpenSwarm();
 
 export async function executeRun(runId: string, gateway: ModelGateway) {
   if (executing.has(runId)) return;

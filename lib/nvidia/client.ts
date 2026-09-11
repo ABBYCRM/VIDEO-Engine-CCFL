@@ -120,7 +120,11 @@ export function isClawModelEnvOverridden(): boolean {
 }
 
 export function isNvidiaEnabled(): boolean {
-  return getNvidiaModel() !== "disabled" && getNvidiaApiKeys().length > 0;
+  try {
+    return getNvidiaModel() !== "disabled" && getNvidiaApiKeys().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 // ── Retryable error classification ─────────────────────────────────────────────
