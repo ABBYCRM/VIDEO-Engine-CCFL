@@ -63,6 +63,13 @@ import {
   forgeStatus,
 } from "@/lib/forge";
 import {
+  cancelSwarm,
+  getSwarm,
+  listSwarm,
+  startSwarmRun,
+  swarmStatus,
+} from "@/lib/swarm";
+import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile, saveClawFile
 } from "@/lib/claw/store";
@@ -238,6 +245,7 @@ export const CLAW_TOOLS: ToolDef[] = [
           composio: { configured: composio.configured, live: composio.live, keyType: composio.keyType, toolkits: composio.toolkits?.length || 0, note: composio.note },
           steel: { configured: isSteelConfigured() },
           forge: { live: forgeStatus().live, cap: forgeStatus().cap, note: "Self-hosted Chromium control plane. Does not farm CAPTCHAs." },
+          swarm: { live: swarmStatus().live, cap: swarmStatus().cap, active: swarmStatus().active, note: "Supervisor + workers + leader. Does not steal Computer Chrome." },
           screenshotone: { configured: isScreenshotOneConfigured() },
           search: { exa: isExaConfigured(), tavily: isTavilyConfigured() },
           helicone: { enabled: isHeliconeEnabled() },
@@ -368,6 +376,46 @@ export const CLAW_TOOLS: ToolDef[] = [
       } catch (e: any) {
         return { ok: false, error: e?.message || "forge_probe failed" };
       }
+    }
+  },
+  {
+    name: "swarm_run",
+    description: "Start a Claw Swarm run: planner decomposes the objective into a DAG, workers execute in parallel, a designated leader synthesizes. Does not use Computer Chrome or Forge sessions. Caps agents (2-4). Returns run_id immediately; poll swarm_status.",
+    args: "{\"objective\":\"Compare two approaches\",\"maxAgents\":4}",
+    when: "Operator wants multi-agent research, comparison, or synthesis rather than a single chat turn or a live browser session.",
+    handler: async (a) => {
+      const result = startSwarmRun({
+        objective: str(a.objective || a.goal),
+        limits: { maxAgents: num(a.maxAgents ?? a.max_subagents, 4) },
+      });
+      return result;
+    }
+  },
+  {
+    name: "swarm_status",
+    description: "Return Claw Swarm health, or a specific run (tasks, events, leader answer, token usage) when id is provided.",
+    args: "{\"id\":\"optional run id\"}",
+    when: "Check whether a swarm_run finished, read the leader answer, or list recent runs.",
+    handler: async (a) => {
+      const id = str(a.id || a.runId || a.run_id).trim();
+      if (id) {
+        const run = getSwarm(id);
+        if (!run) return { ok: false, error: "Unknown run" };
+        return { ok: true, run };
+      }
+      return { ...swarmStatus(), runs: listSwarm().map((r) => ({ id: r.id, status: r.status, objective: r.objective, createdAt: r.createdAt })) };
+    }
+  },
+  {
+    name: "swarm_cancel",
+    description: "Cancel an in-flight Claw Swarm run. Cooperative: no new model calls after cancel.",
+    args: "{\"id\":\"run id\"}",
+    handler: async (a) => {
+      const id = str(a.id || a.runId).trim();
+      if (!id) return { error: "id is required" };
+      const run = cancelSwarm(id);
+      if (!run) return { ok: false, error: "Unknown run" };
+      return { ok: true, run };
     }
   },
   {

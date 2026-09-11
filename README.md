@@ -59,6 +59,12 @@ Local: `npx playwright install chromium`. Production worker: DigitalOcean Drople
 
 Open `/computer` for the live screen.
 
+## Claw Swarm
+
+Grok-style multi-agent runtime: supervisor, planner, durable SQLite tasks, in-process workers, leader synthesis. Bitdeer routes planner/critic/leader to Mistral Large 3 675B and researchers to GLM-5. Caps: 4 agents, depth 2, 8 LLM calls. Does not steal Computer Chrome or Forge sessions. Does not farm CAPTCHAs.
+
+Open `/swarm`. Claw tools: `swarm_run`, `swarm_status`, `swarm_cancel`. NATS / managed Postgres / DOKS is the scale-up path; this node uses SQLite because Computer and Forge already share the App Platform instance.
+
 ## Local setup
 
 ```bash

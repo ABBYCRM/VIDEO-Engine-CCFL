@@ -10,6 +10,7 @@ Live Chromium Claw can drive like a person. Version 1 is **one persistent Playwr
 - Uploads and downloads stay in the session folder. Downloaded files are not executed.
 - Steel scrape is unchanged until this path is the default in production
 - Claw Forge (`/forge`, `lib/forge`) is the self-hosted control plane: sessions, CDP, scrape, fingerprint lab. It does not farm CAPTCHAs.
+- Claw Swarm (`/swarm`, `lib/swarm`) is the multi-agent planner/worker/leader runtime. It does not steal this Chrome session.
 
 ## Tools
 

@@ -110,5 +110,9 @@ CREATE INDEX IF NOT EXISTS idx_claw_files_conv
   ON claw_files (conversation_id, created_at);
 `);
 
+// Swarm tables live in lib/swarm/store.ts (CREATE TABLE IF NOT EXISTS on import).
+// They are Claw Swarm durable tasks — runs / tasks / events — SQLite source of
+// truth, in-process workers. Not a second product database.
+
 export const db = sqlite;
 export { sqlite };

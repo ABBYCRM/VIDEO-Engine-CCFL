@@ -40,6 +40,8 @@ Third-party puzzles **pause for a human on the same session**. Steel Cloud remai
 
 `forge_session` `forge_scrape` `forge_probe`
 
+Claw Swarm (`/swarm`) is a separate planner/worker/leader runtime and does not open Forge sessions.
+
 ## Policy
 
 Private/metadata URLs are denied. CAPTCHA copy on a page triggers `HANDOFF`. Claw must not click tiles.
