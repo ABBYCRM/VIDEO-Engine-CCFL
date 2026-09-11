@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename } from "./policy";
+import { initScriptFor } from "../forge/stealth";
 import type {
   ActionResult,
   ComputerAction,
@@ -232,6 +233,8 @@ export async function ensureSession(): Promise<PublicSession> {
     session.browser = browser;
   }
   const page = context.pages()[0] ?? (await context.newPage());
+  const coherence = initScriptFor("coherence");
+  if (coherence) await context.addInitScript(coherence);
   page.on("download", async (download) => {
     try {
       const name = download.suggestedFilename() || `file-${Date.now()}`;

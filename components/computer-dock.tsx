@@ -234,17 +234,25 @@ export function ComputerDock({
           <div className="pointer-events-none absolute inset-x-3 top-3 rounded-lg border border-[rgba(214,181,109,0.4)] bg-[rgba(8,8,20,0.92)] px-3 py-2 text-[12px] text-[#d6b56d]">
             <p className="pointer-events-none">
               Claw paused: {session.handoffReason}. Tap the puzzle on the screen
-              {session.handoffReason === "captcha" ? " (the duck square), or skip it with Steel." : ", then return control."}
+              {session.handoffReason === "captcha" ? " (the duck square), skip it with Steel, or open Forge (no solver)." : ", then return control."}
             </p>
             {session.handoffReason === "captcha" && (
-              <button
-                type="button"
-                className="pointer-events-auto mt-2 rounded-md bg-[#d6b56d] px-3 py-1.5 text-[12px] font-medium text-[#1a1408]"
-                onClick={() => void steelSearch()}
-                disabled={steelBusy}
-              >
-                {steelBusy ? "Steel searching…" : "Skip puzzle — search with Steel"}
-              </button>
+              <div className="pointer-events-auto mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#d6b56d] px-3 py-1.5 text-[12px] font-medium text-[#1a1408]"
+                  onClick={() => void steelSearch()}
+                  disabled={steelBusy}
+                >
+                  {steelBusy ? "Steel searching…" : "Skip puzzle — search with Steel"}
+                </button>
+                <Link
+                  href="/forge"
+                  className="rounded-md border border-[#d6b56d]/50 px-3 py-1.5 text-[12px] font-medium text-[#d6b56d]"
+                >
+                  Open Forge lab
+                </Link>
+              </div>
             )}
           </div>
         )}

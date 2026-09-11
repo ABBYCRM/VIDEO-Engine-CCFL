@@ -9,6 +9,7 @@ Live Chromium Claw can drive like a person. Version 1 is **one persistent Playwr
 - CAPTCHA / password / MFA / payment → `computer_handoff` on the **same** window
 - Uploads and downloads stay in the session folder. Downloaded files are not executed.
 - Steel scrape is unchanged until this path is the default in production
+- Claw Forge (`/forge`, `lib/forge`) is the self-hosted control plane: sessions, CDP, scrape, fingerprint lab. It does not farm CAPTCHAs.
 
 ## Tools
 

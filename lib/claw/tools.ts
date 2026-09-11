@@ -53,6 +53,16 @@ import {
 } from "@/lib/browser-computer";
 import type { ActionResult, PublicSession } from "@/lib/browser-computer";
 import {
+  createForgeSession,
+  getForgeSession,
+  listForgeSessions,
+  navigateForge,
+  probeForge,
+  releaseForgeSession,
+  scrapeWithForge,
+  forgeStatus,
+} from "@/lib/forge";
+import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile, saveClawFile
 } from "@/lib/claw/store";
@@ -275,6 +285,84 @@ export const CLAW_TOOLS: ToolDef[] = [
       const url = str(a.url).trim();
       if (!url) return { error: "url is required" };
       return scrapePublicUrl({ url });
+    }
+  },
+  {
+    name: "forge_session",
+    description: "Claw Forge — self-hosted Chromium control plane (sessions, persistent profile, loopback CDP). op: status|create|list|get|navigate|release. stealth: coherence|lab|off. Does NOT solve CAPTCHAs or rotate residential proxies. Third-party puzzles require computer_handoff or the operator.",
+    args: "{\"op\":\"create\",\"stealth\":\"coherence\",\"url\":\"https://example.com\"}",
+    when: "Operator wants a managed browser session, CDP, or persistent cookies without Steel Cloud.",
+    handler: async (a) => {
+      const op = str(a.op || "status").trim();
+      try {
+        if (op === "status") return forgeStatus();
+        if (op === "list") return { ok: true, sessions: listForgeSessions() };
+        if (op === "create") {
+          const session = await createForgeSession({ stealth: a.stealth, persist: a.persist !== false, blockAds: a.blockAds === true });
+          const url = str(a.url).trim();
+          if (url) return { ok: true, session: await navigateForge(session.id, url) };
+          return { ok: true, session };
+        }
+        if (op === "get") return { ok: true, session: getForgeSession(str(a.id || a.sessionId)) };
+        if (op === "navigate") {
+          const id = str(a.id || a.sessionId);
+          if (!id) return { error: "id is required" };
+          return { ok: true, session: await navigateForge(id, a.url) };
+        }
+        if (op === "release") {
+          const id = str(a.id || a.sessionId);
+          if (!id) return { error: "id is required" };
+          return releaseForgeSession(id);
+        }
+        return { error: "unknown op. Use status, create, list, get, navigate, release." };
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "forge_session failed" };
+      }
+    }
+  },
+  {
+    name: "forge_scrape",
+    description: "Scrape a public URL with Claw Forge (self-hosted Chromium). Returns markdown and links. Private URLs denied. If the page is a CAPTCHA, returns humanRequired and does not solve it. Steel Cloud remains available via computer_search for search CAPTCHAs.",
+    args: "{\"url\":\"https://example.com\",\"sessionId\":\"optional\",\"delayMs\":500}",
+    when: "Operator wants one-shot markdown from Forge Chromium instead of Steel Cloud.",
+    handler: async (a) => {
+      const url = str(a.url).trim();
+      if (!url) return { error: "url is required" };
+      try {
+        const result = await scrapeWithForge({ url, sessionId: str(a.sessionId) || undefined, delayMs: a.delayMs, screenshot: a.screenshot === true });
+        return { ok: result.scrape.ok, ...result.scrape, sessionId: result.session?.id, handoff: result.session?.handoffReason };
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "forge_scrape failed" };
+      }
+    }
+  },
+  {
+    name: "forge_probe",
+    description: "Measure the live Forge Chromium fingerprint (UA, webdriver, WebGL, canvas digest, CPU/RAM) and return an educational anomaly score. This does not hide automation and is not a stealth certificate.",
+    args: "{\"sessionId\":\"optional\",\"url\":\"https://example.com\"}",
+    when: "Operator asks what the browser looks like to a detector, or to run the fingerprint lab.",
+    handler: async (a) => {
+      try {
+        const result = await probeForge({ sessionId: str(a.sessionId) || undefined, url: str(a.url) || undefined });
+        const fp = result.probe.fingerprint;
+        return {
+          ok: result.probe.ok,
+          digest: result.probe.digest,
+          score: result.probe.detector.score,
+          findings: result.probe.detector.findings,
+          note: result.probe.detector.note,
+          webdriver: fp?.webdriver,
+          userAgent: fp?.userAgent,
+          hardwareConcurrency: fp?.hardwareConcurrency,
+          deviceMemory: fp?.deviceMemory,
+          webgl: fp?.webgl?.unmaskedRenderer || fp?.webgl?.renderer,
+          timezone: fp?.timezone,
+          sessionId: result.session?.id,
+          error: result.probe.error,
+        };
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "forge_probe failed" };
+      }
     }
   },
   {
