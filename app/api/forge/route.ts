@@ -48,11 +48,11 @@ export async function POST(req: Request) {
         delayMs: body.delayMs,
         screenshot: body.screenshot !== false,
       });
-      return NextResponse.json({ ok: result.scrape.ok, ...result });
+      return NextResponse.json({ ok: result.scrape.ok, session: result.session, scrape: result.scrape });
     }
     if (op === "probe") {
       const result = await probeForge({ sessionId: body.sessionId || body.id, url: body.url });
-      return NextResponse.json({ ok: result.probe.ok, ...result });
+      return NextResponse.json({ ok: result.probe.ok, session: result.session, probe: result.probe });
     }
     if (op === "screenshot") {
       const session = await screenshotForge(String(body.id || body.sessionId));
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     }
     if (op === "cookies") {
       const result = await cookiesForge(String(body.id || body.sessionId));
-      return NextResponse.json({ ok: true, ...result });
+      return NextResponse.json({ ok: true, session: result.session, cookies: result.cookies });
     }
     if (op === "handoff") {
       const session = await handoffForge(String(body.id || body.sessionId), (body.reason || "manual") as ForgeHandoffReason);

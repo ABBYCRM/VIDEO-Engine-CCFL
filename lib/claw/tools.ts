@@ -330,7 +330,11 @@ export const CLAW_TOOLS: ToolDef[] = [
       if (!url) return { error: "url is required" };
       try {
         const result = await scrapeWithForge({ url, sessionId: str(a.sessionId) || undefined, delayMs: a.delayMs, screenshot: a.screenshot === true });
-        return { ok: result.scrape.ok, ...result.scrape, sessionId: result.session?.id, handoff: result.session?.handoffReason };
+        return {
+          ...result.scrape,
+          sessionId: result.session?.id,
+          handoff: result.session?.handoffReason,
+        };
       } catch (e: any) {
         return { ok: false, error: e?.message || "forge_scrape failed" };
       }
