@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
-import { cancelSwarm, getSwarm, listSwarm, startSwarmRun, swarmStatus } from "@/lib/swarm";
+import {
+  cancelSwarm,
+  completeSwarm,
+  getSwarm,
+  listSwarm,
+  messageSwarm,
+  spawnSwarmTask,
+  startSwarmRun,
+  swarmStatus,
+  waitSwarmTask,
+} from "@/lib/swarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,14 +52,47 @@ export async function POST(req: Request) {
         },
       });
       if (!result.ok) return NextResponse.json(result, { status: 400 });
+      return NextResponse.json(result, { status: 202 });
+    }
+    if (op === "spawn") {
+      const result = spawnSwarmTask({
+        runId: body.runId || body.id,
+        role: body.role,
+        objective: String(body.objective || body.task || body.goal || ""),
+        dependsOn: body.dependsOn,
+        urls: body.urls,
+      });
+      if (!result.ok) return NextResponse.json(result, { status: 400 });
+      return NextResponse.json(result, { status: 202 });
+    }
+    if (op === "wait") {
+      const result = await waitSwarmTask({
+        runId: String(body.runId || body.id || ""),
+        taskId: String(body.taskId || ""),
+        timeoutMs: body.timeoutMs,
+      });
       return NextResponse.json(result);
+    }
+    if (op === "message") {
+      const result = messageSwarm({
+        runId: String(body.runId || body.id || ""),
+        taskId: body.taskId,
+        body: String(body.body || body.message || ""),
+      });
+      if (!result.ok) return NextResponse.json(result, { status: 400 });
+      return NextResponse.json(result);
+    }
+    if (op === "complete") {
+      const run = completeSwarm({ runId: String(body.runId || body.id || ""), answer: body.answer });
+      if (!run) return NextResponse.json({ ok: false, error: "Unknown run" }, { status: 404 });
+      return NextResponse.json({ ok: true, run });
     }
     if (op === "cancel") {
       const run = cancelSwarm(String(body.id || body.runId || ""));
       if (!run) return NextResponse.json({ ok: false, error: "Unknown run" }, { status: 404 });
       return NextResponse.json({ ok: true, run });
     }
-    return NextResponse.json({ ok: false, error: "unknown op. Use status, list, get, create, cancel." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "unknown op. Use status, list, get, create, spawn, wait, message, complete, cancel." }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "swarm failed" }, { status: 500 });
   }

@@ -46,6 +46,7 @@ export function parseLimits(raw?: Partial<SwarmLimits>): SwarmLimits {
     deadlineMs: clampInt(raw?.deadlineMs, 30_000, SWARM_DEADLINE_MS, 120_000),
     maxLlmCalls: clampInt(raw?.maxLlmCalls, 2, SWARM_MAX_LLM_CALLS, SWARM_MAX_LLM_CALLS),
     maxFetches: clampInt(raw?.maxFetches, 0, SWARM_MAX_FETCHES, 3),
+    mode: raw?.mode === "led" ? "led" : "auto",
   };
 }
 

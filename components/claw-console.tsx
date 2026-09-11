@@ -10,6 +10,8 @@ import {
 import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
 import { ComputerDock } from "@/components/computer-dock";
+import { ForgeConsole } from "@/components/forge-console";
+import { SwarmConsole } from "@/components/swarm-console";
 import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode, type SelfStateView } from "@/components/ui/claw-thinking-panel";
 
@@ -30,9 +32,9 @@ const WORKING_MODEL_PREFIXES = [
 ];
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [
-  { label: "Drive the Computer", prompt: "Use computer_open on https://example.com, then computer_look and tell me the exact title and first visible heading. Click using visible labels.", source: "tool" },
-  { label: "Probe Forge fingerprint", prompt: "Call forge_session with op create, then forge_probe. Report webdriver, HeadlessChrome, anomaly score, and that Forge does not solve CAPTCHAs. Steel remains the optional cloud solver for search puzzles.", source: "tool" },
-  { label: "Run a Swarm", prompt: "Call swarm_run with objective: Compare SQLite vs managed Postgres for a single-node DigitalOcean agent orchestrator that already runs Chromium. Recommend one for MVP. Then poll swarm_status until the leader answer is ready. Do not use Computer Chrome for this.", source: "tool" },
+  { label: "Drive the Computer", prompt: "Choose the Computer agent, open https://example.com, look at the screen, and tell me the exact title and first visible heading. Click using visible labels. Do not tell me to open /computer.", source: "tool" },
+  { label: "Probe Forge fingerprint", prompt: "Choose Forge, build a session, and probe the fingerprint lab. Report webdriver, HeadlessChrome, anomaly score, and that Forge does not solve CAPTCHAs. Do not tell me to click New session or Probe lab.", source: "tool" },
+  { label: "Run a Swarm", prompt: "Choose Swarm and task it: Compare SQLite vs managed Postgres for a single-node DigitalOcean agent orchestrator that already runs Chromium. Recommend one for MVP. Poll until the leader answer is ready. Do not tell me to click Run swarm.", source: "tool" },
   { label: "Research a URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
   { label: "Browse dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
 ];
@@ -414,6 +416,8 @@ export function ClawConsole() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [computerOpen, setComputerOpen] = useState(false);
+  const [forgeOpen, setForgeOpen] = useState(false);
+  const [swarmOpen, setSwarmOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState("");
   const [models, setModels] = useState<{ id: string; label: string; notes: string; contextWindow: number }[]>([]);
@@ -575,8 +579,22 @@ export function ClawConsole() {
           if (e.type === "token") setStreaming(s => s + e.text);
           if (e.type === "tool_start") {
             setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now(), args: e.args ? JSON.stringify(e.args) : undefined }]);
-            if (String(e.name).startsWith("computer_")) {
+            if (String(e.name).startsWith("computer_") || (e.name === "claw_dispatch" && /computer/i.test(String(e.args || "")))) {
               setComputerOpen(true);
+              setForgeOpen(false);
+              setSwarmOpen(false);
+              setFilesOpen(false);
+            }
+            if (String(e.name).startsWith("forge_") || (e.name === "claw_dispatch" && /forge/i.test(String(e.args || "")))) {
+              setForgeOpen(true);
+              setComputerOpen(false);
+              setSwarmOpen(false);
+              setFilesOpen(false);
+            }
+            if (String(e.name).startsWith("swarm_") || (e.name === "claw_dispatch" && /swarm/i.test(String(e.args || "")))) {
+              setSwarmOpen(true);
+              setComputerOpen(false);
+              setForgeOpen(false);
               setFilesOpen(false);
             }
           }
@@ -834,6 +852,8 @@ export function ClawConsole() {
               type="button"
               onClick={() => {
                 setComputerOpen((v) => !v);
+                setForgeOpen(false);
+                setSwarmOpen(false);
                 setFilesOpen(false);
               }}
               className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
@@ -845,25 +865,47 @@ export function ClawConsole() {
               <Monitor size={13} />
               Computer
             </button>
-            <Link
-              href="/forge"
-              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-2.5 py-1.5 text-[12px] font-medium text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+            <button
+              type="button"
+              onClick={() => {
+                setForgeOpen((v) => !v);
+                setComputerOpen(false);
+                setSwarmOpen(false);
+                setFilesOpen(false);
+              }}
+              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
+                forgeOpen
+                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
+                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+              }`}
             >
               <Hammer size={13} />
               Forge
-            </Link>
-            <Link
-              href="/swarm"
-              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-2.5 py-1.5 text-[12px] font-medium text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSwarmOpen((v) => !v);
+                setComputerOpen(false);
+                setForgeOpen(false);
+                setFilesOpen(false);
+              }}
+              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
+                swarmOpen
+                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
+                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+              }`}
             >
               <Network size={13} />
               Swarm
-            </Link>
+            </button>
             <button
               type="button"
               onClick={() => {
                 setFilesOpen((v) => !v);
                 setComputerOpen(false);
+                setForgeOpen(false);
+                setSwarmOpen(false);
               }}
               className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium backdrop-blur-md transition-all ${
                 filesOpen
@@ -896,7 +938,7 @@ export function ClawConsole() {
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
                         <p className="text-[14px] text-muted-foreground">
-                          Claw drives live Chrome on Computer. Forge is the session lab. Swarm is planner + workers + leader. Steel still covers search CAPTCHAs.
+                          Talk to me. I choose Computer, Forge, or Swarm, build the agent, and task it. You do not click New session or Probe.
                         </p>
                       </div>
                     </div>
@@ -932,6 +974,7 @@ export function ClawConsole() {
                                 return;
                               }
                               setText(s.prompt);
+                              void send(s.prompt);
                             }}
                           >
                             {s.source === "rag" && <Sparkles size={10} className="mr-1 shrink-0 text-[var(--claw-accent)]" />}
@@ -999,6 +1042,16 @@ export function ClawConsole() {
             {computerOpen && (
               <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
                 <ComputerDock variant="pane" onClose={() => setComputerOpen(false)} />
+              </aside>
+            )}
+            {forgeOpen && (
+              <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col overflow-y-auto border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
+                <ForgeConsole variant="pane" drivenByClaw onClose={() => setForgeOpen(false)} />
+              </aside>
+            )}
+            {swarmOpen && (
+              <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col overflow-y-auto border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
+                <SwarmConsole variant="pane" drivenByClaw onClose={() => setSwarmOpen(false)} />
               </aside>
             )}
 

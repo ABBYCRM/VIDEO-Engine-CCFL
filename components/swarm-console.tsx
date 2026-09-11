@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Network, Square } from "lucide-react";
+import { Loader2, Network, Square, X } from "lucide-react";
 
 type Task = {
   id: string;
@@ -51,7 +51,15 @@ function tone(status: string) {
   return "text-muted-foreground";
 }
 
-export function SwarmConsole() {
+export function SwarmConsole({
+  variant = "page",
+  drivenByClaw = true,
+  onClose,
+}: {
+  variant?: "page" | "pane";
+  drivenByClaw?: boolean;
+  onClose?: () => void;
+}) {
   const [objective, setObjective] = useState(STARTERS[0].prompt);
   const [maxAgents, setMaxAgents] = useState(4);
   const [busy, setBusy] = useState(false);
@@ -80,8 +88,21 @@ export function SwarmConsole() {
         setNote(s.gateway?.note || s.note || note);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "status failed"));
+    const poll = setInterval(() => {
+      call("list")
+        .then((body) => {
+          if (!alive || !Array.isArray(body.runs) || !body.runs[0]) return;
+          setRun((prev) => {
+            const newer = body.runs[0];
+            if (!prev || prev.id !== newer.id || prev.status !== newer.status) return newer;
+            return prev;
+          });
+        })
+        .catch(() => undefined);
+    }, 2200);
     return () => {
       alive = false;
+      clearInterval(poll);
     };
   }, []);
 
@@ -133,10 +154,28 @@ export function SwarmConsole() {
         <h1 className="flex items-center gap-2 text-base font-semibold">
           <Network size={16} />
           Claw Swarm
+          {variant === "pane" && onClose && (
+            <button type="button" className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-muted-foreground" onClick={onClose} aria-label="Close swarm">
+              <X size={14} />
+            </button>
+          )}
         </h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Planner decomposes the objective. Workers run in parallel. Leader synthesizes. Computer and Forge keep their own Chrome.
+          {drivenByClaw
+            ? "Claw builds planner, workers, and a leader from chat. You watch this graph."
+            : "Planner decomposes the objective. Workers run in parallel. Leader synthesizes. Computer and Forge keep their own Chrome."}
         </p>
+        {drivenByClaw ? (
+          active ? (
+            <button type="button" onClick={() => void cancel()} className="mt-3 inline-flex h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm">
+              <Square size={12} />
+              Cancel
+            </button>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">Ask Claw in chat. The task graph appears when Claw tasks Swarm.</p>
+          )
+        ) : (
+        <>
         <textarea
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
@@ -191,6 +230,8 @@ export function SwarmConsole() {
         </div>
         {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
         {!live && <p className="mt-3 text-sm text-amber-400">{note}</p>}
+        </>
+        )}
         <ul className="mt-4 space-y-2">
           {(run?.tasks ?? []).map((task) => (
             <li key={task.id} className="rounded-xl border border-border px-3 py-2 dark:border-[rgba(180,180,255,0.10)]">

@@ -10,6 +10,7 @@ import {
   ScanSearch,
   ShieldAlert,
   Trash2,
+  X,
 } from "lucide-react";
 
 type StealthMode = "off" | "coherence" | "lab";
@@ -49,7 +50,13 @@ const DOES_NOT = [
   "Click third-party puzzle tiles",
 ];
 
-export function ForgeConsole() {
+type Props = {
+  variant?: "page" | "pane";
+  drivenByClaw?: boolean;
+  onClose?: () => void;
+};
+
+export function ForgeConsole({ variant = "page", drivenByClaw = true, onClose }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [stealth, setStealth] = useState<StealthMode>("coherence");
@@ -135,13 +142,24 @@ export function ForgeConsole() {
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-semibold tracking-tight">Claw Forge</p>
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              Self-hosted Chromium control plane: sessions, persistent profile, loopback CDP, scrape, fingerprint lab.
-              Not a CAPTCHA farm. Not undetectable. Third-party puzzles pause for you.
+              {drivenByClaw
+                ? "Live view of the Forge agent Claw built. Talk in chat — do not click New session."
+                : "Self-hosted Chromium control plane: sessions, persistent profile, loopback CDP, scrape, fingerprint lab. Not a CAPTCHA farm."}
             </p>
           </div>
+          {variant === "pane" && onClose && (
+            <button type="button" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground" onClick={onClose} aria-label="Close forge">
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
+      {drivenByClaw ? (
+        <div className="border-b border-border px-4 py-3 text-[12px] leading-relaxed text-muted-foreground dark:border-[rgba(180,180,255,0.10)]">
+          Claw chooses Forge, builds the Chromium session, and tasks probe or scrape. This pane is the live frame.
+        </div>
+      ) : (
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 dark:border-[rgba(180,180,255,0.10)]">
         {(["coherence", "lab", "off"] as const).map((mode) => (
           <button
@@ -194,9 +212,14 @@ export function ForgeConsole() {
           Scrape example.com
         </button>
       </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto border-b border-border px-4 py-2 dark:border-[rgba(180,180,255,0.08)]">
-        {sessions.length === 0 && <p className="py-2 text-[12px] text-muted-foreground">No live sessions. Create one to boot Chromium.</p>}
+        {sessions.length === 0 && (
+          <p className="py-2 text-[12px] text-muted-foreground">
+            {drivenByClaw ? "Waiting for Claw to dispatch Forge." : "No live sessions. Create one to boot Chromium."}
+          </p>
+        )}
         {sessions.map((s) => (
           <button
             key={s.id}
@@ -217,6 +240,20 @@ export function ForgeConsole() {
 
       <div className="grid md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
         <div className="flex min-h-0 flex-col">
+          {drivenByClaw ? (
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <p className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground">{active?.url || "about:blank"}</p>
+              <button
+                type="button"
+                aria-label="Refresh frame"
+                className="grid h-11 w-11 place-items-center rounded-md border border-border"
+                disabled={!active || Boolean(busy)}
+                onClick={() => void run("shot", async () => { if (active) await call("screenshot", { id: active.id }); })}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
           <form
             className="flex items-center gap-2 border-b border-border px-3 py-2"
             onSubmit={(e) => {
@@ -255,6 +292,7 @@ export function ForgeConsole() {
               <Trash2 className="h-4 w-4" />
             </button>
           </form>
+          )}
           <div className="relative min-h-[220px] bg-muted dark:bg-[rgba(5,5,15,0.8)]">
             {active?.screenshotJpeg ? (
               <div className="relative w-full" style={{ aspectRatio: "1280 / 800" }}>
@@ -265,7 +303,9 @@ export function ForgeConsole() {
                 />
               </div>
             ) : (
-              <p className="p-6 text-sm text-muted-foreground">Create a session to see the Chromium frame.</p>
+              <p className="p-6 text-sm text-muted-foreground">
+                {drivenByClaw ? "Ask Claw in chat. The Chromium frame appears when Claw tasks Forge." : "Create a session to see the Chromium frame."}
+              </p>
             )}
             {active?.handoffReason && (
               <div className="absolute inset-x-3 top-3 rounded-lg border border-amber-400/40 bg-background/90 px-3 py-2 text-sm text-amber-700 dark:text-[#d6b56d]">

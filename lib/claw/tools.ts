@@ -64,11 +64,16 @@ import {
 } from "@/lib/forge";
 import {
   cancelSwarm,
+  completeSwarm,
   getSwarm,
   listSwarm,
+  messageSwarm,
+  spawnSwarmTask,
   startSwarmRun,
   swarmStatus,
+  waitSwarmTask,
 } from "@/lib/swarm";
+import { dispatchAgent } from "@/lib/claw/dispatch";
 import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile, saveClawFile
@@ -256,6 +261,24 @@ export const CLAW_TOOLS: ToolDef[] = [
     }
   },
 
+  {
+    name: "claw_dispatch",
+    description: "Grok-style supervisor: YOU choose, build, and task a specialist. The operator talks only to Claw chat — they never click New session, Probe lab, Scrape, Run swarm, or Take over (except CAPTCHA after computer_handoff). agent: computer | forge | swarm | steel. task: the objective. For forge, work: probe | scrape | session. url optional. maxAgents for swarm (2-4).",
+    args: "{\"agent\":\"forge\",\"task\":\"Probe the fingerprint lab\",\"work\":\"probe\"}",
+    when: "First tool on almost every operator request that needs Computer, Forge, Swarm, or Steel. You pick the agent.",
+    handler: async (a) => {
+      return dispatchAgent({
+        agent: str(a.agent || a.kind || a.name),
+        task: str(a.task || a.objective || a.goal),
+        work: str(a.work) || undefined,
+        url: str(a.url) || undefined,
+        stealth: (["off", "coherence", "lab"].includes(str(a.stealth)) ? str(a.stealth) : undefined) as "off" | "coherence" | "lab" | undefined,
+        maxAgents: a.maxAgents == null && a.max_subagents == null ? undefined : num(a.maxAgents ?? a.max_subagents, 4),
+        sessionId: str(a.sessionId || a.id) || undefined,
+      });
+    }
+  },
+
   // ─── Composio (granular in/out passthrough) ──────────────────────
   {
     name: "composio_health",
@@ -414,6 +437,49 @@ export const CLAW_TOOLS: ToolDef[] = [
       const id = str(a.id || a.runId).trim();
       if (!id) return { error: "id is required" };
       const run = cancelSwarm(id);
+      if (!run) return { ok: false, error: "Unknown run" };
+      return { ok: true, run };
+    }
+  },
+  {
+    name: "swarm_spawn",
+    description: "Claw-as-leader: build and task a durable subagent. If runId is omitted, creates a led run (no auto-planner). role: researcher|critic|synthesizer. Returns taskId. Then swarm_wait. Do not tell the operator to click Run swarm.",
+    args: "{\"runId\":\"optional\",\"role\":\"researcher\",\"objective\":\"Investigate X\"}",
+    when: "You are the leader and need a specialist worker with its own context.",
+    handler: async (a) => spawnSwarmTask({
+      runId: str(a.runId || a.id) || undefined,
+      role: str(a.role) || "researcher",
+      objective: str(a.objective || a.task || a.goal),
+      dependsOn: Array.isArray(a.dependsOn) ? a.dependsOn.map(String) : undefined,
+      urls: Array.isArray(a.urls) ? a.urls.map(String) : undefined,
+    })
+  },
+  {
+    name: "swarm_wait",
+    description: "Wait for one spawned task to complete. Returns the task output the leader is allowed to see, not chain-of-thought.",
+    args: "{\"runId\":\"run id\",\"taskId\":\"task id\"}",
+    handler: async (a) => waitSwarmTask({
+      runId: str(a.runId || a.id),
+      taskId: str(a.taskId),
+      timeoutMs: a.timeoutMs == null ? undefined : num(a.timeoutMs, 45_000),
+    })
+  },
+  {
+    name: "swarm_message",
+    description: "Send a follow-up to a live subagent via the supervisor blackboard. The next worker turn sees it. Does not let agents call siblings directly.",
+    args: "{\"runId\":\"run id\",\"taskId\":\"optional\",\"body\":\"Investigate the NATS failure case further.\"}",
+    handler: async (a) => messageSwarm({
+      runId: str(a.runId || a.id),
+      taskId: str(a.taskId) || undefined,
+      body: str(a.body || a.message || a.text),
+    })
+  },
+  {
+    name: "swarm_complete",
+    description: "Close a Claw-led swarm with your synthesized answer. Use after swarm_wait when you are the leader (not when swarm_run already produced leaderAnswer).",
+    args: "{\"runId\":\"run id\",\"answer\":\"final operator-facing answer\"}",
+    handler: async (a) => {
+      const run = completeSwarm({ runId: str(a.runId || a.id), answer: str(a.answer) });
       if (!run) return { ok: false, error: "Unknown run" };
       return { ok: true, run };
     }

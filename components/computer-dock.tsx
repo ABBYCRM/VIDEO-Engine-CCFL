@@ -226,7 +226,7 @@ export function ComputerDock({
         ) : (
           !booting && (
             <p className="p-6 text-[12px] text-[rgba(220,220,255,0.35)]">
-              Screen appears when Chromium boots. If this stays empty, Playwright is not in this runtime — Steel scrape still works.
+              Screen appears when Claw tasks the Computer agent. Ask Claw in chat — do not drive this Chrome unless Claw hands you a CAPTCHA.
             </p>
           )
         )}
@@ -246,12 +246,6 @@ export function ComputerDock({
                 >
                   {steelBusy ? "Steel searching…" : "Skip puzzle — search with Steel"}
                 </button>
-                <Link
-                  href="/forge"
-                  className="rounded-md border border-[#d6b56d]/50 px-3 py-1.5 text-[12px] font-medium text-[#d6b56d]"
-                >
-                  Open Forge lab
-                </Link>
               </div>
             )}
           </div>

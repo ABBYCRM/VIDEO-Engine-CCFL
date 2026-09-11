@@ -37,6 +37,7 @@ export type SwarmLimits = {
   deadlineMs: number;
   maxLlmCalls: number;
   maxFetches: number;
+  mode: "auto" | "led";
 };
 
 export type PlannedTask = {
@@ -77,6 +78,15 @@ export type SwarmEventData = {
   attempt?: number;
   via?: string;
   reason?: string;
+};
+
+export type SwarmMessage = {
+  id: string;
+  runId: string;
+  taskId: string | null;
+  fromRole: string;
+  body: string;
+  at: number;
 };
 
 export type SwarmEvent = {
@@ -146,6 +156,6 @@ export const SWARM_CONTRACT = {
     "Does not farm CAPTCHAs or rotate residential proxies",
     "Does not expose subagent chain-of-thought — only task outputs and the leader answer",
   ],
-  transport: "in-process queue; SQLite is the source of truth",
+  transport: "SQLite durable tasks; Claw-led spawn/wait/message; SSE /api/swarm/:id/events",
   providers: "Bitdeer: planner/critic/leader = Mistral Large 3 675B; researcher = GLM-5 with Mistral fallback",
 } as const;

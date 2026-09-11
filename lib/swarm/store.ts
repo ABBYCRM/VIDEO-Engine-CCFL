@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { emptyUsage } from "./policy";
-import type { PlannedTask, PublicSwarmRun, SwarmEvent, SwarmLimits, SwarmRun, SwarmTask } from "./types";
+import type { PlannedTask, PublicSwarmRun, SwarmEvent, SwarmLimits, SwarmMessage, SwarmRun, SwarmTask } from "./types";
 
 const controllers = new Map<string, AbortController>();
 
@@ -52,6 +52,26 @@ CREATE TABLE IF NOT EXISTS swarm_events (
 );
 CREATE INDEX IF NOT EXISTS idx_swarm_runs_created ON swarm_runs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_swarm_events_run ON swarm_events(run_id, at);
+CREATE TABLE IF NOT EXISTS swarm_messages (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  task_id TEXT,
+  from_role TEXT NOT NULL,
+  body TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  FOREIGN KEY (run_id) REFERENCES swarm_runs(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS swarm_task_results (
+  task_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  findings_json TEXT NOT NULL,
+  artifacts_json TEXT NOT NULL,
+  usage_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (run_id, task_id)
+);
 `);
 
 type RunRow = {
@@ -316,6 +336,94 @@ export function seedTasks(runId: string, planned: PlannedTask[], provider: strin
   tx();
   appendEvent(runId, null, "plan.seeded", { count: rows.length, roles: rows.map((r) => r.role) });
   return rows;
+}
+
+export function insertTask(runId: string, planned: PlannedTask, provider: string, model: string): SwarmTask {
+  const task: SwarmTask = {
+    id: planned.id,
+    runId,
+    parentId: planned.dependsOn[0] ?? null,
+    role: planned.role,
+    objective: planned.objective,
+    dependsOn: planned.dependsOn,
+    urls: (planned.urls ?? []).slice(0, 3),
+    state: planned.dependsOn.length === 0 ? "ready" : "pending",
+    attempt: 0,
+    provider,
+    model,
+    result: null,
+    evidence: [],
+    error: null,
+    usage: emptyUsage(),
+    startedAt: null,
+    completedAt: null,
+  };
+  db.prepare(
+    `INSERT INTO swarm_tasks (id, run_id, parent_id, role, objective, depends_json, urls_json, state, attempt, provider, model, result, evidence_json, error, usage_json, started_at, completed_at)
+     VALUES (@id, @run_id, @parent_id, @role, @objective, @depends_json, @urls_json, @state, @attempt, @provider, @model, @result, @evidence_json, @error, @usage_json, @started_at, @completed_at)`,
+  ).run({
+    id: task.id,
+    run_id: task.runId,
+    parent_id: task.parentId,
+    role: task.role,
+    objective: task.objective,
+    depends_json: JSON.stringify(task.dependsOn),
+    urls_json: JSON.stringify(task.urls),
+    state: task.state,
+    attempt: task.attempt,
+    provider: task.provider,
+    model: task.model,
+    result: task.result,
+    evidence_json: JSON.stringify(task.evidence),
+    error: task.error,
+    usage_json: JSON.stringify(task.usage),
+    started_at: task.startedAt,
+    completed_at: task.completedAt,
+  });
+  appendEvent(runId, task.id, "task.spawned", { role: task.role });
+  return task;
+}
+
+export function saveTaskResult(runId: string, taskId: string, status: string, summary: string, usage: unknown) {
+  db.prepare(
+    `INSERT OR REPLACE INTO swarm_task_results (task_id, run_id, status, summary, findings_json, artifacts_json, usage_json, created_at)
+     VALUES (?, ?, ?, ?, '[]', '[]', ?, ?)`,
+  ).run(taskId, runId, status, summary.slice(0, 8000), JSON.stringify(usage ?? {}), now());
+}
+
+export function postMessage(runId: string, body: string, fromRole = "claw", taskId: string | null = null): SwarmMessage {
+  const row: SwarmMessage = { id: nid("msg"), runId, taskId, fromRole, body: body.slice(0, 4000), at: now() };
+  db.prepare(
+    `INSERT INTO swarm_messages (id, run_id, task_id, from_role, body, at) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(row.id, row.runId, row.taskId, row.fromRole, row.body, row.at);
+  appendEvent(runId, taskId, "task.message", { role: fromRole });
+  return row;
+}
+
+export function listMessages(runId: string, taskId?: string): SwarmMessage[] {
+  const rows = (
+    taskId
+      ? db.prepare(
+          `SELECT * FROM swarm_messages WHERE run_id = ? AND (task_id IS NULL OR task_id = ?) ORDER BY at ASC`,
+        ).all(runId, taskId)
+      : db.prepare(`SELECT * FROM swarm_messages WHERE run_id = ? ORDER BY at ASC`).all(runId)
+  ) as Array<{
+    id: string; run_id: string; task_id: string | null; from_role: string; body: string; at: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    runId: r.run_id,
+    taskId: r.task_id,
+    fromRole: r.from_role,
+    body: r.body,
+    at: r.at,
+  }));
+}
+
+export function listOpenRuns(): SwarmRun[] {
+  return listRuns().filter((r) =>
+    r.status === "queued" || r.status === "planning" || r.status === "running" || r.status === "synthesizing",
+  );
 }
 
 export function patchTask(runId: string, taskId: string, patch: Partial<SwarmTask>): SwarmTask {
