@@ -51,6 +51,14 @@ On **Integrations**, connect Composio Instagram for the primary path. Its OAuth 
 
 Set `STEEL_API_KEY` to let Claw research public web pages through Steel.dev. Claw receives clean Markdown, page metadata, links, and optional screenshots; local and private network targets are rejected.
 
+## Claw Computer
+
+Claw can drive a live Chromium session the operator can see and take over — same Chrome, same cookies, no restart on handoff. Tools: `computer_open`, `computer_click`, `computer_type`, `computer_keypress`, `computer_scroll`, `computer_handoff`, `computer_resume`. Passwords, MFA, CAPTCHA, passkeys, and payments pause the agent and flip `control_owner` to HUMAN. Steel scrape stays until this path is the default in production.
+
+Local: `npx playwright install chromium`. Production worker: DigitalOcean Droplet from a golden snapshot (`DIGITALOCEAN_BROWSER_SNAPSHOT_ID`). The LLM never receives `DIGITALOCEAN_TOKEN`.
+
+Open `/computer` for the live screen.
+
 ## Local setup
 
 ```bash

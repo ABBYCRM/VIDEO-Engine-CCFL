@@ -1,0 +1,4 @@
+CaseClosedFL sample crash worksheet
+Agency: fictional
+This file is a fixture for Claw Computer download tests.
+It is not a real police report.

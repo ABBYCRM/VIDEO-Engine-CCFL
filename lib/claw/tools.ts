@@ -48,6 +48,10 @@ import { arxivSearch } from "@/lib/claw/arxiv";
 import { isExaConfigured, isTavilyConfigured } from "@/lib/web-search";
 import { isScreenshotOneConfigured } from "@/lib/screenshotone";
 import {
+  ensureSession, getActiveSession, runAction, setControlOwner
+} from "@/lib/browser-computer";
+import type { ActionResult, PublicSession } from "@/lib/browser-computer";
+import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile, saveClawFile
 } from "@/lib/claw/store";
@@ -78,6 +82,29 @@ function clip<T>(value: T, maxChars = 6000): T {
   } catch {
     return value;
   }
+}
+
+function computerObserve(session: PublicSession | null, result?: ActionResult) {
+  const snap = result?.snapshot ?? session?.snapshot ?? null;
+  return {
+    ok: result ? result.ok : Boolean(session),
+    decision: result?.decision,
+    error: result?.error,
+    note: result?.note ?? "Operator is watching this Chrome window. Click using a visible label or x,y. Never type passwords or CAPTCHA.",
+    handoffReason: result?.handoffReason ?? session?.handoffReason ?? null,
+    controlOwner: session?.controlOwner ?? null,
+    url: snap?.url ?? session?.url ?? "",
+    title: snap?.title ?? session?.title ?? "",
+    text: (snap?.text ?? "").slice(0, 1800),
+    suspicious: snap?.suspicious ?? [],
+    elements: (snap?.elements ?? []).slice(0, 40).map((e) => ({
+      tag: e.tag,
+      type: e.type,
+      text: e.text,
+      x: e.x,
+      y: e.y,
+    })),
+  };
 }
 
 type ToolDef = {
@@ -240,7 +267,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Steel.dev (web scrape) ──────────────────────────────────────
   {
     name: "steel_scrape",
-    description: "Live-fetch a public URL. Primary provider is Steel.dev; if Steel is missing or fails, Firecrawl then ScrapingBee then Scrapfly are tried. Returns markdown + via + optional fallbackNote. Local/private URLs are rejected. Do NOT fetch() the URL yourself.",
+    description: "One-shot markdown of a known public URL (Steel, then Firecrawl/ScrapingBee/Scrapfly). Local/private URLs are rejected. For interactive browsing — search, click, type, CAPTCHA handoff — use computer_open / computer_click. Do NOT fetch() the URL yourself. Steel remains until Computer e2e is the default path.",
     args: "{\"url\":\"https://example.com\"}",
     when: "Operator asks to read/summarize/research a known public URL.",
     handler: async (a) => {
@@ -269,6 +296,227 @@ export const CLAW_TOOLS: ToolDef[] = [
     args: "{\"url\":\"https://example.com\"}",
     when: "Anti-bot last-resort scrape.",
     handler: async (a) => scrapeScrapfly(str(a.url).trim())
+  },
+
+  // ─── Claw Computer (Grok-style live Chrome) ────────────────────
+  {
+    name: "computer_status",
+    description: "Return the live Claw Computer session: who owns the mouse (AGENT/HUMAN), URL, title, page text, and clickable elements with x,y. Call this to look before acting.",
+    args: "{}",
+    when: "Before driving the browser, or after the operator returns control.",
+    handler: async () => {
+      try {
+        const session = getActiveSession();
+        if (!session) return { ok: false, error: "Computer is not started. Call computer_open." };
+        return computerObserve(session);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "computer_status failed" };
+      }
+    }
+  },
+  {
+    name: "computer_open",
+    description: "Start the live Chromium session the operator can see and take over (Grok-style computer: screenshot + click/type/scroll). Optionally navigate to a public URL. Never solve CAPTCHA or type passwords — call computer_handoff.",
+    args: "{\"url\":\"https://example.com\"}",
+    when: "Operator wants you to browse, search, click, or use a website as a person would. Prefer this over steel_scrape for interactive work.",
+    handler: async (a) => {
+      try {
+        await ensureSession();
+        await setControlOwner("AGENT");
+        const url = str(a.url).trim();
+        if (url) {
+          const result = await runAction({ type: "navigate", url }, "agent");
+          return computerObserve(getActiveSession(), result);
+        }
+        return computerObserve(getActiveSession());
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "computer_open failed", hint: "Playwright Chromium is required on the worker. Steel scrape still works for one-shot URL markdown." };
+      }
+    }
+  },
+  {
+    name: "computer_look",
+    description: "Look at the current Chrome screen without clicking. Returns page text and interactive elements with x,y so you can decide the next click. Call this after navigating, waiting, or when the operator returns control.",
+    args: "{}",
+    when: "You need to see the page before clicking or after a handoff.",
+    handler: async () => {
+      try {
+        const session = await ensureSession();
+        if (session.controlOwner === "HUMAN") {
+          return { ...computerObserve(session), ok: false, error: "Browser currently controlled by human. Wait for computer_resume." };
+        }
+        if (session.controlOwner !== "AGENT") await setControlOwner("AGENT");
+        const result = await runAction({ type: "screenshot" }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "computer_look failed" };
+      }
+    }
+  },
+  {
+    name: "computer_click",
+    description: "Click the live Chrome session. Prefer a visible control label (text). Coordinates x,y from the snapshot are a fallback. Blocked while the human owns the session.",
+    args: "{\"text\":\"Search\",\"x\":120,\"y\":40}",
+    handler: async (a) => {
+      try {
+        const result = await runAction({
+          type: "click",
+          text: str(a.text).trim() || undefined,
+          x: a.x == null ? undefined : num(a.x, 0),
+          y: a.y == null ? undefined : num(a.y, 0)
+        }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "click failed" };
+      }
+    }
+  },
+  {
+    name: "computer_type",
+    description: "Type ordinary non-secret text into the focused field. 6-digit OTP and password-shaped strings force human takeover.",
+    args: "{\"text\":\"hello\"}",
+    handler: async (a) => {
+      try {
+        const result = await runAction({ type: "type", text: str(a.text) }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "type failed" };
+      }
+    }
+  },
+  {
+    name: "computer_keypress",
+    description: "Press keys such as Enter, Tab, Escape, ArrowDown.",
+    args: "{\"keys\":[\"Enter\"]}",
+    handler: async (a) => {
+      try {
+        const keys = Array.isArray(a.keys) ? a.keys.map(String) : [str(a.keys || "Enter")];
+        const result = await runAction({ type: "keypress", keys }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "keypress failed" };
+      }
+    }
+  },
+  {
+    name: "computer_scroll",
+    description: "Scroll the live page. Positive scroll_y moves down.",
+    args: "{\"scroll_y\":700}",
+    handler: async (a) => {
+      try {
+        const result = await runAction({ type: "scroll", scroll_y: num(a.scroll_y, 700), x: a.x == null ? undefined : num(a.x, 640), y: a.y == null ? undefined : num(a.y, 360) }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "scroll failed" };
+      }
+    }
+  },
+  {
+    name: "computer_wait",
+    description: "Wait briefly for the page to settle, then look at the screen again.",
+    args: "{}",
+    handler: async () => {
+      try {
+        const result = await runAction({ type: "wait" }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "wait failed" };
+      }
+    }
+  },
+  {
+    name: "computer_search",
+    description: "Search the web in the live Chrome session (DuckDuckGo) like a person would.",
+    args: "{\"text\":\"DigitalOcean Droplets\"}",
+    when: "Operator wants a web search performed in the visible computer, not a one-shot scrape.",
+    handler: async (a) => {
+      try {
+        const result = await runAction({ type: "search", text: str(a.text) }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "search failed" };
+      }
+    }
+  },
+  {
+    name: "computer_fill",
+    description: "Fill a labeled field on the live page. field is the visible label, placeholder, or name. Never use this for passwords — call computer_handoff.",
+    args: "{\"field\":\"Full name\",\"text\":\"Jane Doe\"}",
+    handler: async (a) => {
+      try {
+        const result = await runAction({ type: "fill", field: str(a.field), text: str(a.text) }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "fill failed" };
+      }
+    }
+  },
+  {
+    name: "computer_upload",
+    description: "Attach a file that already exists in this session's uploads folder to the page file input. Paths outside the session folder are denied.",
+    args: "{\"filename\":\"report.pdf\"}",
+    handler: async (a) => {
+      try {
+        const result = await runAction({ type: "upload", filename: str(a.filename), selector: str(a.selector) || undefined }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "upload failed" };
+      }
+    }
+  },
+  {
+    name: "computer_download",
+    description: "Click a download control. The file is saved only in this session's downloads folder and is never executed.",
+    args: "{\"text\":\"Download report\"}",
+    handler: async (a) => {
+      try {
+        const result = await runAction({ type: "download", text: str(a.text) || undefined }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "download failed" };
+      }
+    }
+  },
+  {
+    name: "computer_observe",
+    description: "Alias of computer_look. Return the current screen text and labeled controls.",
+    args: "{}",
+    handler: async () => {
+      try {
+        await ensureSession();
+        const result = await runAction({ type: "screenshot" }, "agent");
+        return computerObserve(getActiveSession(), result);
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "computer_observe failed" };
+      }
+    }
+  },
+  {
+    name: "computer_handoff",
+    description: "Pause Claw and give the operator the SAME Chrome session (cookies, tabs, page). Use for captcha, password, MFA, passkey, payment, consent. Do not solve those yourself.",
+    args: "{\"reason\":\"captcha\"}",
+    handler: async (a) => {
+      try {
+        const reason = str(a.reason, "manual") as any;
+        const result = await runAction({ type: "handoff", reason }, "agent");
+        return { ...computerObserve(getActiveSession(), result), note: "Same Chrome session is waiting on Computer. Do not continue until computer_resume." };
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "handoff failed" };
+      }
+    }
+  },
+  {
+    name: "computer_resume",
+    description: "After the operator finishes a checkpoint, take the computer back. Look at the current snapshot. Do not assume what they did.",
+    args: "{}",
+    handler: async () => {
+      try {
+        const session = await setControlOwner("AGENT");
+        return { ...computerObserve(session), note: "Continue from this screen. Do not assume what the human typed." };
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "resume failed" };
+      }
+    }
   },
 
   // ─── Screenshot ─────────────────────────────────────────────────

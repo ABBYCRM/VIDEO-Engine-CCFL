@@ -19,7 +19,7 @@ services:
       deploy_on_push: true
     http_port: 3000
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-s
     health_check:
       # Readiness must be constant-time and must not depend on upstream AI
       # providers. /api/health is the operator-triggered deep diagnostic.

@@ -8,7 +8,7 @@ import type { NextConfig } from "next";
 // nav is the Claw page's own session/files sidebar.
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["better-sqlite3", "sharp"],
+  serverExternalPackages: ["better-sqlite3", "sharp", "playwright", "playwright-core"],
   experimental: {
     serverActions: { bodySizeLimit: "80mb" }
   },

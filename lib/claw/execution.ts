@@ -89,7 +89,8 @@ const READ_ONLY = new Set([
   "app_status", "composio_health", "composio_tool_schema", "steel_scrape", "firecrawl_scrape", "scrapingbee_scrape", "scrapfly_scrape",
   "web_search", "web_screenshot", "analyze_image", "aion_status", "aion_consult", "aion_execute", "aion_contract", "aion_tools",
   "hedra_status", "helicone_status", "connector_status",
-  "gdy_search", "gdy_rag_context", "gdy_categories", "gdy_tools", "arxiv_search"
+  "gdy_search", "gdy_rag_context", "gdy_categories", "gdy_tools", "arxiv_search",
+  "computer_status", "computer_look", "computer_observe", "computer_wait", "computer_screenshot"
 ]);
 export function toolSucceeded(value: unknown): boolean {
   if (!value || typeof value !== "object") return true;

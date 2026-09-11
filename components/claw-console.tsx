@@ -3,12 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
-  Hash, Loader2, Menu, Moon, PanelLeftClose, Paperclip,
+  Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose, Paperclip,
   Pencil, Plug, Plus, Search, Send, Settings, Sparkles, Square,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
+import { ComputerDock } from "@/components/computer-dock";
 import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode, type SelfStateView } from "@/components/ui/claw-thinking-panel";
 
@@ -29,6 +30,7 @@ const WORKING_MODEL_PREFIXES = [
 ];
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [
+  { label: "Drive the Computer", prompt: "Use computer_open on https://example.com, then computer_look and tell me the exact title and first visible heading. Click using visible labels.", source: "tool" },
   { label: "Research a URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
   { label: "Browse dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
   { label: "Find a skill by id", prompt: "Call dev_skill_get for 'sql.like-escape' and show me the body verbatim.", source: "tool" }
@@ -410,6 +412,7 @@ export function ClawConsole() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [computerOpen, setComputerOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState("");
   const [models, setModels] = useState<{ id: string; label: string; notes: string; contextWindow: number }[]>([]);
@@ -569,7 +572,13 @@ export function ClawConsole() {
         if (done) break;
         sseParse(decoder.decode(value, { stream: true }), (e) => {
           if (e.type === "token") setStreaming(s => s + e.text);
-          if (e.type === "tool_start") setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now(), args: e.args ? JSON.stringify(e.args) : undefined }]);
+          if (e.type === "tool_start") {
+            setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now(), args: e.args ? JSON.stringify(e.args) : undefined }]);
+            if (String(e.name).startsWith("computer_")) {
+              setComputerOpen(true);
+              setFilesOpen(false);
+            }
+          }
           if (e.type === "tool_end") setTools(t => t.map(x => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", via: e.via, result: e.preview, finishedAt: Date.now() } : x));
           if (e.type === "self_state") setSelfState({
             health: e.health, issue: e.issue, phase: e.phase, progress: e.progress,
@@ -810,7 +819,25 @@ export function ClawConsole() {
 
             <button
               type="button"
-              onClick={() => setFilesOpen(v => !v)}
+              onClick={() => {
+                setComputerOpen((v) => !v);
+                setFilesOpen(false);
+              }}
+              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
+                computerOpen
+                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
+                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+              }`}
+            >
+              <Monitor size={13} />
+              Computer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilesOpen((v) => !v);
+                setComputerOpen(false);
+              }}
               className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium backdrop-blur-md transition-all ${
                 filesOpen
                   ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
@@ -842,7 +869,7 @@ export function ClawConsole() {
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
                         <p className="text-[14px] text-muted-foreground">
-                          Claw calls real tools — research, generate, post, scrape.
+                          Claw drives a live Chrome session — click, type, scroll — like Grok’s computer.
                         </p>
                       </div>
                     </div>
@@ -941,6 +968,12 @@ export function ClawConsole() {
                 </>
               )}
             </section>
+
+            {computerOpen && (
+              <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
+                <ComputerDock variant="pane" onClose={() => setComputerOpen(false)} />
+              </aside>
+            )}
 
             {/* ── Files drawer ── */}
             {filesOpen && (

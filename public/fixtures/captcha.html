@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Human verification required</title>
+    <style>
+      body { font-family: sans-serif; background: #111; color: #eee; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+      .card { width: min(420px, 92vw); border: 1px solid #333; padding: 28px; border-radius: 16px; background: #18181c; }
+      button { width: 100%; height: 44px; border: 0; border-radius: 8px; background: #d6d6db; color: #111; font-weight: 600; cursor: pointer; }
+      .box { margin: 16px 0; padding: 16px; border: 1px dashed #666; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Verify you are human</h1>
+      <p>I'm not a robot. Complete this CAPTCHA checkpoint, then return control to Claw.</p>
+      <div class="box" id="captcha">CAPTCHA challenge placeholder</div>
+      <button type="button" id="pass">I completed verification</button>
+    </main>
+    <script>
+      document.getElementById("pass").onclick = () => {
+        document.body.innerHTML = "<main class='card'><h1>Verified</h1><p>Dashboard unlocked. Claw may continue.</p></main>";
+        document.title = "Dashboard";
+      };
+    </script>
+  </body>
+</html>

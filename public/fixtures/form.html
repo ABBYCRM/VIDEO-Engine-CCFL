@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intake form</title>
+    <style>
+      body { font-family: sans-serif; background: #0c0c0e; color: #f2f2f4; margin: 0; padding: 32px; }
+      label { display: block; margin: 12px 0 6px; font-size: 13px; }
+      input { width: min(420px, 100%); height: 44px; border-radius: 8px; border: 1px solid #333; background: #16161a; color: #fff; padding: 0 12px; }
+      button { margin-top: 20px; height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: #d8dbe3; color: #111; font-weight: 600; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Public intake</h1>
+    <form onsubmit="event.preventDefault(); document.title='Submitted'; document.body.insertAdjacentHTML('beforeend','<p>Recorded.</p>');">
+      <label for="name">Full name</label>
+      <input id="name" name="name" placeholder="Jane Doe" />
+      <label for="city">City</label>
+      <input id="city" name="city" placeholder="Miami" />
+      <button type="submit">Submit</button>
+    </form>
+  </body>
+</html>

@@ -56,7 +56,7 @@ export function connectorInventory() {
     } catch { composio = { configured: false }; }
   }
   return {
-    steel: { configured: Boolean(secret("steel_api_key", "STEEL_API_KEY")), when: "Primary live public-web scrape (steel_scrape)." },
+    steel: { configured: Boolean(secret("steel_api_key", "STEEL_API_KEY")), when: "One-shot public-web scrape (steel_scrape). Interactive browsing uses Claw Computer." },
     firecrawl: { configured: Boolean(secret("firecrawl_api_key", "FIRECRAWL_API_KEY")), when: "Scrape fallback when Steel fails; structured markdown." },
     scrapingbee: { configured: Boolean(secret("scrapingbee_api_key", "SCRAPINGBEE_API_KEY")), when: "HTML scrape fallback; JS-rendered pages." },
     scrapfly: { configured: Boolean(secret("scrapfly_api_key", "SCRAPFLY_API_KEY")), when: "Last scrape fallback; anti-bot pages." },

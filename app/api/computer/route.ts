@@ -1,0 +1,40 @@
+import { NextResponse } from "next/server";
+import { ensureSession, getActiveSession, runAction, setControlOwner, takeOver, resetSession, stageUpload } from "@/lib/browser-computer";
+import type { ComputerAction } from "@/lib/browser-computer";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    return NextResponse.json({ ok: true, session: getActiveSession() });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "status failed" }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const op = String(body.op || "boot");
+    if (op === "boot") return NextResponse.json({ ok: true, session: await ensureSession() });
+    if (op === "reset") return NextResponse.json({ ok: true, session: await resetSession() });
+    if (op === "takeover") return NextResponse.json({ ok: true, session: await takeOver() });
+    if (op === "resume") return NextResponse.json({ ok: true, session: await setControlOwner("AGENT") });
+    if (op === "upload") {
+      const filename = String(body.filename || "");
+      const raw = String(body.base64 || "");
+      const buf = Buffer.from(raw, "base64");
+      if (buf.length > 8_000_000) return NextResponse.json({ ok: false, error: "File is too large" }, { status: 400 });
+      const artifact = stageUpload(filename, buf);
+      return NextResponse.json({ ok: true, artifact, session: getActiveSession() });
+    }
+    if (op === "action") {
+      const result = await runAction(body.action as ComputerAction, body.actor === "human" ? "human" : "agent");
+      return NextResponse.json({ ok: result.ok, result, session: getActiveSession() });
+    }
+    return NextResponse.json({ ok: false, error: "unknown op" }, { status: 400 });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "computer failed" }, { status: 500 });
+  }
+}
