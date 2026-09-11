@@ -317,6 +317,24 @@ code, pre { overflow-wrap: anywhere; word-break: break-word; }
     color: #fff;
     box-shadow: 0 2px 10px rgba(80, 40, 160, 0.28);
   }
+  html[data-claw-theme="light"] .claw-send {
+    background: hsl(262 72% 42%);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(80, 40, 160, 0.35);
+  }
+  html[data-claw-theme="light"] .claw-send svg {
+    color: #fff;
+    stroke: #fff;
+  }
+  html[data-claw-theme="light"] .claw-send:disabled {
+    background: #2a2438;
+    color: #fff;
+    border: 1px solid rgba(20, 24, 36, 0.25);
+  }
+  html[data-claw-theme="light"] .claw-send:disabled svg {
+    color: #fff;
+    stroke: #fff;
+  }
 
   /* Glass button */
   .glass-btn {
@@ -384,17 +402,65 @@ code, pre { overflow-wrap: anywhere; word-break: break-word; }
     background-clip: text;
   }
 
-  /* Neon glow on send button */
+  /* Neon glow on send button — MUST use hsl() because --claw-accent is HSL channels */
   .btn-send {
-    background: linear-gradient(135deg, var(--claw-accent) 0%, var(--claw-violet) 100%);
-    box-shadow: 0 0 16px rgba(199, 100, 67%, 0.45), 0 4px 12px rgba(0,0,0,0.3);
+    background: linear-gradient(135deg, hsl(var(--claw-accent)) 0%, hsl(var(--claw-violet)) 100%);
+    color: #fff;
+    box-shadow: 0 0 16px hsl(var(--claw-accent) / 0.45), 0 4px 12px rgba(0,0,0,0.3);
     transition: all 200ms ease;
   }
   .btn-send:hover {
-    box-shadow: 0 0 28px rgba(199, 100, 67%, 0.65), 0 6px 16px rgba(0,0,0,0.35);
+    box-shadow: 0 0 28px hsl(var(--claw-accent) / 0.65), 0 6px 16px rgba(0,0,0,0.35);
     transform: translateY(-1px) scale(1.02);
   }
   .btn-send:active { transform: scale(0.96); }
+  .btn-send:disabled {
+    opacity: 1;
+    filter: none;
+  }
+
+  /* 21st.dev Send Button — always-visible round ArrowUp / Stop */
+  .claw-send {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: hsl(var(--claw-accent));
+    color: #fff;
+    border: 0;
+    box-shadow: 0 2px 12px hsl(var(--claw-accent) / 0.45);
+    transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  }
+  .claw-send svg {
+    color: #fff;
+    stroke: #fff;
+  }
+  .claw-send:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px hsl(var(--claw-accent) / 0.6);
+  }
+  .claw-send:active:not(:disabled) { transform: scale(0.96); }
+  .claw-send:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    background: #3a3a4a;
+    color: #f4f4f8;
+    box-shadow: none;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+  }
+  .claw-send:disabled svg {
+    color: #f4f4f8;
+    stroke: #f4f4f8;
+  }
+  .claw-send-stop {
+    background: #e11d48 !important;
+    color: #fff !important;
+    border: 0 !important;
+    box-shadow: 0 2px 10px rgba(225, 29, 72, 0.45);
+  }
 
   /* Pill suggestion chips */
   .chip-suggestion {

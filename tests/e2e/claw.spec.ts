@@ -54,6 +54,11 @@ test("Claw is the operator chat with thread/file controls, model picker, and too
   await expect(page.getByRole("button", { name: "Research a public URL with Steel" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Attach files" })).toBeVisible();
+  const sendBtn = page.getByRole("button", { name: "Send message" });
+  await expect(sendBtn).toBeVisible();
+  const sendSize = await sendBtn.boundingBox();
+  expect(sendSize?.width ?? 0).toBeGreaterThan(28);
+  expect(sendSize?.height ?? 0).toBeGreaterThan(28);
 
   await expect(page.getByRole("button", { name: "Choose model" })).toContainText("GLM-5");
 

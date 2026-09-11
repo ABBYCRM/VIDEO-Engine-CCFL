@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
   Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose, Paperclip,
-  Pencil, Plug, Plus, Search, Send, Settings, Sparkles, Square,
+  Pencil, Plug, Plus, Search, ArrowUp, Settings, Sparkles, Square,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
@@ -322,9 +322,9 @@ function Composer({
               type="button"
               onClick={onStop}
               aria-label="Stop generating"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[rgba(255,100,100,0.30)] bg-[rgba(255,60,60,0.12)] text-rose-400 transition-all hover:border-[rgba(255,100,100,0.50)] hover:bg-[rgba(255,60,60,0.20)]"
+              className="claw-send claw-send-stop"
             >
-              <Square size={14} />
+              <Square size={14} fill="currentColor" />
             </button>
           ) : (
             <button
@@ -332,9 +332,9 @@ function Composer({
               onClick={onSend}
               disabled={!text.trim() && !pendingFiles.length}
               aria-label="Send message"
-              className="btn-send flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[rgba(5,5,15,0.95)] disabled:cursor-not-allowed disabled:opacity-30"
+              className="claw-send"
             >
-              <Send size={15} />
+              <ArrowUp size={18} strokeWidth={2.75} />
             </button>
           )}
         </div>
@@ -1082,7 +1082,7 @@ export function ClawConsole() {
                 type="button"
                 onClick={() => void launchCreativeAds()}
                 disabled={!creativeUrl.trim()}
-                className="btn-send flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-[rgba(5,5,15,0.95)] disabled:cursor-not-allowed disabled:opacity-30"
+                className="btn-send flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-white disabled:cursor-not-allowed"
               >
                 <Wand2 size={14} />
                 Generate
