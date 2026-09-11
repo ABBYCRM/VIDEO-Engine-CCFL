@@ -43,6 +43,8 @@ export type InteractiveNode = {
   type?: string;
   name?: string;
   placeholder?: string;
+  autocomplete?: string;
+  inputMode?: string;
   x: number;
   y: number;
   w: number;

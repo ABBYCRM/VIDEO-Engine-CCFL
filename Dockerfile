@@ -31,7 +31,7 @@ COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-
 COPY --from=builder /app/package.json ./package.json
 # npx looks for a PATH binary that standalone images do not ship.
 # Call the JS CLI directly so Chromium + OS deps install as root.
-RUN node ./node_modules/playwright/cli.js install --with-deps chromium \
+RUN node ./node_modules/playwright/cli.js install --with-deps chromium chrome \
   && chown -R nextjs:nodejs /ms-playwright /app/node_modules/playwright /app/node_modules/playwright-core
 USER nextjs
 EXPOSE 3000

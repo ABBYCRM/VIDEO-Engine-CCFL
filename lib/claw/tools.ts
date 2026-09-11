@@ -52,6 +52,7 @@ import {
   ensureSession, getActiveSession, runAction, setControlOwner
 } from "@/lib/browser-computer";
 import type { ActionResult, PublicSession } from "@/lib/browser-computer";
+import { loginHints } from "@/lib/browser-computer/login";
 import {
   createForgeSession,
   getForgeSession,
@@ -109,11 +110,16 @@ function clip<T>(value: T, maxChars = 6000): T {
 
 function computerObserve(session: PublicSession | null, result?: ActionResult) {
   const snap = result?.snapshot ?? session?.snapshot ?? null;
+  const hints = snap ? loginHints(snap) : [];
   return {
     ok: result ? result.ok : Boolean(session),
     decision: result?.decision,
     error: result?.error,
-    note: result?.note ?? "Operator is watching this Chrome window. Click using a visible label or x,y. Never type passwords or CAPTCHA.",
+    note:
+      result?.note ??
+      (hints[0] ||
+        "Operator is watching this Chrome. Click using a visible label. If they gave a Gmail address, click Continue with Google or Log in with email — never a Phone field."),
+    loginHints: hints,
     handoffReason: result?.handoffReason ?? session?.handoffReason ?? null,
     controlOwner: session?.controlOwner ?? null,
     url: snap?.url ?? session?.url ?? "",
@@ -563,7 +569,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_click",
-    description: "Click the live Chrome session. Prefer a visible control label (text). Coordinates x,y from the snapshot are a fallback. Blocked while the human owns the session.",
+    description: "Click the live Chrome session. Prefer a visible control label (text). For Gmail logins click Continue with Google. For TikTok-style forms click Log in with email / username, never dump an email into Phone.",
     args: "{\"text\":\"Search\",\"x\":120,\"y\":40}",
     handler: async (a) => {
       try {

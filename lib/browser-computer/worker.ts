@@ -1,10 +1,11 @@
 import { mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { classifyPageForHandoff, evaluateAction, isSafePublicUrl, safeSessionFilename, shouldAutoHandoff } from "./policy";
 import { initScriptFor } from "../forge/stealth";
+import { launchComputerContext } from "./chrome";
+import { classifyValue, fieldAccepts, findEmailLoginSwitch, loginHints } from "./login";
 import type {
   ActionResult,
   ComputerAction,
@@ -90,6 +91,8 @@ async function snapshotPage(page: Page): Promise<PageSnapshot> {
             type: el.getAttribute("type") || undefined,
             name: el.getAttribute("name") || undefined,
             placeholder: el.getAttribute("placeholder") || undefined,
+            autocomplete: el.getAttribute("autocomplete") || undefined,
+            inputMode: el.getAttribute("inputmode") || undefined,
             x: Math.round(r.x + r.width / 2),
             y: Math.round(r.y + r.height / 2),
             w: Math.round(r.width),
@@ -188,7 +191,7 @@ export async function ensureSession(): Promise<PublicSession> {
     const existing = sessions.get(activeId);
     if (existing?.page) return toPublic(existing);
   }
-  const id = randomUUID();
+  const id = "default";
   const base = join(ROOT, id);
   const downloadsDir = join(base, "downloads");
   const uploadsDir = join(base, "uploads");
@@ -214,24 +217,9 @@ export async function ensureSession(): Promise<PublicSession> {
     lastSearchQuery: null,
   };
 
-  const { chromium } = await import("playwright");
-  let context: BrowserContext;
-  try {
-    context = await chromium.launchPersistentContext(profileDir, {
-      headless: true,
-      viewport: VIEWPORT,
-      acceptDownloads: true,
-      locale: "en-US",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-    });
-  } catch {
-    const browser = await chromium.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-    });
-    context = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true, locale: "en-US" });
-    session.browser = browser;
-  }
+  const launched = await launchComputerContext(profileDir, VIEWPORT);
+  const context = launched.context;
+  session.browser = launched.browser;
   const page = context.pages()[0] ?? (await context.newPage());
   const coherence = initScriptFor("coherence");
   if (coherence) await context.addInitScript(coherence);
@@ -251,7 +239,7 @@ export async function ensureSession(): Promise<PublicSession> {
   session.page = page;
   sessions.set(id, session);
   activeId = id;
-  pushEvent(session, "system", "boot", "Persistent Chromium worker started");
+  pushEvent(session, "system", "boot", `Persistent ${launched.via} worker started`);
   await page.setContent(START_HTML, { waitUntil: "domcontentloaded" });
   await refresh(session);
   return toPublic(session);
@@ -276,29 +264,77 @@ function requestHandoff(session: LiveSession, reason: HandoffReason, note: strin
 }
 
 async function fillLabeled(page: Page, session: LiveSession, action: ComputerAction) {
-  const label = (action.field || action.selector || "").trim();
+  const rawLabel = (action.field || action.selector || "").trim();
   const value = action.text ?? "";
+  const kind = classifyValue(value);
+  let label = rawLabel;
+
+  if (kind === "email") {
+    const switcher = findEmailLoginSwitch(session.snapshot?.elements ?? []);
+    if (switcher) {
+      const point = { x: switcher.x, y: switcher.y };
+      session.pointer = point;
+      await page.mouse.click(point.x, point.y);
+      await page.waitForTimeout(500);
+      await refresh(session);
+    }
+    if (/phone|mobile|tel/i.test(label)) label = "email";
+    const emailBox = page.locator('input[type="email"], input[autocomplete="username"], input[autocomplete="email"]').first();
+    if ((await emailBox.count()) > 0) {
+      await emailBox.fill(value);
+      return;
+    }
+    const byEmailLabel = page.getByLabel(/email|username/i);
+    if ((await byEmailLabel.count()) > 0) {
+      await byEmailLabel.first().fill(value);
+      return;
+    }
+  }
+
+  if (kind === "password") {
+    const byType = page.locator('input[type="password"]').first();
+    if ((await byType.count()) > 0) {
+      await byType.fill(value);
+      return;
+    }
+  }
+
   if (label) {
     const byLabel = page.getByLabel(label, { exact: false });
     if ((await byLabel.count()) > 0) {
-      await byLabel.first().fill(value);
-      return;
+      const handle = byLabel.first();
+      const type = ((await handle.getAttribute("type")) || "").toLowerCase();
+      if (!(kind === "email" && (type === "tel" || /phone/i.test(label)))) {
+        await handle.fill(value);
+        return;
+      }
     }
     const byPlaceholder = page.getByPlaceholder(label, { exact: false });
     if ((await byPlaceholder.count()) > 0) {
-      await byPlaceholder.first().fill(value);
-      return;
+      const handle = byPlaceholder.first();
+      const type = ((await handle.getAttribute("type")) || "").toLowerCase();
+      if (!(kind === "email" && type === "tel")) {
+        await handle.fill(value);
+        return;
+      }
     }
     const byName = page.locator(`[name="${CSS.escape(label)}"], #${CSS.escape(label)}`);
     if ((await byName.count()) > 0) {
       await byName.first().fill(value);
       return;
     }
-    const point = resolveClick(session, { type: "click", text: label });
-    if (point) {
-      session.pointer = point;
-      await page.mouse.click(point.x, point.y);
+    const match = (session.snapshot?.elements ?? []).find((el) => fieldAccepts(el, kind) && `${el.text} ${el.placeholder ?? ""} ${el.name ?? ""}`.toLowerCase().includes(label.toLowerCase()));
+    if (match) {
+      session.pointer = { x: match.x, y: match.y };
+      await page.mouse.click(match.x, match.y);
+      await page.keyboard.type(value, { delay: 16 });
+      return;
     }
+  }
+  const typed = (session.snapshot?.elements ?? []).find((el) => fieldAccepts(el, kind));
+  if (typed) {
+    session.pointer = { x: typed.x, y: typed.y };
+    await page.mouse.click(typed.x, typed.y);
   }
   await page.keyboard.type(value, { delay: 16 });
 }
