@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, MessageSquare, Menu, Plug, Settings, Monitor, Hammer, Network } from "lucide-react";
+import { X, MessageSquare, Menu, Plug, Settings, Monitor } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
 
 type NavItem = { href: string; label: string; icon: any };
@@ -14,8 +14,6 @@ type NavItem = { href: string; label: string; icon: any };
 const NAV: NavItem[] = [
   { href: "/claw", label: "Claw", icon: MessageSquare },
   { href: "/computer", label: "Computer", icon: Monitor },
-  { href: "/forge", label: "Forge", icon: Hammer },
-  { href: "/swarm", label: "Swarm", icon: Network },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings }
 ];

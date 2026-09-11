@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
-  Hammer, Hash, Loader2, Menu, Monitor, Moon, Network, PanelLeftClose, Paperclip,
+  Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose, Paperclip,
   Pencil, Plug, Plus, Search, Send, Settings, Sparkles, Square,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
@@ -276,7 +276,7 @@ function Composer({
           }}
           rows={2}
           placeholder="What do you need?"
-          className="block max-h-[220px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-[rgba(220,220,255,0.90)] outline-none placeholder:text-[rgba(220,220,255,0.30)]"
+          className="block max-h-[220px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
         />
 
         {/* Bottom bar */}
@@ -349,7 +349,7 @@ function UserBubble({ content }: { content: string }) {
   return (
     <div className="group flex flex-col items-end animate-fade-up">
       <div className="glass-bubble-user max-w-[80%] px-4 py-3">
-        <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[rgba(220,220,255,0.95)]">
+        <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-foreground">
           {content}
         </p>
       </div>
@@ -378,7 +378,7 @@ function AssistantBubble({ content }: { content: string }) {
       </div>
       <div className="pl-9">
         <div className="glass-bubble-assistant px-4 py-3">
-          <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[rgba(220,220,255,0.90)]">
+          <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-foreground">
             {content}
           </p>
         </div>
@@ -740,10 +740,10 @@ export function ClawConsole() {
               </div>
               <div>
                 <span className="text-[15px] font-bold tracking-tight text-neon">Claw</span>
-                <div className="text-[10px] text-[rgba(220,220,255,0.30)]">AI Operator Console</div>
+                <div className="text-[10px] text-muted-foreground">Talk. Claw runs it.</div>
               </div>
             </div>
-            <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-[rgba(220,220,255,0.35)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.70)] md:hidden" aria-label="Close sidebar">
+            <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:hidden" aria-label="Close sidebar">
               <PanelLeftClose size={15} />
             </button>
           </div>
@@ -767,7 +767,7 @@ export function ClawConsole() {
               <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-xl px-2.5 py-2.5 text-[13px] transition-all ${
                 active === c.id
                   ? "sidebar-item-active"
-                  : "text-[rgba(220,220,255,0.45)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[rgba(220,220,255,0.75)]"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}>
                 <button
                   type="button"
@@ -792,31 +792,23 @@ export function ClawConsole() {
           </div>
 
           {/* Footer nav */}
-          <div className="border-t border-[rgba(180,180,255,0.08)] p-2">
-            <Link href="/computer" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
+          <div className="border-t border-border p-2">
+            <Link href="/computer" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
               <Monitor size={14} />
               Computer
             </Link>
-            <Link href="/forge" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
-              <Hammer size={14} />
-              Forge
-            </Link>
-            <Link href="/swarm" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
-              <Network size={14} />
-              Swarm
-            </Link>
-            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
+            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
               <Plug size={14} />
               Integrations
             </Link>
-            <Link href="/settings" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
+            <Link href="/settings" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
               <Settings size={14} />
               Settings
             </Link>
             <button
               type="button"
               onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
               aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
             >
               {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
@@ -829,7 +821,7 @@ export function ClawConsole() {
         <main className="relative flex min-w-0 flex-1 flex-col">
           {/* Header */}
           <header className="glass-sidebar sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[rgba(180,180,255,0.08)] px-4 backdrop-blur-md">
-            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[rgba(220,220,255,0.45)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.80)] md:hidden" aria-label="Open sidebar">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:hidden" aria-label="Open sidebar">
               <Menu size={17} />
             </button>
 
@@ -837,7 +829,7 @@ export function ClawConsole() {
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
                 <Bot size={15} className="text-[var(--claw-accent)]" />
               </div>
-              <span className="truncate text-[14px] font-medium text-[rgba(220,220,255,0.80)]">
+              <span className="truncate text-[14px] font-medium text-foreground">
                 {activeTitle || "New conversation"}
               </span>
               {busy && (
@@ -859,62 +851,11 @@ export function ClawConsole() {
               className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
                 computerOpen
                   ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
-                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+                  : "border-border bg-muted/40 text-muted-foreground hover:text-foreground"
               }`}
             >
               <Monitor size={13} />
               Computer
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setForgeOpen((v) => !v);
-                setComputerOpen(false);
-                setSwarmOpen(false);
-                setFilesOpen(false);
-              }}
-              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
-                forgeOpen
-                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
-                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
-              }`}
-            >
-              <Hammer size={13} />
-              Forge
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSwarmOpen((v) => !v);
-                setComputerOpen(false);
-                setForgeOpen(false);
-                setFilesOpen(false);
-              }}
-              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
-                swarmOpen
-                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
-                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
-              }`}
-            >
-              <Network size={13} />
-              Swarm
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFilesOpen((v) => !v);
-                setComputerOpen(false);
-                setForgeOpen(false);
-                setSwarmOpen(false);
-              }}
-              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium backdrop-blur-md transition-all ${
-                filesOpen
-                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
-                  : "border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
-              }`}
-            >
-              <FolderOpen size={13} />
-              Files
             </button>
           </header>
 

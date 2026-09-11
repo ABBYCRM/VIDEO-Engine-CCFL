@@ -145,7 +145,7 @@ export function ComputerDock({
       <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(180,180,255,0.08)] px-3 py-2.5">
         <Monitor size={14} className="text-[var(--claw-accent)]" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[11px] text-[rgba(220,220,255,0.55)]">
+          <p className="truncate font-mono text-[11px] text-muted-foreground">
             {session?.url || "about:blank"}
           </p>
         </div>
@@ -155,27 +155,31 @@ export function ComputerDock({
               ? "bg-[rgba(214,181,109,0.15)] text-[#d6b56d]"
               : agent
                 ? "bg-[rgba(143,191,163,0.15)] text-[#8fbfa3]"
-                : "text-[rgba(220,220,255,0.35)]"
+                : "text-muted-foreground"
           }`}
         >
           {human ? "YOU" : agent ? "CLAW" : "IDLE"}
         </span>
+        {(human || agent) && (
         <button
           type="button"
-          className="rounded-lg border border-[rgba(180,180,255,0.15)] px-2 py-1 text-[11px] text-[rgba(220,220,255,0.55)] hover:text-[rgba(220,220,255,0.85)]"
+          className="rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
           onClick={() => call(human ? "resume" : "takeover")}
         >
           {human ? <Play size={11} className="inline" /> : <Pause size={11} className="inline" />}{" "}
           {human ? "Return" : "Take over"}
         </button>
+        )}
+        {human && (
         <button
           type="button"
-          className="grid h-8 w-8 place-items-center rounded-lg text-[rgba(220,220,255,0.4)] hover:text-[rgba(220,220,255,0.85)]"
+          className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:text-foreground"
           onClick={() => call("reset")}
           aria-label="Restart computer"
         >
           <RotateCcw size={13} />
         </button>
+        )}
         {variant === "pane" && (
           <>
             <Link

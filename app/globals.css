@@ -175,38 +175,39 @@ html[data-claw-theme="dark"] {
 }
 
 html[data-claw-theme="light"] {
-  --background:           60 20% 96%;
-  --foreground:           240 20% 10%;
-  --muted:               220 25% 93%;
-  --muted-foreground:    220 15% 40%;
-  --border:              220 20% 88%;
-  --border-strong:       220 20% 78%;
+  color-scheme: light;
+  --background:           40 20% 97%;
+  --foreground:           240 22% 8%;
+  --muted:               40 12% 93%;
+  --muted-foreground:    228 14% 28%;
+  --border:              228 12% 82%;
+  --border-strong:       228 12% 68%;
   --popover:             0 0% 100%;
-  --popover-foreground:  240 20% 10%;
-  --primary:             262 100% 65%;
+  --popover-foreground:  240 22% 8%;
+  --primary:             262 72% 42%;
   --primary-foreground:  0 0% 100%;
-  --primary-soft:       262 50% 94%;
-  --primary-soft-2:     199 100% 92%;
-  --ring:               262 100% 65%;
-  --accent:             220 25% 93%;
-  --success:             160 70% 40%;
-  --warning:            38 100% 50%;
-  --danger:             355 80% 55%;
-  --info:               199 100% 45%;
-  --claw-sidebar:       220 25% 94%;
+  --primary-soft:       262 45% 94%;
+  --primary-soft-2:     199 70% 90%;
+  --ring:               262 72% 42%;
+  --accent:             40 12% 93%;
+  --success:             152 55% 28%;
+  --warning:            32 90% 36%;
+  --danger:             0 72% 40%;
+  --info:               199 90% 32%;
+  --claw-sidebar:       40 18% 96%;
   --claw-elevated:      0 0% 100%;
-  --claw-bubble:        220 25% 92%;
-  --claw-accent:        262 100% 65%;
-  --claw-accent-hover:  262 100% 70%;
+  --claw-bubble:        40 16% 94%;
+  --claw-accent:        262 72% 42%;
+  --claw-accent-hover:  262 72% 36%;
   --claw-accent-fg:     0 0% 100%;
-  --claw-glow:          262 100% 65%;
-  --claw-violet:        262 100% 70%;
-  --glass-bg:           rgba(255, 255, 255, 0.60);
-  --glass-border:       rgba(130, 100, 255, 0.18);
-  --glass-border-hover: rgba(130, 100, 255, 0.35);
-  --orb-purple:         rgba(130, 40, 255, 0.10);
-  --orb-cyan:           rgba(0, 210, 255, 0.08);
-  --orb-violet:         rgba(100, 60, 255, 0.08);
+  --claw-glow:          262 72% 42%;
+  --claw-violet:        262 60% 38%;
+  --glass-bg:           rgba(255, 255, 255, 0.92);
+  --glass-border:       rgba(20, 24, 36, 0.14);
+  --glass-border-hover: rgba(20, 24, 36, 0.28);
+  --orb-purple:         rgba(90, 40, 180, 0.08);
+  --orb-cyan:           rgba(0, 120, 160, 0.06);
+  --orb-violet:         rgba(80, 40, 160, 0.06);
 }
 
 html[data-claw-theme="dark"] input,
@@ -267,8 +268,54 @@ code, pre { overflow-wrap: anywhere; word-break: break-word; }
     border-right: 1px solid var(--glass-border);
   }
   html[data-claw-theme="light"] .glass-sidebar {
-    background: rgba(255, 255, 255, 0.70);
-    border-right-color: var(--glass-border);
+    background: rgba(255, 255, 255, 0.94);
+    border-right-color: rgba(20, 24, 36, 0.12);
+    color: hsl(var(--foreground));
+  }
+
+  html[data-claw-theme="light"] .glass-btn {
+    background: #fff;
+    border-color: rgba(20, 24, 36, 0.16);
+    color: #16181d;
+  }
+  html[data-claw-theme="light"] .glass-btn:hover {
+    background: #f3f3f0;
+    border-color: rgba(20, 24, 36, 0.28);
+  }
+
+  html[data-claw-theme="light"] .glass-input {
+    background: #fff;
+    border-color: rgba(20, 24, 36, 0.18);
+    color: #16181d;
+  }
+
+  html[data-claw-theme="light"] .chip-suggestion {
+    background: #fff;
+    border-color: rgba(20, 24, 36, 0.16);
+    color: #2a2e38;
+  }
+  html[data-claw-theme="light"] .chip-suggestion:hover {
+    color: hsl(var(--claw-accent));
+  }
+
+  html[data-claw-theme="light"] .glass-bubble-assistant {
+    background: #fff;
+    color: #16181d;
+    border-color: rgba(20, 24, 36, 0.12);
+  }
+  html[data-claw-theme="light"] .glass-bubble-user {
+    background: hsl(var(--primary-soft));
+    color: #16181d;
+    border-color: hsl(var(--primary) / 0.28);
+  }
+
+  html[data-claw-theme="light"] .glass-card:hover {
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  html[data-claw-theme="light"] .btn-send {
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(80, 40, 160, 0.28);
   }
 
   /* Glass button */
@@ -453,3 +500,58 @@ code, pre { overflow-wrap: anywhere; word-break: break-word; }
 .animate-slide-in { animation: slide-in-left 250ms ease-out both; }
 .animate-glow-pulse { animation: glow-pulse 2.5s ease-in-out infinite; }
 .animate-spin-slow { animation: spin-slow 8s linear infinite; }
+
+/* ============================================================
+ * Light mode — remap hardcoded dark-console ink so text is readable
+ * ============================================================ */
+html[data-claw-theme="light"] body {
+  background-color: #f6f5f1;
+  background-image: none;
+  color: #16181d;
+}
+html[data-claw-theme="light"] input,
+html[data-claw-theme="light"] textarea,
+html[data-claw-theme="light"] select {
+  color-scheme: light;
+  color: #16181d;
+}
+
+html[data-claw-theme="light"] [class*="text-[rgba(220,220,255"] {
+  color: #16181d !important;
+}
+html[data-claw-theme="light"] [class*="placeholder:text-[rgba(220,220,255"]::placeholder {
+  color: #4b5160 !important;
+  opacity: 1;
+}
+html[data-claw-theme="light"] [class*="border-[rgba(180,180,255"] {
+  border-color: rgba(20, 24, 36, 0.16) !important;
+}
+html[data-claw-theme="light"] [class*="hover:border-[rgba(180,180,255"]:hover {
+  border-color: rgba(20, 24, 36, 0.32) !important;
+}
+html[data-claw-theme="light"] [class*="bg-[rgba(255,255,255,0.0"] {
+  background-color: rgba(20, 24, 36, 0.05) !important;
+}
+html[data-claw-theme="light"] [class*="hover:bg-[rgba(255,255,255"]:hover {
+  background-color: rgba(20, 24, 36, 0.07) !important;
+}
+html[data-claw-theme="light"] [class*="bg-[rgba(8,8,20"],
+html[data-claw-theme="light"] [class*="bg-[rgba(5,5,15"] {
+  background-color: #ffffff !important;
+  color: #16181d;
+}
+html[data-claw-theme="light"] [class*="text-[#d6b56d"] {
+  color: #8a5b00 !important;
+}
+html[data-claw-theme="light"] [class*="text-[#8fbfa3"] {
+  color: #1f6b4a !important;
+}
+html[data-claw-theme="light"] .text-muted-foreground {
+  color: #3d4452;
+}
+html[data-claw-theme="light"] .text-neon {
+  -webkit-text-fill-color: #3b2a8a;
+  color: #3b2a8a;
+  background: none;
+}
+
