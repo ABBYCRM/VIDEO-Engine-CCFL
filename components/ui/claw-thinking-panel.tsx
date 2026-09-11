@@ -73,8 +73,12 @@ type ClawThinkingPanelProps = {
  * SIMPLE ACCORDION
  * ───────────────────────────────────────────────────────── */
 function ToolAccordion({ tool }: { tool: ToolNode }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(tool.status === "running");
   const hasContent = tool.args || tool.result;
+
+  useEffect(() => {
+    if (tool.status === "running") setOpen(true);
+  }, [tool.status]);
 
   const statusIcon = {
     running: <Loader2 size={12} className="animate-spin text-[hsl(var(--claw-accent))]" />,
@@ -182,7 +186,7 @@ function StreamingPreview({ text }: { text: string }) {
         <span className="h-1.5 w-1.5 rounded-full bg-[var(--claw-accent)] animate-pulse shadow-[0_0_6px_var(--claw-accent)]" />
         <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--claw-accent)]">Responding</span>
       </div>
-      <p className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-[rgba(220,220,255,0.70)]">
+      <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-foreground">
         {preview}
         <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 animate-pulse bg-[var(--claw-accent)]" />
       </p>
@@ -250,8 +254,8 @@ export function ClawThinkingPanel({ tools, streaming, busy, selfState, className
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
           <ClawLogo size={12} className="text-[var(--claw-accent)]" />
         </div>
-        <span className="text-[12px] font-medium text-[rgba(220,220,255,0.50)]">
-          {isDone ? "Claw worked" : busy ? (health ? `Thinking · ${health}` : "Claw is thinking") : ""}
+        <span className="min-w-0 truncate text-[12px] font-medium text-muted-foreground">
+          {isDone ? "Claw worked" : busy ? (selfState?.step ? `Working · ${selfState.step}` : health ? `Thinking · ${health}` : "Claw is working") : ""}
         </span>
         {busy ? (
           <>

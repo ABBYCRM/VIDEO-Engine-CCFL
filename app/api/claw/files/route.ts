@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getConversation, listFiles, saveClawFile } from "@/lib/claw/store";
+import { mimeFromFilename } from "@/lib/claw/zip-index";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
   const saved = await saveClawFile({
     conversationId,
     name: file.name,
-    mime: file.type || "application/octet-stream",
+    mime: mimeFromFilename(file.name, file.type),
     bytes
   });
   return NextResponse.json({ file: saved }, { status: 201 });

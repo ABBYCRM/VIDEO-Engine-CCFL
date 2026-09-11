@@ -3,6 +3,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db";
+import { zipEntryNames } from "./zip-index";
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS claw_conversations (
@@ -159,10 +160,15 @@ export function renameClawFile(id: string, name: string) {
 export async function readClawFileText(id: string, max = 8000): Promise<string | null> {
   const f = getFile(id);
   if (!f) return null;
-  if (!/^text\/|^application\/(json|xml|javascript|csv)/.test(f.mime) && !/\.(txt|md|csv|json|xml|js|ts|py)$/i.test(f.name)) {
+  const buf = await fsp.readFile(f.path);
+  const zippy = f.mime === "application/zip" || f.mime === "application/x-zip-compressed" || /\.zip$/i.test(f.name);
+  if (zippy) {
+    const entries = zipEntryNames(buf);
+    return `[zip ${f.name} · ${f.size} bytes · ${entries.length} entries]\n${entries.slice(0, 80).join("\n")}${entries.length > 80 ? "\n…" : ""}`;
+  }
+  if (!/^text\/|^application\/(json|xml|javascript|csv)/.test(f.mime) && !/\.(txt|md|csv|json|xml|js|ts|tsx|py|html|css)$/i.test(f.name)) {
     return `[binary file ${f.name} · ${f.mime} · ${f.size} bytes]`;
   }
-  const buf = await fsp.readFile(f.path);
   const text = buf.toString("utf8");
   return text.length > max ? text.slice(0, max) + `\n… (${text.length - max} more chars)` : text;
 }

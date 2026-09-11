@@ -220,14 +220,15 @@ function ModelCommandPalette({
 function Composer({
   text, setText, pendingFiles, setPendingFiles,
   busy, onSend, onStop, model, models, modelEnvOverridden, modelSaving, onChangeModel,
-  theme
+  onAttach,
 }: {
   text: string; setText: (t: string) => void;
   pendingFiles: ClawFile[]; setPendingFiles: React.Dispatch<React.SetStateAction<ClawFile[]>>;
   busy: boolean; onSend: () => void; onStop: () => void;
   model: string | null; models: { id: string; label: string; notes: string; contextWindow: number }[];
   modelEnvOverridden: boolean; modelSaving: boolean; onChangeModel: (id: string) => void;
-  theme: Theme;
+  onAttach: (files: FileList | null) => void;
+  theme?: Theme;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -269,9 +270,10 @@ function Composer({
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => {
-            if (e.key === "Enter" && !e.shiftKey && !(e as any).isComposing && (e as any).keyCode !== 229) {
+            // Enter inserts a newline. Only the Send button runs Claw.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) {
               e.preventDefault();
-              if (!busy) onSend();
+              onSend();
             }
           }}
           rows={2}
@@ -291,14 +293,17 @@ function Composer({
             >
               <Paperclip size={14} />
             </button>
-            <input ref={fileInputRef} type="file" className="hidden" multiple onChange={e => {
-              const files = e.target.files;
-              if (!files?.length) return;
-              // File upload is handled by parent; just trigger the parent handler
-              const dt = new DataTransfer();
-              for (const f of Array.from(files)) dt.items.add(f);
-              // Let parent handle via its own file input
-            }} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              accept="*/*"
+              onChange={e => {
+                onAttach(e.target.files);
+                e.target.value = "";
+              }}
+            />
 
             {/* Model picker */}
             <ModelCommandPalette
@@ -317,7 +322,7 @@ function Composer({
               type="button"
               onClick={onStop}
               aria-label="Stop generating"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[rgba(255,100,100,0.30)] bg-[rgba(255,60,60,0.12)] text-rose-400 transition-all hover:border-[rgba(255,100,100,0.50)] hover:bg-[rgba(255,60,60,0.20)]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[rgba(255,100,100,0.30)] bg-[rgba(255,60,60,0.12)] text-rose-400 transition-all hover:border-[rgba(255,100,100,0.50)] hover:bg-[rgba(255,60,60,0.20)]"
             >
               <Square size={14} />
             </button>
@@ -327,7 +332,7 @@ function Composer({
               onClick={onSend}
               disabled={!text.trim() && !pendingFiles.length}
               aria-label="Send message"
-              className="btn-send flex h-9 w-9 items-center justify-center rounded-xl text-[rgba(5,5,15,0.95)] disabled:cursor-not-allowed disabled:opacity-30"
+              className="btn-send flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[rgba(5,5,15,0.95)] disabled:cursor-not-allowed disabled:opacity-30"
             >
               <Send size={15} />
             </button>
@@ -336,8 +341,9 @@ function Composer({
       </div>
 
       {modelEnvOverridden && (
-        <div className="mt-1.5 text-center text-[11px] text-[rgba(220,220,255,0.25)]">Model locked by environment.</div>
+        <div className="mt-1.5 text-center text-[11px] text-muted-foreground">Model locked by environment.</div>
       )}
+      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Enter for a new line · Send runs Claw</p>
     </div>
   );
 }
@@ -677,7 +683,7 @@ export function ClawConsole() {
 
   return (
     <AuthGuard>
-      <div className="claw-shell relative flex h-[100dvh] overflow-hidden" style={{ background: "transparent" }}>
+      <div className="claw-shell relative flex h-[100dvh] overflow-hidden overflow-x-hidden" style={{ background: "transparent" }}>
         {/* ── Ambient background orbs ── */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
           <div
@@ -720,6 +726,7 @@ export function ClawConsole() {
           type="file"
           className="hidden"
           multiple
+          accept="*/*"
           onChange={e => { void upload(e.target.files); e.target.value = ""; }}
         />
 
@@ -875,7 +882,7 @@ export function ClawConsole() {
                         <div className="absolute inset-0 -z-10 rounded-full animate-glow-pulse" style={{ background: "transparent" }} />
                       </div>
                       <div>
-                        <h1 className="mb-1 text-3xl font-bold tracking-tight">
+                        <h1 className="mb-1 text-xl font-bold tracking-tight sm:text-2xl">
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
                         <p className="text-[14px] text-muted-foreground">
@@ -892,7 +899,7 @@ export function ClawConsole() {
                         busy={busy} onSend={() => void send()} onStop={stop}
                         model={model} models={models} modelEnvOverridden={modelEnvOverridden}
                         modelSaving={modelSaving} onChangeModel={changeModel}
-                        theme={theme}
+                        onAttach={(files) => void upload(files)}
                       />
                     </div>
 
@@ -939,21 +946,8 @@ export function ClawConsole() {
                       )}
 
                       {/* Thinking panel */}
-                      {(tools.length > 0 || busy || selfState) && (
+                      {(tools.length > 0 || busy || selfState || streaming) && (
                         <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} selfState={selfState} />
-                      )}
-
-                      {/* Streaming response */}
-                      {streaming && <AssistantBubble content={streaming} />}
-
-                      {/* Early thinking loader */}
-                      {busy && !streaming && tools.length === 0 && !selfState && (
-                        <div className="flex items-center gap-3 animate-fade-up">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
-                            <Bot size={15} className="text-[var(--claw-accent)]" />
-                          </div>
-                          <AILoader label="Claw is thinking" showElapsed variant="dots" className="text-[rgba(220,220,255,0.45)]" />
-                        </div>
                       )}
                     </div>
                   </div>
@@ -972,7 +966,7 @@ export function ClawConsole() {
                         busy={busy} onSend={() => void send()} onStop={stop}
                         model={model} models={models} modelEnvOverridden={modelEnvOverridden}
                         modelSaving={modelSaving} onChangeModel={changeModel}
-                        theme={theme}
+                        onAttach={(files) => void upload(files)}
                       />
                     </div>
                   </div>
