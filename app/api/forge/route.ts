@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    return NextResponse.json({ ok: true, ...forgeStatus() });
+    return NextResponse.json(forgeStatus());
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "status failed" }, { status: 500 });
   }
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const op = String(body.op || "status");
-    if (op === "status") return NextResponse.json({ ok: true, ...forgeStatus() });
+    if (op === "status") return NextResponse.json(forgeStatus());
     if (op === "list") return NextResponse.json({ ok: true, sessions: listForgeSessions() });
     if (op === "create" || op === "boot") {
       const session = await createForgeSession(body);
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     }
     if (op === "release" || op === "kill") {
       const result = await releaseForgeSession(String(body.id || body.sessionId));
-      return NextResponse.json({ ok: true, ...result, sessions: listForgeSessions() });
+      return NextResponse.json({ ...result, sessions: listForgeSessions() });
     }
     if (op === "solve_captcha" || op === "inject_token") {
       return NextResponse.json({
