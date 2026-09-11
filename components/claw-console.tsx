@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
-  Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose, Paperclip,
+  Hammer, Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose, Paperclip,
   Pencil, Plug, Plus, Search, Send, Settings, Sparkles, Square,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
@@ -31,9 +31,9 @@ const WORKING_MODEL_PREFIXES = [
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [
   { label: "Drive the Computer", prompt: "Use computer_open on https://example.com, then computer_look and tell me the exact title and first visible heading. Click using visible labels.", source: "tool" },
+  { label: "Probe Forge fingerprint", prompt: "Call forge_session with op create, then forge_probe. Report webdriver, HeadlessChrome, anomaly score, and that Forge does not solve CAPTCHAs. Steel remains the optional cloud solver for search puzzles.", source: "tool" },
   { label: "Research a URL with Steel", prompt: "Use steel_scrape on https://caseclosedfl.com and summarize what the operator's PI site actually says.", source: "tool" },
   { label: "Browse dev skills RAG", prompt: "Run dev_skill_list so I can browse the curated knowledge base.", source: "tool" },
-  { label: "Find a skill by id", prompt: "Call dev_skill_get for 'sql.like-escape' and show me the body verbatim.", source: "tool" }
 ];
 
 /* ─────────────────────────────────────────────────────────
@@ -774,6 +774,14 @@ export function ClawConsole() {
 
           {/* Footer nav */}
           <div className="border-t border-[rgba(180,180,255,0.08)] p-2">
+            <Link href="/computer" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
+              <Monitor size={14} />
+              Computer
+            </Link>
+            <Link href="/forge" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
+              <Hammer size={14} />
+              Forge
+            </Link>
             <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted dark:hover:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.40)] dark:hover:text-[rgba(220,220,255,0.75)]">
               <Plug size={14} />
               Integrations
@@ -832,6 +840,13 @@ export function ClawConsole() {
               <Monitor size={13} />
               Computer
             </button>
+            <Link
+              href="/forge"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-2.5 py-1.5 text-[12px] font-medium text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.28)] hover:text-[rgba(220,220,255,0.75)]"
+            >
+              <Hammer size={13} />
+              Forge
+            </Link>
             <button
               type="button"
               onClick={() => {
@@ -869,7 +884,7 @@ export function ClawConsole() {
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
                         <p className="text-[14px] text-muted-foreground">
-                          Claw drives a live Chrome session — click, type, scroll — like Grok’s computer.
+                          Claw drives live Chrome on Computer. Forge is the session lab. Steel still covers search CAPTCHAs.
                         </p>
                       </div>
                     </div>

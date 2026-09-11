@@ -1,6 +1,6 @@
 import type { ForgeCreateInput, ForgeHandoffReason, StealthMode } from "./types";
 
-export const FORGE_MAX_SESSIONS = Number(process.env.FORGE_MAX_SESSIONS) || 4;
+export const FORGE_MAX_SESSIONS = Number(process.env.FORGE_MAX_SESSIONS) || 2;
 export const FORGE_MAX_DELAY_MS = 10_000;
 export const FORGE_MAX_MARKDOWN = 12_000;
 export const FORGE_MAX_LINKS = 30;

@@ -63,6 +63,7 @@ type LiveForge = {
 
 const sessions = new Map<string, LiveForge>();
 const locks = new Map<string, Promise<unknown>>();
+const FORGE_IDLE_MS = 30 * 60 * 1000;
 
 function pushEvent(session: LiveForge, actor: ForgeEvent["actor"], eventType: string, note: string) {
   session.events.unshift({ actor, eventType, note, at: new Date().toISOString() });
@@ -175,8 +176,9 @@ async function attachCdp(session: LiveForge) {
 }
 
 export async function createForgeSession(raw?: unknown): Promise<PublicForgeSession> {
+  await reapIdleForge();
   if (sessions.size >= FORGE_MAX_SESSIONS) {
-    throw new Error(`Forge is at capacity (${FORGE_MAX_SESSIONS} live Chromium sessions)`);
+    throw new Error(`Forge is at capacity (${FORGE_MAX_SESSIONS} live Chromium sessions). Computer keeps its own Chrome; release a Forge session first.`);
   }
   const input: ForgeCreateInput = parseCreateInput(raw);
   const id = randomUUID();
@@ -522,7 +524,18 @@ export async function releaseForgeSession(id: string): Promise<{ ok: true; id: s
   return { ok: true, id };
 }
 
+async function reapIdleForge(): Promise<void> {
+  const now = Date.now();
+  const stale: string[] = [];
+  for (const s of sessions.values()) {
+    const stamp = Date.parse(s.events[0]?.at || s.createdAt);
+    if (Number.isFinite(stamp) && now - stamp > FORGE_IDLE_MS) stale.push(s.id);
+  }
+  for (const id of stale) await releaseForgeSession(id);
+}
+
 export function forgeStatus() {
+  void reapIdleForge();
   return {
     ok: true,
     contract: FORGE_CONTRACT,

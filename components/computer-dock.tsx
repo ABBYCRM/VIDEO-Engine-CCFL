@@ -142,7 +142,7 @@ export function ComputerDock({
 
   return (
     <div className={`flex min-h-0 flex-col ${variant === "page" ? "min-h-[70vh]" : "h-full"}`}>
-      <div className="flex items-center gap-2 border-b border-[rgba(180,180,255,0.08)] px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(180,180,255,0.08)] px-3 py-2.5">
         <Monitor size={14} className="text-[var(--claw-accent)]" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-mono text-[11px] text-[rgba(220,220,255,0.55)]">

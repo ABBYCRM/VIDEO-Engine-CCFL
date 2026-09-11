@@ -237,6 +237,7 @@ export const CLAW_TOOLS: ToolDef[] = [
         external: {
           composio: { configured: composio.configured, live: composio.live, keyType: composio.keyType, toolkits: composio.toolkits?.length || 0, note: composio.note },
           steel: { configured: isSteelConfigured() },
+          forge: { live: forgeStatus().live, cap: forgeStatus().cap, note: "Self-hosted Chromium control plane. Does not farm CAPTCHAs." },
           screenshotone: { configured: isScreenshotOneConfigured() },
           search: { exa: isExaConfigured(), tavily: isTavilyConfigured() },
           helicone: { enabled: isHeliconeEnabled() },
