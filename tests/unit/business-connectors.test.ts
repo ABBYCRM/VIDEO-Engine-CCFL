@@ -320,11 +320,12 @@ describe("business connectors e2e (mock HTTP)", () => {
     const res = await connectorsGet();
     assert.equal(res.status, 401);
     const inventory = connectorInventory();
+    const rows = inventory as Record<string, { when?: string; role?: string }>;
     for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "bitdeer", "nvidia"]) {
-      assert.ok(inventory[id], id);
+      assert.ok(rows[id], id);
     }
     assert.match(String(inventory.youtube.when), /youtube_search/);
-    assert.equal((inventory.bitdeer as { role?: string }).role, "primary");
+    assert.equal(inventory.bitdeer.role, "primary");
     noLeak(inventory);
     assert.equal(JSON.stringify(inventory).includes("sk-"), false);
   });
