@@ -5,6 +5,7 @@ import { stripTypeScriptTypes } from "node:module";
 import vm from "node:vm";
 import { Execution, parseToolCalls, awaitWithSignal } from "../../lib/claw/execution.ts";
 import { SelfStateController, createSelfState } from "../../lib/claw/self-state.ts";
+import { humanToolProgress, looksLikeInternalState, sanitizeUserVisibleMessage, toUserVisibleAssistant } from "../../lib/claw/user-visible.ts";
 
 const runtimeSource = readFileSync(new URL("../../lib/claw/runtime.ts", import.meta.url), "utf8");
 const executable = stripTypeScriptTypes(runtimeSource)
@@ -19,6 +20,7 @@ function harness(responses: any[], result: unknown = { ok: true, id: "f1", size:
   const context = vm.createContext({
     AbortController, AbortSignal, setTimeout, clearTimeout, Execution, parseToolCalls, awaitWithSignal,
     SelfStateController, createSelfState,
+    humanToolProgress, looksLikeInternalState, sanitizeUserVisibleMessage, toUserVisibleAssistant,
     getClawModel: () => "test",
     isNvidiaEnabled: () => true,
     getConversation: () => ({ title: "Existing" }),
@@ -57,30 +59,33 @@ const plan = call("execution_plan", { goal: "Create report", steps: ["save", "ve
 test("runtime withholds unsupported final claims and records a blocked result", async () => {
   const h = harness([]);
   const final = await h.run();
-  assert.match(final, /blocked \/ unverified|acceptance criteria|required evidence/i);
+  assert.match(final, /verified evidence|continue/i);
   assert.doesNotMatch(final, /production ready/);
+  assert.doesNotMatch(final, /SELF_STATE|Status:|PASS:|free_energy|execution_plan/i);
   assert.equal(h.calls.length, 0);
 });
 
 test("runtime finishes only after actual save and verification", async () => {
   const h = harness([plan, call("save_file", { name: "report.md", content: "Report" }), call("execution_verify", { check: "file", evidence: "e1" }), response("Saved: /file/f1")]);
   const final = await h.run();
-  assert.match(final, /Status: verified checks/);
-  assert.match(final, /PASS: Report saved \(e1\)/);
+  assert.match(final, /Saved: \/file\/f1|Saved\./);
+  assert.doesNotMatch(final, /Status: verified|PASS:|SELF_STATE|free_energy/i);
   assert.deepEqual(h.calls, ["save_file"]);
 });
 
 test("length cutoff resumes incomplete call without executing it twice", async () => {
   const h = harness([plan, response('<tool_call name="save_file">{"name":"report.md","content":"hel', "length"), response('lo"}</tool_call>'), call("execution_verify", { check: "file", evidence: "e1" }), response("Saved.")]);
   const final = await h.run();
-  assert.match(final, /verified checks/);
+  assert.match(final, /Saved\./);
+  assert.doesNotMatch(final, /Status:|PASS:/);
   assert.deepEqual(h.calls, ["save_file"]);
 });
 
 test("structured tool failure cannot be green or certify the task", async () => {
   const h = harness([plan, call("save_file", { name: "x", content: "x" }), call("execution_verify", { check: "file", evidence: "e1" })], { ok: false, error: "disk full" });
   const final = await h.run();
-  assert.match(final, /unverified/);
+  assert.match(final, /verified evidence|continue/i);
+  assert.doesNotMatch(final, /Status:|PASS:|SELF_STATE/);
   assert.equal(h.events.find(e => e.type === "tool_end" && e.name === "save_file").ok, false);
 });
 
@@ -92,7 +97,8 @@ test("native tool_calls execute and emit self_state without XML", async () => {
     response("Saved.")
   ]);
   const final = await h.run();
-  assert.match(final, /verified checks/);
+  assert.match(final, /Saved\./);
+  assert.doesNotMatch(final, /Status:|SELF_STATE/);
   assert.deepEqual(h.calls, ["save_file"]);
   assert.ok(h.events.some(e => e.type === "self_state"));
   assert.ok(h.events.some(e => e.type === "tool_start" && e.name === "save_file"));
@@ -128,15 +134,33 @@ test("Aion execute evidence is ingested locally and does not verify the Claw exe
   });
   assert.ok(h.events.some(e => e.type === "tool_start" && e.name === "aion_execute"));
   assert.ok(h.events.some(e => e.type === "tool_end" && e.name === "aion_execute" && e.ok === true));
-  assert.match(final, /unverified|blocked|NOT VERIFIED/i);
+  assert.match(final, /verified evidence|continue|Draft saved/i);
   assert.doesNotMatch(final, /Aion said the report is done/);
+  assert.doesNotMatch(final, /SELF_STATE|Status: verified|NOT VERIFIED/i);
   assert.ok(h.messages.some(m => m.role === "tool" && String(m.content).includes("web_search")));
+});
+
+test("user-visible done event strips a model state dump", async () => {
+  const h = harness([
+    plan,
+    call("save_file", { name: "report.md", content: "Report" }),
+    call("execution_verify", { check: "file", evidence: "e1" }),
+    response("SELF_STATE health=HEALTHY\nStatus: verified checks.\nSaved the report at /file/f1.")
+  ]);
+  const final = await h.run();
+  assert.match(final, /Saved the report/);
+  assert.doesNotMatch(final, /SELF_STATE|Status: verified|PASS:/);
+  const done = h.events.find((e: { type?: string }) => e.type === "done") as { assistant?: string };
+  assert.match(String(done.assistant), /Saved the report/);
+  assert.doesNotMatch(String(done.assistant), /SELF_STATE|Status: verified/);
 });
 
 test("continuation limit preserves unfinished text and never emits Done", async () => {
   const h = harness([response("partial ", "length"), response("partial ", "length"), response("partial ", "length"), response("partial ", "length")]);
   const final = await h.run();
-  assert.match(final, /continuation limit/);
-  assert.ok(h.messages.some(m => String(m.content).startsWith("Unfinished draft")));
+  assert.match(final, /cut off|continue/i);
+  assert.doesNotMatch(final, /continuation limit|SELF_STATE|Status:/i);
+  assert.ok(h.messages.some(m => m.role === "tool" && String(m.content).startsWith("Unfinished draft")));
+  assert.ok(!h.messages.some(m => m.role === "assistant" && String(m.content).includes("Unfinished draft")));
   assert.deepEqual(h.calls, []);
 });

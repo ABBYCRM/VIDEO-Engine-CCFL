@@ -14,6 +14,7 @@ import { ForgeConsole } from "@/components/forge-console";
 import { SwarmConsole } from "@/components/swarm-console";
 import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode, type SelfStateView } from "@/components/ui/claw-thinking-panel";
+import { humanToolProgress, isTranscriptAssistantContent, looksLikeInternalState, sanitizeUserVisibleMessage } from "@/lib/claw/user-visible";
 
 
 /* ─────────────────────────────────────────────────────────
@@ -385,7 +386,7 @@ function AssistantBubble({ content }: { content: string }) {
       <div className="pl-9">
         <div className="glass-bubble-assistant px-4 py-3">
           <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-foreground">
-            {content}
+            {sanitizeUserVisibleMessage(content)}
           </p>
         </div>
         <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -582,9 +583,16 @@ export function ClawConsole() {
         const { done, value } = await reader.read();
         if (done) break;
         sseParse(decoder.decode(value, { stream: true }), (e) => {
-          if (e.type === "token") setStreaming(s => s + e.text);
+          if (e.type === "token" && !looksLikeInternalState(String(e.text || ""))) setStreaming(s => s + e.text);
+          if (e.type === "status" && typeof e.text === "string") {
+            setTools(t => {
+              const last = t[t.length - 1];
+              if (last && last.status === "running") return t.map((x, i) => i === t.length - 1 ? { ...x, label: e.text } : x);
+              return [...t, { id: `status-${Date.now()}`, name: "status", label: e.text, status: "running", startedAt: Date.now() }];
+            });
+          }
           if (e.type === "tool_start") {
-            setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, status: "running", startedAt: Date.now(), args: e.args ? JSON.stringify(e.args) : undefined }]);
+            setTools(t => [...t, { id: `${e.name}-${Date.now()}`, name: e.name, label: humanToolProgress(e.name), status: "running", startedAt: Date.now() }]);
             if (String(e.name).startsWith("computer_") || (e.name === "claw_dispatch" && /computer/i.test(String(e.args || "")))) {
               setComputerOpen(true);
               setForgeOpen(false);
@@ -604,13 +612,24 @@ export function ClawConsole() {
               setFilesOpen(false);
             }
           }
-          if (e.type === "tool_end") setTools(t => t.map(x => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", via: e.via, result: e.preview, finishedAt: Date.now() } : x));
+          if (e.type === "tool_end") setTools(t => t.map(x => x.name === e.name && x.status === "running" ? { ...x, status: e.ok ? "success" : "error", label: humanToolProgress(e.name), finishedAt: Date.now() } : x));
           if (e.type === "self_state") setSelfState({
             health: e.health, issue: e.issue, phase: e.phase, progress: e.progress,
             strategy: e.strategy, blockers: e.blockers, step: e.step, toolsRun: e.toolsRun
           });
           if (e.type === "error") setError(e.error);
-          if (e.type === "done") setStreaming("");
+          if (e.type === "done") {
+            setStreaming("");
+            const answer = sanitizeUserVisibleMessage(String(e.assistant || ""));
+            if (answer) {
+              setMessages((m) => [...m.filter((x) => x.id !== "local-assistant"), {
+                id: "local-assistant",
+                role: "assistant",
+                content: answer,
+                createdAt: new Date().toISOString()
+              }]);
+            }
+          }
         }, carry);
       }
       if (convId) await loadThread(convId);
@@ -677,7 +696,10 @@ export function ClawConsole() {
     await send(fullPrompt);
   }
 
-  const visible = messages.filter(m => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && m.toolJson));
+  const visible = messages.filter(m =>
+    m.role === "user" ||
+    (m.role === "assistant" && !m.toolJson && isTranscriptAssistantContent(m.content))
+  );
   const empty = !visible.length && !streaming && !busy;
   const activeTitle = convs.find(c => c.id === active)?.title;
 

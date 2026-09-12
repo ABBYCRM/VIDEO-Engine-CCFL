@@ -70,11 +70,10 @@ test("Claw is the operator chat with thread/file controls, model picker, and too
 
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByRole("button", { name: "Stop generating" })).toBeVisible();
-  await expect(page.getByText(/Working|Thinking/i).first()).toBeVisible();
-  await expect(page.getByText("steel_scrape")).toBeVisible();
-  await expect(page.getByText("steel.dev")).toBeVisible();
-  await expect(page.getByText("HEALTHY").first()).toBeVisible();
+  await expect(page.getByText(/Working|Reading the page/i).first()).toBeVisible();
   await expect(page.getByText("Example Domain is a placeholder page.")).toBeVisible();
+  await expect(page.getByText("HEALTHY")).toHaveCount(0);
+  await expect(page.getByText("steel_scrape")).toHaveCount(0);
 });
 
 test("Composer attaches zip and other file types", async ({ page }) => {

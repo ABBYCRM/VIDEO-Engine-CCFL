@@ -1,5 +1,6 @@
 import { Execution, parseToolCalls, awaitWithSignal, toolSucceeded } from "../../lib/claw/execution.ts";
 import { SelfStateController, createSelfState } from "../../lib/claw/self-state.ts";
+import { humanToolProgress, looksLikeInternalState, sanitizeUserVisibleMessage, toUserVisibleAssistant } from "../../lib/claw/user-visible.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
@@ -37,6 +38,7 @@ async function runWithResult(payload: unknown) {
     aionExecute: async () => { throw new Error("aionExecute should not run"); },
     SelfStateController,
     createSelfState,
+    humanToolProgress, looksLikeInternalState, sanitizeUserVisibleMessage, toUserVisibleAssistant,
     executeClawTool: async () => payload,
     chatCompletionStream: async (request: any, onToken: (text: string) => void) => {
       requests.push(request);
@@ -96,6 +98,7 @@ test("native tool_calls execute, update previous_tool_results, and appear in SEL
   const context = vm.createContext({
     AbortController, AbortSignal, setTimeout, clearTimeout, Execution, parseToolCalls, awaitWithSignal,
     SelfStateController, createSelfState,
+    humanToolProgress, looksLikeInternalState, sanitizeUserVisibleMessage, toUserVisibleAssistant,
     getClawModel: () => "mistralai/Mistral-Large-3-675B-Instruct-2512",
     isNvidiaEnabled: () => true,
     getConversation: () => ({ title: "Existing thread" }),

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aionStatus, aionConsult, aionCurriculum, aionN8n, aionExecute, aionContract, aionTools, aionAcceptanceForGoal, sanitizeAionToolResults, isToolfulGoal } from "../../lib/claw/aion.ts";
+import { aionStatus, aionConsult, aionCurriculum, aionN8n, aionExecute, aionContract, aionTools, aionAcceptanceForGoal, sanitizeAionToolResults, isToolfulGoal, dispatchAionPrompt, routeAionMode } from "../../lib/claw/aion.ts";
 
 const originalFetch = globalThis.fetch;
 const previousUrl = process.env.AION_BASE_URL;
@@ -176,8 +176,53 @@ test("acceptance helpers stay on documented brain tools", () => {
   assert.equal(isToolfulGoal("search the docket"), true);
   assert.equal(isToolfulGoal("run osint on the subject"), true);
   assert.equal(isToolfulGoal("arxiv transformer papers"), true);
+  assert.equal(isToolfulGoal("email the client the dates"), true);
   assert.deepEqual(aionAcceptanceForGoal("run osint on the subject"), []);
   assert.deepEqual(sanitizeAionToolResults([{ tool: "datetime", ok: true, id: "t1" }]), [{ name: "datetime", ok: true, evidence_id: "t1" }]);
+});
+
+test("consult drops control-loop SSE events from the user-facing answer", async () => {
+  globalThis.fetch = async () => stream([
+    { type: "self_state", health: "HEALTHY", free_energy: 0.2 },
+    { type: "trinity", reasons: ["need evidence"] },
+    { type: "delta", text: "SELF_OBSERVATION phase\nfree_energy: 0.2\n" },
+    { type: "delta", text: "The docket lists two hearings." },
+    { type: "done", provider: "nvidia", model: "test" }
+  ]);
+  const result = await aionConsult("Question", { conversationId: "thread-one" });
+  assert.equal(result.answer, "The docket lists two hearings.");
+  assert.doesNotMatch(result.answer, /SELF_OBSERVATION|free_energy|self_state/i);
+});
+
+test("actionable prompts dispatch to execute, advice stays consult", async () => {
+  assert.equal(routeAionMode("Search live news"), "execute");
+  assert.equal(routeAionMode("What do you think about Trinity?"), "consult");
+  const seen: string[] = [];
+  globalThis.fetch = async (url, options) => {
+    seen.push(String(url));
+    if (String(url).endsWith("/api/claw/execute")) {
+      const body = JSON.parse(String(options?.body));
+      assert.equal(body.goal, "Search live news");
+      return Response.json({
+        ok: true, source: "aion-brain", status: "COMPLETE", complete: true, verified: true,
+        answer: "SELF_STATE health=HEALTHY\nI searched.", session_id: "claw:thread-one",
+        self_state: { previous_tool_results: [{ tool: "web_search", ok: true, id: "ev1", preview: "hits" }], health: "HEALTHY", progress: 1 },
+        cycles: [{ health: "HEALTHY" }],
+        previous_tool_results: [{ tool: "web_search", ok: true, id: "ev1", preview: "hits" }]
+      });
+    }
+    return stream([{ type: "delta", text: "Trinity is a gate, not a dump." }, { type: "done", provider: "nvidia", model: "test" }]);
+  };
+  const executed = await dispatchAionPrompt("Search live news", { conversationId: "thread-one" });
+  assert.equal(executed.mode, "execute");
+  assert.ok(seen.some((u) => u.endsWith("/api/claw/execute")));
+  assert.equal(executed.answer, "I searched.");
+  assert.doesNotMatch(executed.answer, /SELF_STATE/);
+  seen.length = 0;
+  const consulted = await dispatchAionPrompt("What do you think about Trinity?", { conversationId: "thread-one" });
+  assert.equal(consulted.mode, "consult");
+  assert.ok(seen.some((u) => u.endsWith("/api/chat")));
+  assert.equal(consulted.answer, "Trinity is a gate, not a dump.");
 });
 test("cursor proxy forwards launch to Brain /api/cursor/launch with X-AION-Key and never hits api.cursor.com", async () => {
   const { aionCursorLaunch } = await import("../../lib/claw/aion.ts");

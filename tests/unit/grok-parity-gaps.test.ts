@@ -233,5 +233,8 @@ describe("Files tray + connectors registry + runtime", () => {
     assert.match(runtime, /call routines/);
     assert.match(runtime, /trinity_decide/);
     assert.match(runtime, /POST \/api\/decision/);
+    assert.match(runtime, /USER-VISIBLE MESSAGE CONTRACT/);
+    assert.match(runtime, /Default mode is EXECUTE/);
+    assert.match(runtime, /FORBIDDEN in the assistant message/);
   });
 });
