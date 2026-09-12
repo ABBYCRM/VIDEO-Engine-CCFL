@@ -2,6 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { searchDevSkills, searchDevSkillsReranked } from "../../lib/claw/dev-skills.ts";
 
+// Isolate from any Bitdeer/NVIDIA/embeddings env vars that may be set in the
+// calling shell. The stage-2 reranker is dynamically imported; if any of these
+// env vars are present, `isRerankConfigured()` returns true and the rerank
+// path runs (silently passing the test's "must fall back" assertion). Match
+// the pattern used by tests/unit/aion.test.ts and tests/unit/grok-parity-gaps.test.ts.
+const RERANK_ENV_KEYS = [
+  "BITDEER_API_KEY", "BITDEER_API_KEYS",
+  "NVIDIA_API_KEY", "NVIDIA_API_KEYS",
+  "EMBEDDINGS_API_KEY",
+] as const;
+const previousRerankEnv: Record<string, string | undefined> = {};
+for (const k of RERANK_ENV_KEYS) previousRerankEnv[k] = process.env[k];
+for (const k of RERANK_ENV_KEYS) delete process.env[k];
+test.after(() => {
+  for (const k of RERANK_ENV_KEYS) {
+    const prev = previousRerankEnv[k];
+    if (prev === undefined) delete process.env[k];
+    else process.env[k] = prev;
+  }
+});
+
 // Note: these tests exercise dev-skills.ts, which is self-contained. The
 // stage-2 NVIDIA reranker (lib/nvidia/rerank.ts) is loaded via a dynamic
 // import and is NOT reachable under `node --test` (the repo's source uses
