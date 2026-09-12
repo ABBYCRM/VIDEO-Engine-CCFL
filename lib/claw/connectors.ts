@@ -17,12 +17,21 @@ function getRaw(key: string): string | null {
   } catch { return null; }
 }
 
-function secret(setting: string, envName: string): string {
+export function secret(setting: string, envName: string): string {
   const encrypted = getRaw(setting);
   if (encrypted) {
     try { return decryptSecret(encrypted); } catch { /* fall through */ }
   }
   return process.env[envName]?.trim() || "";
+}
+
+/** First non-empty settings/env secret. Never logs the value. */
+export function firstSecret(pairs: Array<[string, string]>): string {
+  for (const [setting, envName] of pairs) {
+    const value = secret(setting, envName);
+    if (value) return value;
+  }
+  return "";
 }
 
 export function missing(service: string, envName: string, when: string): { ok: false; error: string; code: string; hint: string } {
@@ -34,7 +43,7 @@ export function missing(service: string, envName: string, when: string): { ok: f
   };
 }
 
-async function timedFetch(url: string, init: RequestInit, ms = TIMEOUT): Promise<Response> {
+export async function timedFetch(url: string, init: RequestInit, ms = TIMEOUT): Promise<Response> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), ms);
   const signal = init.signal ? AbortSignal.any([init.signal, ac.signal]) : ac.signal;
@@ -48,28 +57,37 @@ function clipText(text: string, max = 12_000): { text: string; truncated: boolea
 }
 
 export function connectorInventory() {
-  let composio: { configured: boolean; keyType?: string; note?: string } = { configured: isComposioConfigured() };
+  let composio: { configured: boolean; keyType?: string; note?: string; when: string } = {
+    configured: isComposioConfigured(),
+    when: "ak_ project key is live for composio_health / composio_list_tools / composio_action. Email and GitHub go through Composio when connected. oak_ org key is optional and is not treated as live."
+  };
   if (composio.configured) {
     try {
       const kind = classifyComposioKey(getComposioApiKey());
-      composio = { configured: true, keyType: kind, note: composioKeyHint(kind) || undefined };
-    } catch { composio = { configured: false }; }
+      composio = { configured: true, keyType: kind, note: composioKeyHint(kind) || undefined, when: composio.when };
+    } catch { composio = { configured: false, when: composio.when }; }
   }
   return {
     steel: { configured: Boolean(secret("steel_api_key", "STEEL_API_KEY")), when: "One-shot public-web scrape (steel_scrape). Interactive browsing uses Claw Computer." },
-    firecrawl: { configured: Boolean(secret("firecrawl_api_key", "FIRECRAWL_API_KEY")), when: "Scrape fallback when Steel fails; structured markdown." },
-    scrapingbee: { configured: Boolean(secret("scrapingbee_api_key", "SCRAPINGBEE_API_KEY")), when: "HTML scrape fallback; JS-rendered pages." },
-    scrapfly: { configured: Boolean(secret("scrapfly_api_key", "SCRAPFLY_API_KEY")), when: "Last scrape fallback; anti-bot pages." },
+    firecrawl: { configured: Boolean(secret("firecrawl_api_key", "FIRECRAWL_API_KEY")), when: "Scrape fallback when Steel fails; structured markdown (firecrawl_scrape)." },
+    scrapingbee: { configured: Boolean(secret("scrapingbee_api_key", "SCRAPINGBEE_API_KEY")), when: "HTML scrape fallback (scrapingbee_scrape); JS-rendered pages." },
+    scrapfly: { configured: Boolean(secret("scrapfly_api_key", "SCRAPFLY_API_KEY")), when: "Last scrape fallback (scrapfly_scrape); anti-bot pages." },
     screenshotone: { configured: Boolean(process.env.SCREENSHOTONE_ACCESS_KEY || getRaw("screenshotone_access_key")), when: "Signed page screenshots (web_screenshot)." },
     composio,
     exa: { configured: Boolean(secret("exa_api_key", "EXA_API_KEY")), when: "Primary web_search provider." },
     tavily: { configured: Boolean(secret("tavily_api_key", "TAVILY_API_KEY")), when: "web_search fallback." },
     helicone: { configured: Boolean(process.env.HELICONE_API_KEY || getRaw("helicone_api_key")), enabled: isHeliconeEnabled(), when: "NVIDIA observability proxy; opt-in via HELICONE_ENABLED." },
-    e2b: { configured: Boolean(secret("e2b_api_key", "E2B_API_KEY")), when: "Run untrusted code in a hosted sandbox (e2b_run)." },
-    hedra: { configured: Boolean(secret("hedra_api_key", "HEDRA_API_KEY")), when: "Hedra v3 status / image models. Does not start video jobs." },
-    resend: { configured: Boolean(secret("resend_api_key", "RESEND_API_KEY")), when: "Transactional email (resend_send)." },
-    github: { configured: Boolean(secret("github_personal_access_token", "GITHUB_PERSONAL_ACCESS_TOKEN")), when: "GitHub REST (github_request)." },
-    nvidia: { configured: Boolean(process.env.BITDEER_API_KEY || process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), when: "Claw chat, vision, embed, rerank via Bitdeer." },
+    e2b: { configured: Boolean(secret("e2b_api_key", "E2B_API_KEY")), when: "Run untrusted code in a hosted sandbox (e2b_run / shell_run)." },
+    hedra: { configured: Boolean(secret("hedra_api_key", "HEDRA_API_KEY")), when: "Hedra v3: hedra_status lists models; hedra_start submits an image (default gpt-image-2) or video job; hedra_job polls GET /v3/jobs/{id}." },
+    youtube: { configured: Boolean(secret("youtube_api_key", "YOUTUBE_API_KEY")), when: "YouTube Data API v3 — youtube_search and youtube_video." },
+    gemini: { configured: Boolean(secret("gemini_api_key", "GEMINI_API_KEY")), when: "llm_gemini chat/vision. NVIDIA remains the default Claw chat path; call this when Gemini is named or vision needs Gemini." },
+    xai: { configured: Boolean(secret("xai_api_key", "XAI_API_KEY")), when: "llm_xai — xAI Grok chat/completions." },
+    kimi: { configured: Boolean(secret("kimi_api_key", "KIMI_API_KEY")), when: "llm_kimi — Moonshot Kimi chat/completions." },
+    openai: { configured: Boolean(firstSecret([["openai_api_key", "OPENAI_API_KEY"], ["openai_embeddings_api_key", "OPENAI_EMBEDDINGS_API_KEY"], ["openai_embeddings", "OPENAI_EMBEDDINGS"]])), when: "openai_chat and openai_embed. Embeddings prefer OPENAI_EMBEDDINGS_API_KEY when set." },
+    pinecone: { configured: Boolean(secret("pinecone_api_key", "PINECONE_API_KEY")), when: "pinecone_query / pinecone_upsert. Local vector path; BOS memory stays Brain bos_memory." },
+    resend: { configured: Boolean(secret("resend_api_key", "RESEND_API_KEY")), when: "Transactional email (resend_send). Composio Gmail/Resend is the other email path." },
+    github: { configured: Boolean(secret("github_personal_access_token", "GITHUB_PERSONAL_ACCESS_TOKEN")), when: "Direct GitHub REST (github_request). Prefer composio_action toolkit=github when Composio GitHub is connected." },
+    nvidia: { configured: Boolean(process.env.BITDEER_API_KEY || process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), when: "Claw chat, vision, embed, rerank via Bitdeer (analyze_image)." },
     aion: { configured: Boolean(process.env.AION_BASE_URL && process.env.AION_API_KEY), when: "Connected brain — prefer aion_execute for toolful work; aion_status / aion_consult stay advice-only." },
     cursor: { configured: Boolean(process.env.AION_BASE_URL && process.env.AION_API_KEY), owner: "aion-brain", when: "Ask Brain cursor_launch via AION handshake. CURSOR_API_KEY lives on Brain (name listed here only for co-host)." },
     gdy: { configured: isGdyConfigured(), when: "OSINT RAG (gdy_search, gdy_rag_context, gdy_categories, gdy_tools). Fail-soft if GDY_API_KEY is missing." },
@@ -209,7 +227,7 @@ export async function hedraStatus() {
     connected: true,
     modelCount: models.length,
     models: models.slice(0, 20).map((m: any) => ({ id: m.id || m.name || m.model, kind: m.type || m.kind || "unknown" })),
-    note: "Status only. Video generation stays on the Hedra generate path; this tool does not start a job."
+    note: "Models listed. Start a job with hedra_start (image default gpt-image-2; video when the model accepts the inputs). Poll with hedra_job."
   };
 }
 

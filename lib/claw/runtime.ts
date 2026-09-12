@@ -52,9 +52,20 @@ Exhausted budget, missing tools, interrupted output or absent evidence means blo
 
 Aion-Brain is the connected brain. Prefer aion_execute for work that must use brain tools (search, scrape, n8n, live research). Keep aion_status / aion_consult / aion_n8n as advice. Treat previous_tool_results as the only Aion evidence. Never mark local work verified from Aion prose or complete=true. If Aion is configured, call it — do not pretend it is offline.
 
-Composio is the integration bus. You can use EVERY connected app. Flow: composio_health → composio_list_tools(toolkit or search) → composio_tool_schema if args are unclear → composio_action(exact slug). Never invent slugs. Never tell the operator to open Integrations unless health says nothing is connected.
+Composio is the integration bus. ak_ project keys are live. oak_ org keys are optional and fail soft — do not treat oak_ as connected. Flow: composio_health → composio_list_tools(toolkit or search) → composio_tool_schema if args are unclear → composio_action(exact slug). Email and GitHub go through Composio when those toolkits are connected (composio_list_tools toolkit=gmail|resend|github then composio_action). Never invent slugs. Never tell the operator to open Integrations unless health says nothing is connected.
 
 Email / contact people: when they ask you to email, contact, reach, or follow up — write a professional email (specific subject, relevant body, no fluff, match their intent) then SEND it. Prefer resend_send. If Resend API is missing, composio_list_tools toolkit=resend (or gmail) then composio_action. Do not reply that you cannot send mail. Do not claim sent without a tool result ok:true.
+
+Business wiring (loaded keys → tools → when). Settings-store first, then env. Fail-soft MISSING_KEY — never invent results:
+- YOUTUBE_API_KEY → youtube_search / youtube_video — YouTube Data API v3 lookup
+- GEMINI_API_KEY → llm_gemini — Gemini chat/vision (NVIDIA remains default Claw chat)
+- XAI_API_KEY → llm_xai — xAI Grok chat/completions
+- KIMI_API_KEY → llm_kimi — Moonshot Kimi chat
+- OPENAI_API_KEY / OPENAI_EMBEDDINGS → openai_chat / openai_embed
+- PINECONE_API_KEY → pinecone_query / pinecone_upsert (local vectors; BOS stays bos_memory)
+- HEDRA_API_KEY → hedra_status / hedra_start / hedra_job — Hedra v3 image default; video when the model accepts the inputs
+- COMPOSIO_API_KEY (ak_) → composio_health / composio_list_tools / composio_action — email/GitHub when connected
+Already taught: steel_scrape, firecrawl_scrape, scrapingbee_scrape, scrapfly_scrape, web_search, web_screenshot, e2b_run/shell_run, resend_send, github_request.
 
 When you cannot do something, or a tool fails: web_search the current error/docs, or aion_execute the same question, then retry with a different tool or slug. LOOP_DETECTED means change strategy, not repeat.
 
@@ -124,6 +135,21 @@ async function liveOperatorSurface(): Promise<string> {
     ? "Resend ready — resend_send is the email path"
     : "Resend API key missing — try composio_list_tools toolkit=resend";
   const search = inv.exa.configured || inv.tavily.configured ? "web_search ready" : "no web_search key";
+  const youtube = inv.youtube?.configured
+    ? "YouTube ready — youtube_search / youtube_video"
+    : "YouTube HOLD — YOUTUBE_API_KEY missing";
+  const llms = [
+    inv.gemini?.configured ? "llm_gemini" : null,
+    inv.xai?.configured ? "llm_xai" : null,
+    inv.kimi?.configured ? "llm_kimi" : null,
+    inv.openai?.configured ? "openai_chat/openai_embed" : null
+  ].filter(Boolean).join(", ") || "no extra LLM keys";
+  const pinecone = inv.pinecone?.configured
+    ? "Pinecone ready — pinecone_query / pinecone_upsert (BOS stays bos_memory)"
+    : "Pinecone HOLD — PINECONE_API_KEY missing";
+  const hedra = inv.hedra?.configured
+    ? "Hedra ready — hedra_status / hedra_start / hedra_job"
+    : "Hedra HOLD — HEDRA_API_KEY missing";
   const cursor = inv.cursor?.configured
     ? "Cursor via Brain ready (AION handshake). Non-trivial repo work → cursor_launch (Brain POST /api/cursor/launch). Then cursor_status / cursor_reply / cursor_cancel. Dynamic, not a prefab menu. CURSOR_API_KEY stays on Brain."
     : "Cursor via Brain HOLD — Aion-Brain not configured. Do not pretend a cloud agent ran. Do not call api.cursor.com from CCFL.";
@@ -135,6 +161,10 @@ async function liveOperatorSurface(): Promise<string> {
 - ${composioLine}
 - ${resend}
 - ${search}
+- ${youtube}
+- Extra LLMs: ${llms}
+- ${pinecone}
+- ${hedra}
 - ${cursor}
 - Computer: computer_open / computer_look / computer_click — you drive, operator watches.
 - ${shell}
