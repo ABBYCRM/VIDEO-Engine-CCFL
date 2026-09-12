@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 import { listDevSkillCategories, searchDevSkills } from "@/lib/claw/dev-skills";
 
 export const runtime = "nodejs";
@@ -9,8 +10,8 @@ export const runtime = "nodejs";
 // answer (the four categories + a few hand-picked concrete questions
 // per category, drawn from real records in dev-skills.ts).
 //
-// The component reads this on first load (no auth — these are
-// generic prompt starters, nothing operator-specific). The RAG-driven
+// The component reads this on first load. Auth is required so the
+// prompt catalog is not a public reconnaissance surface. The RAG-driven
 // approach means a new skill record added to dev-skills.ts can show
 // up as a suggestion the next time the operator opens the chat.
 //
@@ -460,6 +461,7 @@ const TOOL_SUGGESTIONS: Array<{ label: string; prompt: string }> = [
 ];
 
 export async function GET() {
+  if (!(await requireAdmin())) return unauthorized();
   const categories = listDevSkillCategories();
   const suggestions: Array<{ label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] }> = [];
   // Tool-driven prompts first — these exercise real Claw tools.

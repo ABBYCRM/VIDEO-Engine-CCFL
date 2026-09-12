@@ -16,6 +16,11 @@ const nextConfig: NextConfig = {
     return [
       { source: "/", destination: "/claw", permanent: false }
     ];
+  },
+  async rewrites() {
+    return [
+      { source: "/api/suggestions", destination: "/api/claw/suggestions" }
+    ];
   }
 };
 

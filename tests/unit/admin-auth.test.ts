@@ -14,6 +14,7 @@ import { GET as computerGet, POST as computerPost } from "../../app/api/computer
 import { GET as forgeGet, POST as forgePost } from "../../app/api/forge/route.ts";
 import { GET as nvidiaGet, POST as nvidiaPost } from "../../app/api/admin/nvidia/keys/route.ts";
 import { POST as clawChatPost } from "../../app/api/claw/chat/route.ts";
+import { GET as suggestionsGet } from "../../app/api/claw/suggestions/route.ts";
 
 const SESSION_SECRET = "e2e-session-secret-that-is-long-enough-for-tests-123456";
 const ADMIN_PASSWORD = "e2e-local-only";
@@ -161,5 +162,9 @@ describe("admin auth", () => {
       body: JSON.stringify({ message: "hello" }),
     }));
     assert.equal(chat.status, 401);
+
+    const suggestions = await suggestionsGet();
+    assert.equal(suggestions.status, 401);
+    assert.deepEqual(await suggestions.json(), { error: "Unauthorized" });
   });
 });
