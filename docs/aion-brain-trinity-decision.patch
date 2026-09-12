@@ -1,0 +1,348 @@
+From 2be0625a55ff90770d45c80652cd5a1e7dd79eb4 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sat, 12 Sep 2026 07:22:38 +0000
+Subject: [PATCH] Expose Brain BOS write, RoutineStore HTTP, and Trinity
+ /api/decision.
+
+GET/POST /api/memory/bos now retrieve and append Continuity notes in
+bos-omega.sqlite. /api/routines list/create/pause/resume/delete persist
+in routines.sqlite. POST /api/decision returns GO/HOLD/ABORT from
+resolveBosGate plus the 7-law kernel.
+---
+ docs/claw-contract.md        |  7 ++++
+ lib/bos_omega_rag.js         | 43 +++++++++++++++++++
+ lib/routines.js              | 40 ++++++++++++++----
+ server.js                    | 81 ++++++++++++++++++++++++++++++++++--
+ test/routines_store.test.mjs | 65 +++++++++++++++++++++++++++++
+ 5 files changed, 224 insertions(+), 12 deletions(-)
+ create mode 100644 test/routines_store.test.mjs
+
+diff --git a/docs/claw-contract.md b/docs/claw-contract.md
+index 7fe0d86..8ea5fc4 100644
+--- a/docs/claw-contract.md
++++ b/docs/claw-contract.md
+@@ -54,6 +54,13 @@ Auth on all of these: `X-AION-Key` or `Authorization: Bearer` matching
+ | `/api/agents/:id/stop` | POST | Cooperative stop |
+ | `/api/agents/:id/cleanup` | POST | After done: drop result payload |
+ | `/api/memory/bos` | GET | `?q=Trinity` local BOS RAG retrieve |
++| `/api/memory/bos` | POST | Append Continuity operator note (`{ text, title? }`) to `bos-omega.sqlite` |
++| `/api/routines` | GET | List durable RoutineStore rows (`routines.sqlite`) |
++| `/api/routines` | POST | Upsert `{ name, trigger, steps, success }` |
++| `/api/routines/:name/pause` | POST | Pause a named routine |
++| `/api/routines/:name/resume` | POST | Resume a named routine |
++| `/api/routines/:name` | DELETE | Delete a named routine |
++| `/api/decision` | POST | Brain-owned Trinity `GO/HOLD/ABORT` plus 7-law `COMMIT/DEFER/REJECT` |
+ 
+ ### `POST /api/claw/execute` body
+ 
+diff --git a/lib/bos_omega_rag.js b/lib/bos_omega_rag.js
+index da4f1c7..7e59b0e 100644
+--- a/lib/bos_omega_rag.js
++++ b/lib/bos_omega_rag.js
+@@ -270,6 +270,49 @@ export class BosOmegaRag {
+     return { ingested: true, chunk_count: rows.length, embedder: 'hash-sha256-256', files: files.length };
+   }
+ 
++  /**
++   * Append an operator Continuity note without wiping Canon/Patch corpus.
++   * Durable SQLite write — same store GET /api/memory/bos retrieves from.
++   */
++  appendOperatorMemory({ text, title = 'operator-note' } = {}) {
++    const body = String(text || '').trim();
++    if (!body) return { ok: false, error: 'text_required', chunk_count: 0 };
++    this.ensureIngested();
++    const sourceId = `operator-${Date.now()}`;
++    const titleSafe = String(title || 'operator-note').slice(0, 80);
++    const chunks = chunkDocument({
++      sourceId,
++      title: titleSafe,
++      content: body,
++      chunkSize: this.chunkSize,
++      overlap: this.overlap,
++    });
++    const insert = this.db.prepare(`
++      INSERT OR REPLACE INTO chunks (
++        chunk_id, source_id, title, text, authority, ordinal, file_mtime,
++        vector_json, vector_dim, embedder
++      ) VALUES (
++        @chunk_id, @source_id, @title, @text, @authority, @ordinal, @file_mtime,
++        @vector_json, @vector_dim, @embedder
++      )
++    `);
++    const tx = this.db.transaction((batch) => {
++      for (const chunk of batch) {
++        const vector = hashEmbed(`${chunk.source_id} ${chunk.title} ${chunk.text}`);
++        insert.run({
++          ...chunk,
++          authority: 'continuity',
++          file_mtime: Date.now(),
++          vector_json: JSON.stringify(vector),
++          vector_dim: vector.length,
++          embedder: 'hash-sha256-256',
++        });
++      }
++    });
++    tx(chunks);
++    return { ok: true, source_id: sourceId, authority: 'continuity', chunk_count: chunks.length, persist: 'bos-omega.sqlite' };
++  }
++
+   retrieve(query, { topK = 6, minScore = 0.02 } = {}) {
+     const q = String(query || '').trim();
+     if (!q) return { ok: false, error: 'query_required', chunks: [] };
+diff --git a/lib/routines.js b/lib/routines.js
+index 9bde425..ff20ff5 100644
+--- a/lib/routines.js
++++ b/lib/routines.js
+@@ -66,10 +66,12 @@ export class RoutineStore {
+         trigger_text TEXT NOT NULL,
+         steps_json TEXT NOT NULL,
+         success TEXT NOT NULL,
++        status TEXT NOT NULL DEFAULT 'active',
+         created_at INTEGER NOT NULL,
+         updated_at INTEGER NOT NULL
+       );
+     `);
++    try { this.db.exec(`ALTER TABLE routines ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`); } catch { /* already present */ }
+   }
+ 
+   seedDefaults() {
+@@ -95,19 +97,24 @@ export class RoutineStore {
+   }
+ 
+   list() {
+-    return this.db.prepare('SELECT name, trigger_text, steps_json, success FROM routines ORDER BY name').all()
+-      .map((r) => ({
+-        name: r.name,
+-        trigger: r.trigger_text,
+-        steps: JSON.parse(r.steps_json),
+-        success: r.success,
+-      }));
++    return this.db.prepare('SELECT name, trigger_text, steps_json, success, status FROM routines ORDER BY name').all()
++      .map((r) => this._row(r));
+   }
+ 
+   get(name) {
+     const r = this.db.prepare('SELECT * FROM routines WHERE name = ?').get(String(name || ''));
+     if (!r) return null;
+-    return { name: r.name, trigger: r.trigger_text, steps: JSON.parse(r.steps_json), success: r.success };
++    return this._row(r);
++  }
++
++  _row(r) {
++    return {
++      name: r.name,
++      trigger: r.trigger_text,
++      steps: JSON.parse(r.steps_json),
++      success: r.success,
++      status: r.status === 'paused' ? 'paused' : 'active',
++    };
+   }
+ 
+   upsert({ name, trigger, steps, success }) {
+@@ -132,6 +139,23 @@ export class RoutineStore {
+     return this.get(n);
+   }
+ 
++  setStatus(name, status) {
++    const n = String(name || '').trim();
++    const next = status === 'paused' ? 'paused' : 'active';
++    const row = this.get(n);
++    if (!row) return null;
++    this.db.prepare('UPDATE routines SET status = ?, updated_at = ? WHERE name = ?').run(next, Date.now(), n);
++    return this.get(n);
++  }
++
++  remove(name) {
++    const n = String(name || '').trim();
++    const row = this.get(n);
++    if (!row) return null;
++    this.db.prepare('DELETE FROM routines WHERE name = ?').run(n);
++    return { ok: true, deleted: n };
++  }
++
+   close() { this.db.close(); }
+ }
+ 
+diff --git a/server.js b/server.js
+index fd2a375..8c3fc45 100644
+--- a/server.js
++++ b/server.js
+@@ -453,13 +453,26 @@ app.get('/api/audit/recent', (req, res) => {
+ 
+ app.post('/api/decision', (req, res) => {
+   try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+-  const userInput = String(req.body?.user_input || '').trim();
+-  if (!userInput) return res.status(400).json({ detail: 'user_input_required' });
++  const userInput = String(req.body?.user_input || req.body?.prompt || req.body?.goal || '').trim();
++  if (!userInput) return res.status(400).json({ ok: false, error: 'user_input_required', trinity: 'ABORT', reason: 'empty_input' });
+   const history = Array.isArray(req.body?.history) ? req.body.history.slice(0, 100) : [];
+-  const ctx = new MissionContext({ userInput, history });
++  const retrieved = Boolean(req.body?.retrieved);
++  const ctx = new MissionContext({ userInput, history, metadata: req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {} });
+   const decision = resolveDecision(ctx);
++  const bosGate = resolveBosGate(userInput, { retrieved });
++  const mapped = decision.state === 'REJECT' ? 'ABORT' : decision.state === 'DEFER' ? 'HOLD' : 'GO';
++  const trinity = bosGate.state === 'GO' ? mapped : bosGate.state;
+   store.recordCall({ ts: Date.now(), app_id: ctx.fingerprint(), provider: 'kernel', model: '7-law', operation: 'aion.decision', status: 200, latency_ms: 0, request_id: ctx.requestId });
+-  res.json({ request_id: ctx.requestId, decision });
++  res.json({
++    ok: true,
++    source: 'aion-brain',
++    request_id: ctx.requestId,
++    trinity,
++    reason: bosGate.reason,
++    reasons: [bosGate.reason, decision.rationale].filter(Boolean),
++    decision,
++    bos_gate: bosGate,
++  });
+ });
+ 
+ app.post('/api/chat', async (req, res) => {
+@@ -772,6 +785,59 @@ app.get('/api/memory/bos', (req, res) => {
+   }
+ });
+ 
++app.post('/api/memory/bos', (req, res) => {
++  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
++  const text = String(req.body?.text || req.body?.content || req.body?.query || '').trim();
++  if (!text) return res.status(400).json({ ok: false, error: 'text_required' });
++  try {
++    const written = bosRag.appendOperatorMemory({ text, title: req.body?.title || 'operator-note' });
++    res.status(written.ok ? 200 : 400).json({ ok: written.ok, source: 'aion-brain', persist: 'bos-omega.sqlite', ...written });
++  } catch (e) {
++    res.status(500).json({ ok: false, error: e.message });
++  }
++});
++
++app.get('/api/routines', (req, res) => {
++  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
++  res.json({ ok: true, source: 'aion-brain', persist: 'routines.sqlite', routines: routines.list() });
++});
++
++app.post('/api/routines', (req, res) => {
++  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
++  try {
++    const row = routines.upsert({
++      name: req.body?.name,
++      trigger: req.body?.trigger || req.body?.text,
++      steps: req.body?.steps,
++      success: req.body?.success,
++    });
++    res.status(200).json({ ok: true, source: 'aion-brain', persist: 'routines.sqlite', routine: row });
++  } catch (e) {
++    res.status(400).json({ ok: false, error: e.message });
++  }
++});
++
++app.post('/api/routines/:name/pause', (req, res) => {
++  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
++  const row = routines.setStatus(req.params.name, 'paused');
++  if (!row) return res.status(404).json({ ok: false, error: 'routine_not_found' });
++  res.json({ ok: true, source: 'aion-brain', persist: 'routines.sqlite', routine: row });
++});
++
++app.post('/api/routines/:name/resume', (req, res) => {
++  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
++  const row = routines.setStatus(req.params.name, 'active');
++  if (!row) return res.status(404).json({ ok: false, error: 'routine_not_found' });
++  res.json({ ok: true, source: 'aion-brain', persist: 'routines.sqlite', routine: row });
++});
++
++app.delete('/api/routines/:name', (req, res) => {
++  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
++  const deleted = routines.remove(req.params.name);
++  if (!deleted) return res.status(404).json({ ok: false, error: 'routine_not_found' });
++  res.json({ ok: true, source: 'aion-brain', persist: 'routines.sqlite', ...deleted });
++});
++
+ app.get('/api/memory/episodes', (req, res) => {
+   try { aionAdmin(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+   const sessionId = (req.query.sessionId && String(req.query.sessionId)) || null;
+@@ -821,6 +887,13 @@ const CLAW_CONTRACT = Object.freeze({
+     cursor_reply: { method: 'POST', path: '/api/cursor/:id/reply' },
+     cursor_cancel: { method: 'POST', path: '/api/cursor/:id/cancel' },
+     memory_bos: { method: 'GET', path: '/api/memory/bos?q=' },
++    memory_bos_write: { method: 'POST', path: '/api/memory/bos', notes: 'Append Continuity operator note to bos-omega.sqlite. Does not wipe Canon/Patch.' },
++    routines: { method: 'GET', path: '/api/routines', notes: 'Durable RoutineStore (routines.sqlite)' },
++    routines_upsert: { method: 'POST', path: '/api/routines' },
++    routines_pause: { method: 'POST', path: '/api/routines/:name/pause' },
++    routines_resume: { method: 'POST', path: '/api/routines/:name/resume' },
++    routines_delete: { method: 'DELETE', path: '/api/routines/:name' },
++    decision: { method: 'POST', path: '/api/decision', notes: 'Brain-owned Trinity GO/HOLD/ABORT + 7-law COMMIT/DEFER/REJECT' },
+   },
+   auth: 'X-AION-Key or Authorization: Bearer (must match AION_API_KEYS)',
+   execute_body: {
+diff --git a/test/routines_store.test.mjs b/test/routines_store.test.mjs
+new file mode 100644
+index 0000000..38594f4
+--- /dev/null
++++ b/test/routines_store.test.mjs
+@@ -0,0 +1,65 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { mkdtempSync, rmSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { RoutineStore } from '../lib/routines.js';
++import { resolveBosGate } from '../lib/aion_kernel.js';
++import { BosOmegaRag } from '../lib/bos_omega_rag.js';
++
++test('RoutineStore persists list/upsert/pause/resume/delete in SQLite', () => {
++  const dir = mkdtempSync(join(tmpdir(), 'routines-'));
++  const store = new RoutineStore(join(dir, 'routines.sqlite'));
++  try {
++    const seeded = store.list();
++    assert.ok(seeded.length >= 1);
++    assert.equal(seeded.every((r) => r.status === 'active'), true);
++    const created = store.upsert({
++      name: 'nightly-ping',
++      trigger: 'every morning',
++      steps: [{ tool: 'datetime' }],
++      success: 'datetime ran',
++    });
++    assert.equal(created.name, 'nightly-ping');
++    assert.equal(created.status, 'active');
++    assert.equal(store.setStatus('nightly-ping', 'paused').status, 'paused');
++    assert.equal(store.setStatus('nightly-ping', 'active').status, 'active');
++    assert.equal(store.remove('nightly-ping').deleted, 'nightly-ping');
++    assert.equal(store.get('nightly-ping'), null);
++  } finally {
++    store.close();
++    rmSync(dir, { recursive: true, force: true });
++  }
++});
++
++test('appendOperatorMemory writes Continuity that retrieve can hit', () => {
++  const dir = mkdtempSync(join(tmpdir(), 'bos-write-'));
++  const rag = new BosOmegaRag({
++    dbPath: join(dir, 'bos-omega.sqlite'),
++    corpusDir: join(process.cwd(), 'knowledge', 'bos-omega'),
++  });
++  try {
++    rag.ensureIngested();
++    const before = rag.status().chunk_count;
++    const written = rag.appendOperatorMemory({
++      text: 'Operator Continuity note: unique-token-ZXQ-924 weldon follow-up lives in this write.',
++      title: 'operator-note',
++    });
++    assert.equal(written.ok, true);
++    assert.equal(rag.status().chunk_count > before, true);
++    const hit = rag.retrieve('unique-token-ZXQ-924');
++    assert.equal(hit.ok, true);
++    assert.ok(hit.chunks.some((c) => /unique-token-ZXQ-924/.test(c.text)));
++    assert.ok(hit.chunks.some((c) => c.authority === 'continuity'));
++  } finally {
++    rag.close();
++    rmSync(dir, { recursive: true, force: true });
++  }
++});
++
++test('resolveBosGate is Trinity GO/HOLD/ABORT', () => {
++  assert.equal(resolveBosGate('').state, 'ABORT');
++  assert.equal(resolveBosGate('Explain Trinity Alpha Omega').state, 'HOLD');
++  assert.equal(resolveBosGate('Explain Trinity Alpha Omega', { retrieved: true }).state, 'GO');
++  assert.equal(resolveBosGate('echo datetime').state, 'GO');
++});
+-- 
+2.43.0
+
