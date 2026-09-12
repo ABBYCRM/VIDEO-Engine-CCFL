@@ -320,8 +320,9 @@ describe("business connectors e2e (mock HTTP)", () => {
   it("composio ak_ stays live; oak_ remains optional / not live", () => {
     assert.equal(classifyComposioKey("ak_project"), "project");
     assert.equal(composioProjectGate("project").ok, true);
-    assert.equal(composioProjectGate("organization").ok, false);
-    assert.match(String(composioProjectGate("organization").ok === false && composioProjectGate("organization").error), /oak_/);
+    const org = composioProjectGate("organization");
+    assert.equal(org.ok, false);
+    if (org.ok === false) assert.match(org.error, /oak_/);
   });
 
   it("connector_status tool returns the expanded inventory", async () => {
