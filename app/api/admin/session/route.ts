@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { parseSessionCookie, sessionCookieName } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-// Session check used by the AuthGuard on every protected page. Returns
-// 200 + { user, expiresAt } if the claw_session cookie maps to an
-// active row in the `sessions` table, 401 otherwise. The guard uses
-// this to decide whether to render the page or redirect to /login.
 export async function GET() {
-  const sessionId = (await cookies()).get("claw_session")?.value;
+  const sessionId = parseSessionCookie((await cookies()).get(sessionCookieName)?.value)?.sid;
   if (!sessionId) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
@@ -25,6 +22,6 @@ export async function GET() {
   return NextResponse.json({
     authenticated: true,
     user: row.user_label,
-    expiresAt: row.expires_at
+    expiresAt: row.expires_at,
   });
 }

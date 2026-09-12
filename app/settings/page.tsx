@@ -5,6 +5,7 @@ import {
   Loader2, Plug, Plus, Save, ShieldCheck, Trash2, Zap
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { AuthGuard } from "@/components/auth-guard";
 
 /* ─────────────────────────────────────────────────────────
  * TYPES
@@ -427,6 +428,7 @@ function ComposioPanel() {
  * ───────────────────────────────────────────────────────── */
 export default function SettingsPage() {
   return (
+    <AuthGuard>
     <AppShell>
       <div className="mx-auto w-full max-w-2xl px-3 py-8 sm:px-4">
         {/* Page header */}
@@ -447,5 +449,6 @@ export default function SettingsPage() {
         </div>
       </div>
     </AppShell>
+    </AuthGuard>
   );
 }

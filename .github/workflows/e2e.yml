@@ -57,7 +57,7 @@ jobs:
       - name: Wait for deployed app and run live UI suite
         shell: bash
         # Runs the Claw spec against the deployed URL.
-        # /login was removed; /api/ready is the constant-time probe.
+        # /api/ready is the constant-time probe. Live UI stubs /api/admin/session.
         # (PLAYWRIGHT_BASE_URL is set above, so this targets the deployed
         # app, not the local webServer.)
         run: |
