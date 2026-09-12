@@ -122,35 +122,36 @@ describe("CCFL → Brain cursor proxy (authoritative)", () => {
     assert.ok(!JSON.stringify(calls[0].headers).includes("CURSOR_API_KEY"));
   });
 
-  it("routes proxy launch → status → reply → cancel to Brain", async () => {
+  it("HTTP cursor proxy routes are admin-gated; helpers still hit Brain", async () => {
     const spawn = await launchPost(new Request("http://local/api/cursor/launch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "Scripted spawn", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" }),
     }));
-    assert.equal(spawn.status, 202);
-    const spawnJson = await spawn.json();
-    assert.equal(spawnJson.ok, true);
-    assert.equal(spawnJson.source, "aion-brain");
+    assert.equal(spawn.status, 401);
 
     const status = await itemGet(new Request(`http://local/api/cursor/${AGENT_ID}`), { params: Promise.resolve({ id: AGENT_ID }) });
-    assert.equal(status.status, 200);
-    assert.equal((await status.json()).evidence.run.result, "landed");
+    assert.equal(status.status, 401);
 
     const reply = await replyPost(new Request(`http://local/api/cursor/${AGENT_ID}/reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "steer" }),
     }), { params: Promise.resolve({ id: AGENT_ID }) });
-    assert.equal(reply.status, 202);
+    assert.equal(reply.status, 401);
 
     const cancel = await cancelPost(new Request(`http://local/api/cursor/${AGENT_ID}/cancel`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     }), { params: Promise.resolve({ id: AGENT_ID }) });
-    assert.equal(cancel.status, 200);
+    assert.equal(cancel.status, 401);
+    assert.equal(calls.length, 0);
 
+    assert.equal((await aionCursorLaunch({ prompt: "Scripted spawn", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" })).ok, true);
+    assert.equal((await aionCursorStatus({ id: AGENT_ID })).ok, true);
+    assert.equal((await aionCursorReply({ id: AGENT_ID, prompt: "steer" })).ok, true);
+    assert.equal((await aionCursorCancel({ id: AGENT_ID })).ok, true);
     assert.ok(calls.every((c) => c.url.startsWith("http://aion-brain:10000/api/cursor")));
     assert.ok(calls.every((c) => !c.url.includes("api.cursor.com")));
   });

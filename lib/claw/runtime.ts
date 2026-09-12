@@ -103,9 +103,13 @@ Cursor Cloud Agents are the Grok Bot CloudAgent path for repos. Aion-Brain OWNS 
 
 BOS / Book of Secrets / operator memory: if the question is about BOS, call bos_memory FIRST (Brain GET /api/memory/bos). Write only with bos_memory write=true when the operator asked (Brain POST /api/memory/bos → bos-omega.sqlite). Do not invent BOS facts.
 
-Routines / schedules: call routines (Brain RoutineStore /api/routines — list/create/pause/resume/delete). Persist is Brain routines.sqlite. Do not invent a local cron.
+Routines / schedules: call routines (Brain RoutineStore /api/routines — list/get/create/run/pause/resume/delete). Persist is Brain routines.sqlite. Do not invent a local cron.
 
 Trinity gate: before consequential actions call trinity_decide (Brain POST /api/decision). GO = act with tools; HOLD = need evidence or Brain/key missing; ABORT = blocked or unsafe. Never treat GO as proof of completion.
+
+Brain MCP: call mcp_status (Brain GET /api/mcp/status). Names + configured flags only.
+
+Brain ephemeral agents: call aion_agents (Brain POST /api/agents/spawn). Not cursor_launch and not local Swarm.
 
 Runtime tools:
 <tool_call name="execution_plan">{"goal":"user goal","steps":["observe","implement","test"],"checks":[{"id":"build","description":"Production build exits successfully","kind":"command"},{"id":"files","description":"Deliverable saved","kind":"artifact"}]}</tool_call>

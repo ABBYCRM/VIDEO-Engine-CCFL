@@ -75,6 +75,8 @@ Aion-Brain **owns** Cursor (`lib/cursor_cloud.js`). CCFL only proxies:
 - `cursor_status` / `cursor_reply` / `cursor_cancel` map to Brain `/api/cursor/:id`, `.../reply`, `.../cancel`.
 - `POST /api/agent/run` stays `aion_execute`. See `docs/CURSOR_CLOUD_AGENTS.md`.
 
+Claw also proxies Brain BOS (`/api/memory/bos`), Trinity (`/api/decision`), routines (including `/run`), MCP (`/api/mcp/status`), and ephemeral agents (`/api/agents/spawn`). Contract: `docs/aion-brain.md`. DigitalOcean env **names**: `docs/DIGITALOCEAN_ENV.md`.
+
 ## Local setup
 
 ```bash
@@ -82,11 +84,12 @@ cp .env.example .env
 npm install
 npm run token:key
 # paste the generated base64 value into APP_ENCRYPTION_KEY
-# set ADMIN_PASSWORD and SESSION_SECRET
+# set ADMIN_PASSWORD (≥8, not 1234/change-me) and SESSION_SECRET (≥32)
+# set AION_BASE_URL + AION_API_KEY to reach Brain (see docs/DIGITALOCEAN_ENV.md)
 npm run dev
 ```
 
-Open `http://localhost:3000`, sign in, then go to **Settings** and save a fresh Gemini API key.
+Open `http://localhost:3000/login`, sign in, then open **Claw**.
 
 ## External API
 

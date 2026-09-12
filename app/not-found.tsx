@@ -2,7 +2,7 @@
 // built-in Next.js default 404 page (a black "404 | This page could not
 // be found." screen), which is what the operator was seeing on Android
 // Chrome when they opened the app and were bounced to a stale URL like
-// /login (a route that was removed in the 2026-08-30 "Claw only" strip).
+// /create or other stripped pre-Claw URLs. /login is a real route again.
 //
 // The right behavior for a private single-page app like this is: any URL
 // that doesn't match a real route sends the visitor straight to the

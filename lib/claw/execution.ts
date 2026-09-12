@@ -89,6 +89,7 @@ const READ_ONLY = new Set([
   "app_status", "composio_health", "composio_tool_schema", "steel_scrape", "firecrawl_scrape", "scrapingbee_scrape", "scrapfly_scrape",
   "web_search", "web_screenshot", "analyze_image", "aion_status", "aion_consult", "aion_execute", "aion_contract", "aion_tools",
   "hedra_status", "hedra_job", "helicone_status", "connector_status", "cursor_status", "bos_memory", "trinity_decide",
+  "mcp_status", "aion_agents", "routines",
   "youtube_search", "youtube_video", "gemini_generate", "xai_chat", "kimi_chat", "openai_chat", "openai_embed", "pinecone_query",
   "gdy_search", "gdy_rag_context", "gdy_categories", "gdy_tools", "arxiv_search",
   "computer_status", "computer_look", "computer_observe", "computer_wait", "computer_screenshot"

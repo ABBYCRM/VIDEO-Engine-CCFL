@@ -1,16 +1,20 @@
-import { NextResponse } from "next/server";
 import { aionRoutines } from "@/lib/claw/aion";
+import { brainResponse, denyUnlessAdmin } from "@/lib/claw/brain-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain RoutineStore. Persist is Brain routines.sqlite. */
 export async function GET() {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
   const result = await aionRoutines({ op: "list" });
-  return NextResponse.json(result, { status: result.ok ? 200 : result.code === "AION_UNCONFIGURED" ? 503 : 400 });
+  return brainResponse(result);
 }
 
 export async function POST(req: Request) {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const result = await aionRoutines({
     op: "create",
@@ -20,5 +24,5 @@ export async function POST(req: Request) {
     steps: body.steps,
     success: body.success,
   });
-  return NextResponse.json(result, { status: result.ok ? 200 : result.code === "AION_UNCONFIGURED" ? 503 : 400 });
+  return brainResponse(result, result.ok ? 201 : 400);
 }

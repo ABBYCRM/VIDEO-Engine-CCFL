@@ -30,7 +30,7 @@
 // having to declare a bespoke tool for each one.
 
 import { db } from "@/lib/db";
-import { aionStatus, aionCurriculum, aionN8n, aionExecute, aionContract, aionTools, aionAcceptanceForGoal, aionBosMemory, aionRoutines, aionDecision, dispatchAionPrompt, type AionContext } from "@/lib/claw/aion";
+import { aionStatus, aionCurriculum, aionN8n, aionExecute, aionContract, aionTools, aionAcceptanceForGoal, aionBosMemory, aionRoutines, aionDecision, aionMcpStatus, aionConnectors, aionAgents, dispatchAionPrompt, type AionContext } from "@/lib/claw/aion";
 import { sanitizeUserVisibleMessage } from "@/lib/claw/user-visible";
 import { composioHealth, composioAction, getComposioToolSchema, listComposioTools } from "@/lib/composio/client";
 import { isSteelConfigured } from "@/lib/steel";
@@ -185,16 +185,17 @@ export const CLAW_TOOLS: ToolDef[] = [
     handler: async (a, context) => {
       const query = str(a.query || a.q || a.text || a.prompt);
       const write = a.write === true || a.op === "write";
-      if (!query) return { ok: false, trinity: "HOLD", error: "query is required" };
+      if (write && !query) return { ok: false, trinity: "HOLD", error: "query is required" };
       // Same helper as app/api/memory/bos — Brain directly, no local store.
-      return aionBosMemory({ query, write, text: query, title: str(a.title) || "operator-note", topK: num(a.topK, 6) }, context);
+      // Empty retrieve maps to Brain GET /api/memory/bos (status + ingest-if-missing).
+      return aionBosMemory({ query, write, text: query, title: str(a.title) || "operator-note", sourceId: str(a.source_id || a.sourceId), topK: num(a.topK, 6) }, context);
     }
   },
   {
     name: "routines",
-    description: "List/create/pause/resume/delete durable operator routines on Aion-Brain RoutineStore (GET/POST /api/routines, pause/resume/delete). Persist is Brain routines.sqlite — not a local throwaway. Writes only if the operator asked.",
+    description: "List/get/create/run/pause/resume/delete durable operator routines on Aion-Brain RoutineStore (GET/POST /api/routines, GET/run/pause/resume/delete /api/routines/:name). Persist is Brain routines.sqlite — not a local throwaway. Writes and run only if the operator asked.",
     args: "{\"op\":\"list\"}",
-    when: "Operator asks to list, create, pause, resume, or delete a routine.",
+    when: "Operator asks to list, get, create, run, pause, resume, or delete a routine.",
     handler: async (a, context) => aionRoutines({
       op: str(a.op || a.action || "list"),
       name: str(a.name || a.id),
@@ -302,6 +303,34 @@ export const CLAW_TOOLS: ToolDef[] = [
     args: "{}",
     when: "Discover which brain tools are available before aion_execute.",
     handler: async (_a, context) => aionTools(context)
+  },
+  {
+    name: "mcp_status",
+    description: "Proxy Aion-Brain GET /api/mcp/status. Names and configured flags only — never tokens. Brain owns the MCP inventory; CCFL does not invent a second store.",
+    args: "{}",
+    when: "Operator asks which Brain MCP servers are configured (n8n).",
+    handler: async (_a, context) => aionMcpStatus(context)
+  },
+  {
+    name: "aion_agents",
+    description: "Dynamic on-the-spot Aion-Brain subagents (POST /api/agents/spawn, GET /api/agents/:id, result/steer/stop/cleanup). Not Cursor Cloud Agents and not local Claw Swarm. Fail-soft HOLD if Brain is unconfigured.",
+    args: "{\"op\":\"spawn\",\"goal\":\"retrieve Trinity then search live news\"}",
+    when: "Operator asks Brain to spawn an ephemeral subagent. Use cursor_launch for repo/PR work and claw_dispatch agent=swarm for local workers.",
+    handler: async (a, context) => aionAgents({
+      op: str(a.op || a.action || "list"),
+      id: str(a.id || a.job_id || a.jobId),
+      goal: str(a.goal || a.prompt || a.task),
+      tools: a.tools,
+      acceptance: a.acceptance || a.checks,
+      context: a.context,
+      callback_url: str(a.callback_url || a.callbackUrl),
+      parent_id: str(a.parent_id || a.parentId),
+      max_cycles: num(a.max_cycles ?? a.maxCycles, 8),
+      message: str(a.message || a.text),
+      goal_override: str(a.goal_override || a.goalOverride),
+      status: str(a.status),
+      limit: num(a.limit, 20),
+    }, context)
   },
   // ─── Local app state ─────────────────────────────────────────────
   {
@@ -1243,7 +1272,16 @@ export const CLAW_TOOLS: ToolDef[] = [
     description: "List every Claw connector and whether its key is present (never the key itself). Use this before blaming a tool for being 'broken'.",
     args: "{}",
     when: "First step when a tool fails with MISSING_KEY or the operator asks what is wired.",
-    handler: async () => ({ ok: true, connectors: connectorInventory() })
+    handler: async (_a, context) => {
+      const snapshot = await aionConnectors(context);
+      const mcp = await aionMcpStatus(context);
+      return {
+        ok: true,
+        connectors: connectorInventory(),
+        brain: snapshot.ok ? snapshot : { ok: false, trinity: snapshot.trinity, error: snapshot.error, code: snapshot.code },
+        mcp: mcp.ok ? mcp : { ok: false, trinity: mcp.trinity, error: mcp.error, code: mcp.code },
+      };
+    }
   },
   {
     name: "gdy_search",

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { aionCursorCancel } from "@/lib/claw/aion";
+import { denyUnlessAdmin } from "@/lib/claw/brain-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const result = await aionCursorCancel({ id, runId: body.runId });

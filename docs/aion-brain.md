@@ -16,6 +16,26 @@ CCFL Claw tools `cursor_launch` / `cursor_status` / `cursor_reply` /
 local execution verified from Aion prose. This is separate from browsing
 its GitHub repository.
 
+Contract pin: Aion-Brain `main` `cd55451` (`docs/claw-contract.md` v0.1.24).
+CCFL proxies Brain paths; it does not host a second BOS / routine / Trinity /
+MCP store.
+
+| CCFL route | Brain route | Auth |
+|---|---|---|
+| Claw tools `aion_execute` | `POST /api/claw/execute` | `X-AION-Key` |
+| Claw tools `aion_consult` | `POST /api/chat` | `X-AION-Key` |
+| Claw tools `aion_status` | `GET /api/state` | `X-AION-Key` |
+| `GET/POST /api/memory/bos` | `GET/POST /api/memory/bos` | admin session + `X-AION-Key` |
+| `POST /api/decision` | `POST /api/decision` | admin session + `X-AION-Key` |
+| `/api/routines` (+ `:name` get/run/pause/resume/delete) | same | admin session + `X-AION-Key` |
+| `GET /api/mcp/status` | `GET /api/mcp/status` | admin session + `X-AION-Key` |
+| `GET /api/connectors` | local inventory + Brain `GET /api/connectors` | admin session |
+| `/api/agents/spawn` + `/api/agents/:id` | same | admin session + `X-AION-Key` |
+| `/api/cursor/*` | `/api/cursor/*` | admin session + `X-AION-Key` |
+
+BOS writes send Brain fields `{ content, title, source_id, authority: "continuity" }`.
+`text` is not a Brain upsert field. GET without `q` is Brain status + ingest-if-missing.
+
 Local Claw also registers GDY OSINT (`gdy_search`, `gdy_rag_context`,
 `gdy_categories`, `gdy_tools`) and public `arxiv_search`. GDY uses
 server-only `GDY_API_KEY` / `GDY_API_KEY_ALT` with `GDY_API_BASE` or

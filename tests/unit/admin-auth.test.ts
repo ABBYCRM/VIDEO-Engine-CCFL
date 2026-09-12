@@ -14,6 +14,10 @@ import { GET as computerGet, POST as computerPost } from "../../app/api/computer
 import { GET as forgeGet, POST as forgePost } from "../../app/api/forge/route.ts";
 import { GET as nvidiaGet, POST as nvidiaPost } from "../../app/api/admin/nvidia/keys/route.ts";
 import { POST as clawChatPost } from "../../app/api/claw/chat/route.ts";
+import { GET as bosGet } from "../../app/api/memory/bos/route.ts";
+import { GET as mcpGet } from "../../app/api/mcp/status/route.ts";
+import { POST as spawnPost } from "../../app/api/agents/spawn/route.ts";
+import { GET as suggestionsGet } from "../../app/api/claw/suggestions/route.ts";
 
 const SESSION_SECRET = "e2e-session-secret-that-is-long-enough-for-tests-123456";
 const ADMIN_PASSWORD = "e2e-local-only";
@@ -161,5 +165,18 @@ describe("admin auth", () => {
       body: JSON.stringify({ message: "hello" }),
     }));
     assert.equal(chat.status, 401);
+
+    const bos = await bosGet(new Request("http://local/api/memory/bos?q=Trinity"));
+    assert.equal(bos.status, 401);
+    const mcp = await mcpGet();
+    assert.equal(mcp.status, 401);
+    const spawn = await spawnPost(new Request("http://local/api/agents/spawn", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ goal: "search" }),
+    }));
+    assert.equal(spawn.status, 401);
+    const suggestions = await suggestionsGet();
+    assert.equal(suggestions.status, 401);
   });
 });

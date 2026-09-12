@@ -69,12 +69,14 @@ export function hasActiveSession(sessionId: string): boolean {
   return new Date(row.expires_at).getTime() > Date.now();
 }
 
+const WEAK_ADMIN_PASSWORDS = new Set(["1234", "change-me", "password", "admin", ""]);
+
 export function verifyAdminPassword(password: string): { ok: true } | { ok: false; status: 401 | 503; error: string } {
   const expected = process.env.ADMIN_PASSWORD;
-  if (!expected || expected.length < 8) {
+  if (!expected || expected.length < 8 || WEAK_ADMIN_PASSWORDS.has(expected)) {
     return { ok: false, status: 503, error: "ADMIN_PASSWORD is not configured" };
   }
-  if (!timingSafeStringEqual(password, expected)) {
+  if (WEAK_ADMIN_PASSWORDS.has(password) || !timingSafeStringEqual(password, expected)) {
     return { ok: false, status: 401, error: "Invalid password" };
   }
   return { ok: true };
