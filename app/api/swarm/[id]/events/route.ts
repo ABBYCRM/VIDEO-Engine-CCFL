@@ -1,9 +1,11 @@
 import { getEvents, snapshot } from "@/lib/swarm/store";
+import { requireAdmin } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdmin())) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
   const { id } = await ctx.params;
   const run = snapshot(id);
   if (!run) return new Response(JSON.stringify({ ok: false, error: "Unknown run" }), { status: 404 });

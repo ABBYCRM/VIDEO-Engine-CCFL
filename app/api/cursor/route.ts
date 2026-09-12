@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { aionCursorStatus } from "@/lib/claw/aion";
+import { denyUnlessAdmin } from "@/lib/claw/brain-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain GET /api/cursor (list). */
 export async function GET(req: Request) {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
   try {
     const url = new URL(req.url);
     const result = await aionCursorStatus({

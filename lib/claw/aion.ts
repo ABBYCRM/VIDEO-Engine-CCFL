@@ -1,5 +1,5 @@
 // Server-side Aion-Brain bridge. Credentials and destination never come from tool arguments.
-// Endpoint shapes match docs/claw-contract.md on Aion-Brain main (0613977). Do not invent fields.
+// Endpoint shapes match docs/claw-contract.md on Aion-Brain main (cd55451 / 0.1.24). Do not invent fields.
 import { PRIMARY_CLAW_NVIDIA_MODEL } from "../nvidia/models.ts";
 import { filterAionSseDelta, isInternalAionSseType, preferAionExecute, routeAionMode, sanitizeUserVisibleMessage } from "./user-visible";
 export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string; agentic?: boolean };
@@ -586,14 +586,37 @@ async function aionBrainHttp(
   }
 }
 
-export async function aionBosMemory(input: { query?: string; write?: boolean; text?: string; title?: string; topK?: number }, context: AionContext = {}) {
+export function brainProxyStatus(result: { ok: boolean; code?: string; status?: number }, okStatus = 200) {
+  if (result.ok) return okStatus;
+  if (result.code === "AION_UNCONFIGURED") return 503;
+  if (typeof result.status === "number" && result.status >= 400) return result.status;
+  if (result.code === "BAD_ARGS") return 400;
+  return 400;
+}
+
+export async function aionBosMemory(input: {
+  query?: string;
+  write?: boolean;
+  text?: string;
+  title?: string;
+  sourceId?: string;
+  topK?: number;
+}, context: AionContext = {}) {
   if (input.write === true) {
     const text = String(input.text || input.query || "").trim();
     if (!text) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "text is required", code: "BAD_ARGS" };
-    return aionBrainHttp("POST", "/api/memory/bos", { text, title: input.title || "operator-note" }, context);
+    const title = String(input.title || "operator-note").trim() || "operator-note";
+    const source_id = String(input.sourceId || "").trim() || `continuity-operator-${Date.now()}`;
+    // Brain POST /api/memory/bos upserts on { content, title, source_id }. `text` is not a Brain field.
+    return aionBrainHttp("POST", "/api/memory/bos", {
+      content: text,
+      title,
+      source_id,
+      authority: "continuity",
+    }, context);
   }
   const query = String(input.query || "").trim();
-  if (!query) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "query is required", code: "BAD_ARGS" };
+  if (!query) return aionBrainHttp("GET", "/api/memory/bos", undefined, context);
   const q = new URLSearchParams({ q: query });
   if (input.topK) q.set("topK", String(input.topK));
   return aionBrainHttp("GET", `/api/memory/bos?${q}`, undefined, context);
@@ -622,10 +645,73 @@ export async function aionRoutines(input: {
   }
   const name = String(input.name || "").trim();
   if (!name) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "name is required", code: "BAD_ARGS" };
+  if (op === "get" || op === "read") return aionBrainHttp("GET", `/api/routines/${encodeURIComponent(name)}`, undefined, context);
+  if (op === "run") return aionBrainHttp("POST", `/api/routines/${encodeURIComponent(name)}/run`, {}, context);
   if (op === "pause") return aionBrainHttp("POST", `/api/routines/${encodeURIComponent(name)}/pause`, {}, context);
   if (op === "resume") return aionBrainHttp("POST", `/api/routines/${encodeURIComponent(name)}/resume`, {}, context);
   if (op === "delete" || op === "cancel") return aionBrainHttp("DELETE", `/api/routines/${encodeURIComponent(name)}`, undefined, context);
-  return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "op must be list, create, pause, resume, or delete", code: "BAD_ARGS" };
+  return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "op must be list, get, create, run, pause, resume, or delete", code: "BAD_ARGS" };
+}
+
+export async function aionMcpStatus(context: AionContext = {}) {
+  return aionBrainHttp("GET", "/api/mcp/status", undefined, context);
+}
+
+export async function aionConnectors(context: AionContext = {}) {
+  return aionBrainHttp("GET", "/api/connectors", undefined, context);
+}
+
+export async function aionAgents(input: {
+  op?: string;
+  id?: string;
+  goal?: string;
+  tools?: unknown;
+  acceptance?: unknown;
+  context?: unknown;
+  callback_url?: string;
+  parent_id?: string;
+  max_cycles?: number;
+  message?: string;
+  goal_override?: string;
+  status?: string;
+  limit?: number;
+} = {}, ctx: AionContext = {}) {
+  const op = String(input.op || "list").toLowerCase();
+  if (op === "spawn") {
+    const goal = String(input.goal || "").trim();
+    if (!goal) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "goal is required", code: "BAD_ARGS" };
+    return aionBrainHttp("POST", "/api/agents/spawn", {
+      goal,
+      tools: input.tools,
+      acceptance: input.acceptance,
+      context: input.context ?? null,
+      callback_url: input.callback_url || null,
+      parent_id: input.parent_id || null,
+      max_cycles: input.max_cycles,
+    }, ctx);
+  }
+  if (op === "list") {
+    const q = new URLSearchParams();
+    if (input.parent_id) q.set("parent_id", String(input.parent_id));
+    if (input.status) q.set("status", String(input.status));
+    if (input.limit) q.set("limit", String(input.limit));
+    return aionBrainHttp("GET", `/api/agents${q.toString() ? `?${q}` : ""}`, undefined, ctx);
+  }
+  const id = String(input.id || "").trim();
+  if (!id || /[/?#]/.test(id)) {
+    return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "id is required", code: "BAD_ARGS" };
+  }
+  const enc = encodeURIComponent(id);
+  if (op === "get" || op === "status") return aionBrainHttp("GET", `/api/agents/${enc}`, undefined, ctx);
+  if (op === "result") return aionBrainHttp("GET", `/api/agents/${enc}/result`, undefined, ctx);
+  if (op === "steer") {
+    const message = String(input.message || "").trim();
+    if (!message) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "message is required", code: "BAD_ARGS" };
+    return aionBrainHttp("POST", `/api/agents/${enc}/steer`, { message, goal_override: input.goal_override }, ctx);
+  }
+  if (op === "stop") return aionBrainHttp("POST", `/api/agents/${enc}/stop`, {}, ctx);
+  if (op === "cleanup") return aionBrainHttp("POST", `/api/agents/${enc}/cleanup`, {}, ctx);
+  return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "op must be spawn, list, get, result, steer, stop, or cleanup", code: "BAD_ARGS" };
 }
 
 export async function aionDecision(input: {

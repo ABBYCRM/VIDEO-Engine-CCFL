@@ -77,6 +77,7 @@ export function RoutinesConsole() {
                   <p className="text-[12px] text-muted-foreground">{row.trigger}</p>
                 </div>
                 <div className="flex gap-1">
+                  <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void act(`/api/routines/${encodeURIComponent(row.name)}/run`, { method: "POST" })}>Run</Button>
                   {row.status === "paused"
                     ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void act(`/api/routines/${encodeURIComponent(row.name)}/resume`, { method: "POST" })}>Resume</Button>
                     : <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void act(`/api/routines/${encodeURIComponent(row.name)}/pause`, { method: "POST" })}>Pause</Button>}

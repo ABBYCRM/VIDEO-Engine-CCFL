@@ -48,7 +48,16 @@ services:
       - key: SESSION_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: ADMIN_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
       - key: APP_ENCRYPTION_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: AION_BASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: AION_API_KEY
         scope: RUN_TIME
         type: SECRET
 
