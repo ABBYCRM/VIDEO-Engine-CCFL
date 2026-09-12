@@ -1,9 +1,12 @@
+import { unauthorized } from "@/lib/auth";
 import { getEvents, snapshot } from "@/lib/swarm/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
   const { id } = await ctx.params;
   const run = snapshot(id);
   if (!run) return new Response(JSON.stringify({ ok: false, error: "Unknown run" }), { status: 404 });

@@ -32,8 +32,8 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-export async function GET() {
-  if (!(await requireAdmin())) return json({ error: "Unauthorized" }, 401);
+export async function GET(req: Request) {
+  if (!(await requireAdmin(req))) return json({ error: "Unauthorized" }, 401);
 
   const vectorConfigured = isVectorStoreConfigured();
   const embedConfigured = isEmbedConfigured();
@@ -59,7 +59,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return json({ error: "Unauthorized" }, 401);
+  if (!(await requireAdmin(req))) return json({ error: "Unauthorized" }, 401);
 
   if (!isVectorStoreConfigured()) {
     return json({ error: "No vector DB configured. Set VECTOR_DATABASE_URL or DATABASE_URL." }, 503);

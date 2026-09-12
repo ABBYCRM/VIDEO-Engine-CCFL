@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unauthorized } from "@/lib/auth";
 import { aionCursorLaunch } from "@/lib/claw/aion";
 
 export const runtime = "nodejs";
@@ -6,6 +7,8 @@ export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain POST /api/cursor/launch. Brain owns the Cursor client. */
 export async function POST(req: Request) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const result = await aionCursorLaunch({

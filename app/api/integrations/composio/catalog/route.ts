@@ -15,7 +15,7 @@ import {
 } from "@/lib/composio/client";
 
 export async function GET(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await requireAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isComposioConfigured()) {
     return NextResponse.json({ configured: false, items: [] });
   }

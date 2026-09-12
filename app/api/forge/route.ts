@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unauthorized } from "@/lib/auth";
 import {
   cookiesForge,
   createForgeSession,
@@ -18,7 +19,9 @@ import type { ForgeHandoffReason } from "@/lib/forge";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
   try {
     return NextResponse.json(forgeStatus());
   } catch (e) {
@@ -27,6 +30,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const op = String(body.op || "status");

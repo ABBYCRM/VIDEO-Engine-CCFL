@@ -70,12 +70,16 @@ function NvidiaPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [modelRes] = await Promise.all([fetch("/api/claw/model", { cache: "no-store" })]);
+      const [modelRes, keysRes] = await Promise.all([
+        fetch("/api/claw/model", { cache: "no-store" }),
+        fetch("/api/admin/nvidia/keys", { cache: "no-store" })
+      ]);
       if (modelRes.ok) {
         const d = await modelRes.json();
+        const keys = keysRes.ok ? await keysRes.json() as { count?: number; configured?: boolean } : { count: 0 };
         setState({
-          configured: true,
-          keyCount: 11, // pool count not exposed, show known count
+          configured: Boolean(keys.configured || keys.count),
+          keyCount: typeof keys.count === "number" ? keys.count : 0,
           model: d.model,
           models: d.models || [],
           envOverridden: d.envOverridden || false,

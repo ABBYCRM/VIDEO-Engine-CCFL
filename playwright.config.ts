@@ -17,15 +17,17 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } }
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    // CI: production `next start` on loopback. Do not poll /login — that
-    // route was removed in the Claw-only strip (not-found redirects to
-    // /claw). Playwright treats HTTP 404 as "not ready" (status < 404),
-    // so a 404 health URL hangs until webServer.timeout.
     command: process.env.CI ? "bash scripts/e2e-webserver.sh" : "npm run dev",
     url: "http://127.0.0.1:3000/api/ready",
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     stdout: "pipe",
-    stderr: "pipe"
+    stderr: "pipe",
+    env: {
+      ...process.env,
+      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || "e2e-local-only",
+      SESSION_SECRET: process.env.SESSION_SECRET || "e2e-session-secret-that-is-long-enough-for-tests-123456",
+      APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY || "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    }
   }
 });

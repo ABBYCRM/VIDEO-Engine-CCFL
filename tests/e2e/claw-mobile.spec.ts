@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubAuthenticatedSession } from "./helpers";
 
 /**
  * Mobile layout inspector for the Claw page (Claude-style console).
@@ -10,18 +11,9 @@ test.use({
   viewport: { width: 412, height: 915 }
 });
 
-test("claw page renders at mobile size with correct layout", async ({ page, request }) => {
+test("claw page renders at mobile size with correct layout", async ({ page }) => {
   test.setTimeout(60000);
-  // The deployment is private with no login gate, but the legacy login route
-  // still exists and setting the session cookie is harmless; skip failures.
-  const login = await request.post("/api/admin/login", {
-    data: { password: process.env.ADMIN_PASSWORD || "e2e-local-only" },
-    ignoreHTTPSErrors: true
-  }).catch(() => null);
-  if (login && login.ok()) {
-    const storage = await request.storageState();
-    await page.context().addCookies(storage.cookies);
-  }
+  await stubAuthenticatedSession(page);
 
   await page.goto("/claw", { waitUntil: "networkidle" });
   // Readiness signal: the composer textarea has mounted.

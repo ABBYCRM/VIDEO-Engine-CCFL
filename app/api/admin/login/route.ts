@@ -1,37 +1,44 @@
 import { NextResponse } from "next/server";
-import crypto from "node:crypto";
-import { db } from "@/lib/db";
-import { ADMIN_UNLOCK_CODE } from "@/lib/auth";
+import { createAdminSession, sessionCookieOptions, verifyAdminPassword } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-// Single-credential admin login for the Claw console. Operator-locked
-// unlock code (lib/auth.ts ADMIN_UNLOCK_CODE) wins over the DO env
-// ADMIN_PASSWORD so the operator can change the unlock without a
-// DO re-encrypt + redeploy. On success, mints a session row in the
-// `sessions` table and returns its id in a `claw_session` cookie.
+const WINDOW_MS = 10 * 60 * 1000;
+const MAX_ATTEMPTS = 8;
+const attempts = new Map<string, { count: number; resetAt: number }>();
+
+function clientKey(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || req.headers.get("x-real-ip") || "local";
+}
+
+function rateLimited(key: string): boolean {
+  const now = Date.now();
+  const row = attempts.get(key);
+  if (!row || row.resetAt <= now) {
+    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    return false;
+  }
+  row.count += 1;
+  return row.count > MAX_ATTEMPTS;
+}
+
 export async function POST(req: Request) {
+  if (rateLimited(clientKey(req))) {
+    return NextResponse.json({ error: "Too many login attempts. Try again later." }, { status: 429 });
+  }
+  if (!process.env.ADMIN_PASSWORD || !process.env.SESSION_SECRET) {
+    return NextResponse.json({ error: "Admin auth is not configured on the server." }, { status: 503 });
+  }
   const { password } = await req.json().catch(() => ({}));
   if (typeof password !== "string" || !password) {
     return NextResponse.json({ error: "password is required" }, { status: 400 });
   }
-  // Accept the operator-locked code, OR (if env is set) the env value.
-  const ok = password === ADMIN_UNLOCK_CODE || (process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD);
-  if (!ok) {
+  if (!verifyAdminPassword(password)) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
-  const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare(
-    "INSERT INTO sessions(id, user_label, expires_at) VALUES(?,?,?)"
-  ).run(sessionId, "admin", expiresAt);
+  const session = createAdminSession();
   const res = NextResponse.json({ ok: true });
-  res.cookies.set("claw_session", sessionId, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60
-  });
+  res.cookies.set("claw_session", session.token, sessionCookieOptions(session.maxAge));
   return res;
 }

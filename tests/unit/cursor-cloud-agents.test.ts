@@ -9,6 +9,7 @@ import { GET as itemGet } from "../../app/api/cursor/[id]/route.ts";
 import { POST as replyPost } from "../../app/api/cursor/[id]/reply/route.ts";
 import { POST as cancelPost } from "../../app/api/cursor/[id]/cancel/route.ts";
 import { isCursorProxyReady, runCursorControl } from "../../lib/cursor/index.ts";
+import { createAdminSession, SESSION_COOKIE } from "../../lib/auth.ts";
 
 const originalFetch = globalThis.fetch;
 const previousUrl = process.env.AION_BASE_URL;
@@ -75,10 +76,21 @@ function mockBrain() {
   }) as typeof fetch;
 }
 
+function authed(url: string, init: RequestInit = {}) {
+  process.env.SESSION_SECRET ||= "e2e-session-secret-that-is-long-enough-for-tests-123456";
+  process.env.ADMIN_PASSWORD ||= "e2e-local-only";
+  const { token } = createAdminSession();
+  const headers = new Headers(init.headers);
+  headers.set("Cookie", `${SESSION_COOKIE}=${token}`);
+  return new Request(url, { ...init, headers });
+}
+
 beforeEach(() => {
   calls.length = 0;
   process.env.AION_BASE_URL = "http://aion-brain:10000";
   process.env.AION_API_KEY = AION_KEY;
+  process.env.SESSION_SECRET ||= "e2e-session-secret-that-is-long-enough-for-tests-123456";
+  process.env.ADMIN_PASSWORD ||= "e2e-local-only";
   delete process.env.CURSOR_API_KEY;
   mockBrain();
 });
@@ -123,7 +135,14 @@ describe("CCFL → Brain cursor proxy (authoritative)", () => {
   });
 
   it("routes proxy launch → status → reply → cancel to Brain", async () => {
-    const spawn = await launchPost(new Request("http://local/api/cursor/launch", {
+    const anonymous = await launchPost(new Request("http://local/api/cursor/launch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "no auth" }),
+    }));
+    assert.equal(anonymous.status, 401);
+
+    const spawn = await launchPost(authed("http://local/api/cursor/launch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "Scripted spawn", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" }),
@@ -133,18 +152,18 @@ describe("CCFL → Brain cursor proxy (authoritative)", () => {
     assert.equal(spawnJson.ok, true);
     assert.equal(spawnJson.source, "aion-brain");
 
-    const status = await itemGet(new Request(`http://local/api/cursor/${AGENT_ID}`), { params: Promise.resolve({ id: AGENT_ID }) });
+    const status = await itemGet(authed(`http://local/api/cursor/${AGENT_ID}`), { params: Promise.resolve({ id: AGENT_ID }) });
     assert.equal(status.status, 200);
     assert.equal((await status.json()).evidence.run.result, "landed");
 
-    const reply = await replyPost(new Request(`http://local/api/cursor/${AGENT_ID}/reply`, {
+    const reply = await replyPost(authed(`http://local/api/cursor/${AGENT_ID}/reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "steer" }),
     }), { params: Promise.resolve({ id: AGENT_ID }) });
     assert.equal(reply.status, 202);
 
-    const cancel = await cancelPost(new Request(`http://local/api/cursor/${AGENT_ID}/cancel`, {
+    const cancel = await cancelPost(authed(`http://local/api/cursor/${AGENT_ID}/cancel`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -195,6 +214,7 @@ describe("tools and routes exist", () => {
       assert.equal(existsSync(abs), true, rel);
       const src = readFileSync(abs, "utf8");
       assert.match(src, /aionCursor|Aion-Brain/);
+      assert.match(src, /unauthorized|requireAdmin/);
       assert.doesNotMatch(src, /api\.cursor\.com/);
     }
     assert.equal(existsSync(resolve(process.cwd(), "lib/cursor/cloud-agents.ts")), false);
