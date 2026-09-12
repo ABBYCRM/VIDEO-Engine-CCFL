@@ -135,16 +135,16 @@ async function liveOperatorSurface(): Promise<string> {
     ? "Resend ready — resend_send is the email path"
     : "Resend API key missing — try composio_list_tools toolkit=resend";
   const search = inv.exa.configured || inv.tavily.configured ? "web_search ready" : "no web_search key";
-  const youtube = inv.youtube.configured
+  const youtube = inv.youtube?.configured
     ? "YouTube ready — youtube_search / youtube_video"
     : "YouTube HOLD — YOUTUBE_API_KEY missing";
   const llms = [
-    inv.gemini.configured ? "llm_gemini" : null,
-    inv.xai.configured ? "llm_xai" : null,
-    inv.kimi.configured ? "llm_kimi" : null,
-    inv.openai.configured ? "openai_chat/openai_embed" : null
+    inv.gemini?.configured ? "llm_gemini" : null,
+    inv.xai?.configured ? "llm_xai" : null,
+    inv.kimi?.configured ? "llm_kimi" : null,
+    inv.openai?.configured ? "openai_chat/openai_embed" : null
   ].filter(Boolean).join(", ") || "no extra LLM keys";
-  const pinecone = inv.pinecone.configured
+  const pinecone = inv.pinecone?.configured
     ? "Pinecone ready — pinecone_query / pinecone_upsert (BOS stays bos_memory)"
     : "Pinecone HOLD — PINECONE_API_KEY missing";
   const hedra = inv.hedra?.configured
