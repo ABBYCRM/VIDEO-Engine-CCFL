@@ -71,6 +71,7 @@ export function connectorInventory() {
     github: { configured: Boolean(secret("github_personal_access_token", "GITHUB_PERSONAL_ACCESS_TOKEN")), when: "GitHub REST (github_request)." },
     nvidia: { configured: Boolean(process.env.BITDEER_API_KEY || process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), when: "Claw chat, vision, embed, rerank via Bitdeer." },
     aion: { configured: Boolean(process.env.AION_BASE_URL && process.env.AION_API_KEY), when: "Connected brain — prefer aion_execute for toolful work; aion_status / aion_consult stay advice-only." },
+    cursor: { configured: Boolean(process.env.CURSOR_API_KEY?.trim()), when: "Cursor Cloud Agents (cursor_launch / cursor_status / cursor_reply / cursor_cancel). Server-only CURSOR_API_KEY. CCFL owns this — not Aion /api/agent/run." },
     gdy: { configured: isGdyConfigured(), when: "OSINT RAG (gdy_search, gdy_rag_context, gdy_categories, gdy_tools). Fail-soft if GDY_API_KEY is missing." },
     arxiv: { configured: true, when: "Public preprint search (arxiv_search). No key." }
   };

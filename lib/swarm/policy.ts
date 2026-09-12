@@ -1,9 +1,10 @@
 import type { PlannedTask, SwarmLimits, SwarmRole, TokenUsage } from "./types";
 
 export const SWARM_MAX_AGENTS = 4;
+export const SWARM_MAX_EPHEMERAL_AGENTS = 8;
 export const SWARM_MAX_DEPTH = 2;
 export const SWARM_MAX_ATTEMPTS = 2;
-export const SWARM_MAX_CONCURRENT_RUNS = 1;
+export const SWARM_MAX_CONCURRENT_RUNS = 2;
 export const SWARM_DEADLINE_MS = 180_000;
 export const SWARM_MAX_OBJECTIVE = 2_000;
 export const SWARM_MAX_LLM_CALLS = 8;
@@ -18,6 +19,7 @@ export const SWARM_MAX_TOKENS = {
   researcher: 520,
   critic: 520,
   synthesizer: 900,
+  worker: 700,
 } as const;
 
 const WORKER_ROLES = new Set<Exclude<SwarmRole, "planner">>(["researcher", "critic", "synthesizer"]);
@@ -51,15 +53,18 @@ export function addUsage(a: TokenUsage, b: { promptTokens: number; completionTok
 }
 
 export function parseLimits(raw?: Partial<SwarmLimits>): SwarmLimits {
-  const maxAgents = clampInt(raw?.maxAgents, 2, SWARM_MAX_AGENTS, 4);
+  const led = raw?.mode === "led";
+  const cap = led ? SWARM_MAX_EPHEMERAL_AGENTS : SWARM_MAX_AGENTS;
+  const fallback = led ? 8 : 4;
+  const maxAgents = clampInt(raw?.maxAgents, 1, cap, fallback);
   return {
     maxAgents,
     maxDepth: clampInt(raw?.maxDepth, 1, SWARM_MAX_DEPTH, 2),
     maxAttempts: clampInt(raw?.maxAttempts, 1, SWARM_MAX_ATTEMPTS, 2),
     deadlineMs: clampInt(raw?.deadlineMs, 30_000, SWARM_DEADLINE_MS, 120_000),
-    maxLlmCalls: clampInt(raw?.maxLlmCalls, 2, SWARM_MAX_LLM_CALLS, SWARM_MAX_LLM_CALLS),
+    maxLlmCalls: clampInt(raw?.maxLlmCalls, 2, led ? 16 : SWARM_MAX_LLM_CALLS, led ? 16 : SWARM_MAX_LLM_CALLS),
     maxFetches: clampInt(raw?.maxFetches, 0, SWARM_MAX_FETCHES, 3),
-    mode: raw?.mode === "led" ? "led" : "auto",
+    mode: led ? "led" : "auto",
   };
 }
 

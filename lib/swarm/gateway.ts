@@ -24,6 +24,7 @@ export function routeLabel(role: SwarmRole): string {
   if (role === "planner") return `planner → ${model}`;
   if (role === "researcher") return `researcher → ${model}`;
   if (role === "critic") return `critic → ${model}`;
+  if (role === "worker") return `worker → ${model}`;
   return `leader → ${model}`;
 }
 

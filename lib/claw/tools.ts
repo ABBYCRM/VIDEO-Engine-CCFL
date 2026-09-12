@@ -69,12 +69,14 @@ import {
   getSwarm,
   listSwarm,
   messageSwarm,
-  spawnSwarmTask,
+  spawnEphemeralAgent,
   startSwarmRun,
+  stopSwarmTask,
   swarmStatus,
   waitSwarmTask,
 } from "@/lib/swarm";
 import { dispatchAgent } from "@/lib/claw/dispatch";
+import { isCursorConfigured, runCursorControl } from "@/lib/cursor";
 import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile, saveClawFile
@@ -262,6 +264,7 @@ export const CLAW_TOOLS: ToolDef[] = [
           search: { exa: isExaConfigured(), tavily: isTavilyConfigured() },
           helicone: { enabled: isHeliconeEnabled() },
           gdy: { configured: isGdyConfigured() },
+          cursor: { configured: isCursorConfigured(), note: "CURSOR_API_KEY. CCFL owns launch/status/reply/cancel. Not Aion /api/agent/run." },
           arxiv: { configured: true }
         }
       };
@@ -270,7 +273,7 @@ export const CLAW_TOOLS: ToolDef[] = [
 
   {
     name: "claw_dispatch",
-    description: "Grok-style supervisor: YOU choose, build, and task a specialist. The operator talks only to Claw chat — they never click New session, Probe lab, Scrape, Run swarm, or Take over (except CAPTCHA after computer_handoff). agent: computer | forge | swarm | steel. task: the objective. For forge, work: probe | scrape | session. url optional. maxAgents for swarm (2-4).",
+    description: "Grok-style supervisor: YOU choose, build, and task a specialist. The operator talks only to Claw chat — they never click New session, Probe lab, Scrape, Run swarm, or Take over (except CAPTCHA after computer_handoff). agent: computer | forge | swarm | steel | cursor. task: the objective. For forge, work: probe | scrape | session. For cursor, url is the GitHub repo and task is the coding brief. maxAgents for swarm (2-4).",
     args: "{\"agent\":\"forge\",\"task\":\"Probe the fingerprint lab\",\"work\":\"probe\"}",
     when: "First tool on almost every operator request that needs Computer, Forge, Swarm, or Steel. You pick the agent.",
     handler: async (a) => {
@@ -417,9 +420,9 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "swarm_run",
-    description: "Start a Claw Swarm run: planner decomposes the objective into a DAG, workers execute in parallel, a designated leader synthesizes. Does not use Computer Chrome or Forge sessions. Caps agents (2-4). Returns run_id immediately; poll swarm_status.",
+    description: "OPTIONAL preset: planner decomposes the objective into a researcher/critic/synthesizer DAG. Default Grok-like path is swarm_spawn (ad-hoc worker). Does not use Computer Chrome. Returns run_id; poll swarm_status.",
     args: "{\"objective\":\"Compare two approaches\",\"maxAgents\":4}",
-    when: "Operator wants multi-agent research, comparison, or synthesis rather than a single chat turn or a live browser session.",
+    when: "Operator explicitly wants the prefab planner graph. Otherwise swarm_spawn.",
     handler: async (a) => {
       const result = startSwarmRun({
         objective: str(a.objective || a.goal),
@@ -457,16 +460,31 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "swarm_spawn",
-    description: "Claw-as-leader: build and task a durable subagent. If runId is omitted, creates a led run (no auto-planner). role: researcher|critic|synthesizer. Returns taskId. Then swarm_wait. Do not tell the operator to click Run swarm.",
-    args: "{\"runId\":\"optional\",\"role\":\"researcher\",\"objective\":\"Investigate X\"}",
-    when: "You are the leader and need a specialist worker with its own context.",
-    handler: async (a) => spawnSwarmTask({
-      runId: str(a.runId || a.id) || undefined,
-      role: str(a.role) || "researcher",
-      objective: str(a.objective || a.task || a.goal),
-      dependsOn: Array.isArray(a.dependsOn) ? a.dependsOn.map(String) : undefined,
-      urls: Array.isArray(a.urls) ? a.urls.map(String) : undefined,
-    })
+    description: "Grok Task-like: spawn an ephemeral worker on the spot with a self-contained brief. Required: goal. Optional: context, tools (search|fetch), successCriteria, label, runId, runner (local|aion), preset (researcher|critic|synthesizer ONLY if the operator asked for a named specialist). Default role is worker — do NOT pick from a prefab list. Parallel spawns allowed. Returns taskId. Then swarm_wait / swarm_message / swarm_stop.",
+    args: "{\"goal\":\"Investigate X\",\"context\":\"why it matters\",\"tools\":[\"search\",\"fetch\"],\"successCriteria\":[\"named sources\",\"unknowns labeled\"],\"label\":\"ad-hoc\"}",
+    when: "Any sub-task that should run in its own session and report back. Default path. Do not require a role.",
+    handler: async (a) => {
+      return spawnEphemeralAgent({
+        runId: str(a.runId || a.id) || undefined,
+        goal: str(a.goal || a.objective || a.task),
+        context: str(a.context) || undefined,
+        tools: a.tools,
+        successCriteria: a.successCriteria ?? a.criteria,
+        label: str(a.label) || undefined,
+        preset: str(a.preset || a.role) || undefined,
+        runner: a.runner === "aion" ? "aion" : "local",
+        urls: Array.isArray(a.urls) ? a.urls.map(String) : undefined,
+        dependsOn: Array.isArray(a.dependsOn) ? a.dependsOn.map(String) : undefined,
+        parentId: str(a.parentId) || undefined,
+      });
+    }
+  },
+  {
+    name: "swarm_stop",
+    description: "Stop one wedged or unwanted spawned worker without cancelling the whole run. Cooperative abort of that task only.",
+    args: "{\"runId\":\"run id\",\"taskId\":\"task id\"}",
+    when: "A spawned worker is looping, stuck, or the operator said stop that one.",
+    handler: async (a) => stopSwarmTask({ runId: str(a.runId || a.id), taskId: str(a.taskId) })
   },
   {
     name: "swarm_wait",
@@ -486,6 +504,59 @@ export const CLAW_TOOLS: ToolDef[] = [
       runId: str(a.runId || a.id),
       taskId: str(a.taskId) || undefined,
       body: str(a.body || a.message || a.text),
+    })
+  },
+  {
+    name: "cursor_launch",
+    description: "Grok Bot Cloud Agent: spawn a Cursor cloud agent ON THE SPOT for non-trivial repo/coding work. Required: prompt (goal). Optional: repo (defaults to https://github.com/ABBYCRM/VIDEO-Engine-CCFL), ref, successCriteria, context, name, model, autoCreatePR. Compiles a brief with evidence rules (methodical-notes branches, no stubs, no hallucination). Uses server CURSOR_API_KEY — never pass a key. Missing key returns Trinity HOLD. Then cursor_status / cursor_reply / cursor_cancel. Do NOT do heavy repo work inline. Do NOT pick from a prefab agent menu.",
+    args: "{\"prompt\":\"Add Cursor control and prove it\",\"repo\":\"https://github.com/ABBYCRM/VIDEO-Engine-CCFL\",\"successCriteria\":[\"routes exist\",\"mocked spawn→status\"],\"context\":\"CCFL Claw-only\"}",
+    when: "Operator asked to build, fix, review, or land code on a GitHub repo that is more than a one-line local edit. Default path for repo work.",
+    handler: async (a) => runCursorControl({
+      op: "launch",
+      prompt: str(a.prompt || a.goal || a.task || a.text),
+      repo: str(a.repo || a.repository || a.url) || undefined,
+      ref: str(a.ref || a.startingRef || a.branch) || undefined,
+      name: str(a.name) || undefined,
+      model: str(a.model) || undefined,
+      mode: str(a.mode) || undefined,
+      autoCreatePR: a.autoCreatePR === true || a.auto_create_pr === true,
+      successCriteria: a.successCriteria ?? a.criteria,
+      context: str(a.context) || undefined,
+      noRepo: a.noRepo === true,
+    })
+  },
+  {
+    name: "cursor_status",
+    description: "Read a Cursor cloud agent (and latest run result) or list recent agents when id is omitted. Await like Grok Bot Task: poll until FINISHED/ERROR/CANCELLED. Trinity HOLD if CURSOR_API_KEY is missing.",
+    args: "{\"id\":\"bc-...\"}",
+    when: "After cursor_launch, or when the operator asks whether the cloud agent finished.",
+    handler: async (a) => runCursorControl({
+      op: str(a.id || a.agentId) ? "status" : "list",
+      id: str(a.id || a.agentId) || undefined,
+      limit: a.limit == null ? undefined : num(a.limit, 20),
+    })
+  },
+  {
+    name: "cursor_reply",
+    description: "Steer a live Cursor cloud agent with a follow-up prompt (Grok Bot Task reply). 409 agent_busy → HOLD, wait or cursor_cancel first. Never pass CURSOR_API_KEY.",
+    args: "{\"id\":\"bc-...\",\"prompt\":\"Also add contract tests and do not stub the client\"}",
+    when: "The cloud agent needs a course correction, extra acceptance criteria, or a follow-up.",
+    handler: async (a) => runCursorControl({
+      op: "reply",
+      id: str(a.id || a.agentId),
+      prompt: str(a.prompt || a.goal || a.text || a.message),
+      mode: str(a.mode) || undefined,
+    })
+  },
+  {
+    name: "cursor_cancel",
+    description: "Stop the active Cursor cloud-agent run (Grok Bot Task cancel). Uses latestRunId when runId is omitted. Terminal; continue with a new cursor_reply on the same agent if needed.",
+    args: "{\"id\":\"bc-...\",\"runId\":\"optional run-...\"}",
+    when: "Operator said stop, or the run is wedged / looping.",
+    handler: async (a) => runCursorControl({
+      op: "cancel",
+      id: str(a.id || a.agentId),
+      runId: str(a.runId) || undefined,
     })
   },
   {

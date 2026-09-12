@@ -1,6 +1,8 @@
 import { fetchPublicPage } from "./fetch-tool";
 import { SWARM_MAX_TASK_RESULT, SWARM_MAX_TOKENS } from "./policy";
-import type { ModelGateway, SwarmTask } from "./types";
+import { workerSystemPrompt, workerUserBrief } from "./spawn";
+import { getTask, listMessages } from "./store";
+import type { ModelGateway, SwarmTask, TaskBrief } from "./types";
 
 const SESSION_ROUNDS = 3;
 
@@ -89,9 +91,12 @@ export async function runWorker(opts: {
     );
   }
 
-  const looping = opts.task.role === "researcher" || opts.task.role === "critic";
-  const rolePrompt =
-    opts.task.role === "researcher"
+  const brief: TaskBrief | null = opts.task.brief;
+  const allowedTools = brief?.tools ?? (opts.task.role === "researcher" || opts.task.role === "critic" ? ["search", "fetch"] : []);
+  const looping = allowedTools.length > 0 && opts.task.role !== "synthesizer";
+  const rolePrompt = brief
+    ? workerSystemPrompt(brief, opts.task.role)
+    : opts.task.role === "researcher"
       ? "You are an independent researcher session. You may search or fetch, then return structured findings: claims, evidence, unknowns, confidence. No hidden chain-of-thought."
       : opts.task.role === "critic"
         ? "You are an independent critic session. Attack weak claims and contradictions. You may fetch a source to verify. Do not produce the final operator answer."
@@ -105,18 +110,26 @@ export async function runWorker(opts: {
 
 You have a small tool loop. Reply with ONLY JSON:
 {"action":"search","query":"..."} OR {"action":"fetch","url":"https://..."} OR {"action":"done","output":"..."}.
-At most ${SESSION_ROUNDS} tool rounds. When finished, action=done with the task output the leader is allowed to see.`
+At most ${SESSION_ROUNDS} tool rounds. When finished, action=done with the task output the parent is allowed to see.`
         : rolePrompt,
     },
     {
       role: "user",
-      content: [
-        `TASK_ID: ${opts.task.id}`,
-        `OBJECTIVE: ${opts.task.objective}`,
-        opts.upstream ? `UPSTREAM_FINDINGS:\n${opts.upstream}` : "UPSTREAM_FINDINGS: (none)",
-        evidence.length ? `FETCHED_EVIDENCE:\n${evidence.join("\n---\n")}` : "FETCHED_EVIDENCE: (none)",
-        looping ? "Choose search, fetch, or done." : "Return only the task output the leader is allowed to see.",
-      ].join("\n\n"),
+      content: brief
+        ? workerUserBrief({
+          taskId: opts.task.id,
+          goal: opts.task.objective,
+          brief,
+          upstream: opts.upstream,
+          evidence,
+        })
+        : [
+          `TASK_ID: ${opts.task.id}`,
+          `OBJECTIVE: ${opts.task.objective}`,
+          opts.upstream ? `UPSTREAM_FINDINGS:\n${opts.upstream}` : "UPSTREAM_FINDINGS: (none)",
+          evidence.length ? `FETCHED_EVIDENCE:\n${evidence.join("\n---\n")}` : "FETCHED_EVIDENCE: (none)",
+          looping ? "Choose search, fetch, or done." : "Return only the task output the leader is allowed to see.",
+        ].join("\n\n"),
     },
   ];
 
@@ -124,9 +137,18 @@ At most ${SESSION_ROUNDS} tool rounds. When finished, action=done with the task 
   let finalText = "";
 
   for (let round = 0; round <= maxRounds; round++) {
+    const live = getTask(opts.task.runId, opts.task.id);
+    if (live?.state === "cancelled") {
+      throw new Error(live.error || "Worker stopped");
+    }
+    const steers = listMessages(opts.task.runId, opts.task.id).filter((m) => m.fromRole === "claw");
+    if (steers.length && round > 0) {
+      const latest = steers[steers.length - 1];
+      history.push({ role: "user", content: `STEER from parent: ${latest.body}\nApply this and continue or action=done.` });
+    }
     const result = await opts.gateway.complete({
       role: opts.task.role,
-      maxTokens: SWARM_MAX_TOKENS[opts.task.role],
+      maxTokens: SWARM_MAX_TOKENS[opts.task.role] ?? SWARM_MAX_TOKENS.worker,
       jsonMode: looping && round < maxRounds,
       signal: opts.signal,
       messages: history,
@@ -150,6 +172,10 @@ At most ${SESSION_ROUNDS} tool rounds. When finished, action=done with the task 
     }
 
     if (act.action === "search") {
+      if (!allowedTools.includes("search")) {
+        history.push({ role: "user", content: "search is not in this worker's tool list. action=done or fetch." });
+        continue;
+      }
       searchesUsed += 1;
       const found = await searchWeb(act.query);
       evidence.push(clip(`SEARCH ${act.query}\n${found}`, 1800));
@@ -159,6 +185,10 @@ At most ${SESSION_ROUNDS} tool rounds. When finished, action=done with the task 
 
     if (fetchesUsed >= opts.remainingFetches) {
       history.push({ role: "user", content: "FETCH budget exhausted. action=done now." });
+      continue;
+    }
+    if (!allowedTools.includes("fetch")) {
+      history.push({ role: "user", content: "fetch is not in this worker's tool list. action=done." });
       continue;
     }
     const page = await fetchPublicPage(act.url, opts.signal);

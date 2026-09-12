@@ -82,6 +82,8 @@ CREATE INDEX IF NOT EXISTS idx_pg_swarm_runs_created ON swarm_runs (created_at D
 CREATE INDEX IF NOT EXISTS idx_pg_swarm_events_run ON swarm_events (run_id, at);
 CREATE INDEX IF NOT EXISTS idx_pg_swarm_tasks_lease ON swarm_tasks (state, lease_until);
 `);
+  await client.unsafe(`ALTER TABLE swarm_tasks ADD COLUMN IF NOT EXISTS brief_json TEXT`);
+  await client.unsafe(`ALTER TABLE swarm_tasks ADD COLUMN IF NOT EXISTS cleaned_up_at BIGINT`);
   return true;
 }
 

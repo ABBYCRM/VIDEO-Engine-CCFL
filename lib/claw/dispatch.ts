@@ -5,11 +5,12 @@ import {
   probeForge,
   scrapeWithForge,
 } from "@/lib/forge";
-import { getSwarm, startSwarmRun } from "@/lib/swarm";
+import { getSwarm, spawnEphemeralAgent, waitSwarmTask } from "@/lib/swarm";
 import { scrapePublicUrl } from "@/lib/scrape";
+import { runCursorControl } from "@/lib/cursor";
 import type { PublicSwarmRun } from "@/lib/swarm";
 
-export const AGENT_KINDS = ["computer", "forge", "swarm", "steel"] as const;
+export const AGENT_KINDS = ["computer", "forge", "swarm", "steel", "cursor"] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export type DispatchInput = {
@@ -32,16 +33,6 @@ function inferForgeWork(task: string, work?: string) {
   if (/fingerprint|probe|detector|webdriver/i.test(task)) return "probe";
   if (/scrape|markdown|extract/i.test(task)) return "scrape";
   return "session";
-}
-
-async function waitSwarm(id: string, ms = 40000): Promise<PublicSwarmRun | null> {
-  const t0 = Date.now();
-  while (Date.now() - t0 < ms) {
-    const run = getSwarm(id);
-    if (run && ["completed", "failed", "cancelled"].includes(run.status)) return run;
-    await new Promise((r) => setTimeout(r, 900));
-  }
-  return getSwarm(id);
 }
 
 function publicSwarm(run: PublicSwarmRun | null) {
@@ -70,7 +61,7 @@ export async function dispatchAgent(input: DispatchInput) {
   if (!AGENT_KINDS.includes(agent as AgentKind)) {
     return {
       ok: false as const,
-      error: "agent must be computer, forge, swarm, or steel. You choose. The operator does not.",
+      error: "agent must be computer, forge, swarm, steel, or cursor. You choose. The operator does not.",
     };
   }
 
@@ -109,6 +100,23 @@ export async function dispatchAgent(input: DispatchInput) {
         handoffReason: live.handoffReason,
       },
       task: task || null,
+    };
+  }
+
+  if (agent === "cursor") {
+    const launched = await runCursorControl({
+      op: "launch",
+      prompt: task,
+      repo: String(input.url || "").trim() || undefined,
+    });
+    return {
+      ...launched,
+      agent,
+      built: launched.ok,
+      tasked: launched.ok,
+      note: launched.ok
+        ? "Cursor cloud agent launched on the spot. Poll cursor_status, steer with cursor_reply, stop with cursor_cancel. Do not do the repo work inline."
+        : launched.error,
     };
   }
 
@@ -194,22 +202,26 @@ export async function dispatchAgent(input: DispatchInput) {
     }
   }
 
-  const started = startSwarmRun({
-    objective: task || "Research the operator's question and return a leader answer.",
-    limits: { maxAgents: input.maxAgents },
+  const spawned = spawnEphemeralAgent({
+    goal: task || "Research the operator's question and report evidence back.",
+    label: "dispatch",
+    tools: ["search", "fetch"],
   });
-  if (!started.ok) return { ok: false as const, agent, error: started.error };
-  const finished = await waitSwarm(started.run.id);
+  if (!spawned.ok) return { ok: false as const, agent, error: spawned.error };
+  const waited = await waitSwarmTask({ runId: spawned.run.id, taskId: spawned.taskId, timeoutMs: 40_000 });
+  const finished = waited.ok ? waited.run : getSwarm(spawned.run.id);
+  const worker = waited.ok ? waited.task : spawned.run.tasks.find((t) => t.id === spawned.taskId);
   return {
     ok: true as const,
     agent,
     built: true,
     tasked: true,
-    work: "swarm",
-    note:
-      finished && ["completed", "failed", "cancelled"].includes(finished.status)
-        ? "Swarm finished. Answer from leaderAnswer. Do not tell the operator to click Run swarm."
-        : "Swarm is still running. Poll swarm_status. The operator watches the Swarm pane you opened.",
-    run: publicSwarm(finished ?? started.run),
+    work: "spawn",
+    note: worker && ["completed", "failed", "cancelled"].includes(worker.state)
+      ? "Ephemeral worker finished. Result is on the task, not a prefab planner graph. Spawn more in parallel with swarm_spawn if needed."
+      : "Worker is still running. Poll swarm_status or swarm_wait. Do not tell the operator to click Run swarm.",
+    run: publicSwarm(finished ?? spawned.run),
+    taskId: spawned.taskId,
+    brief: spawned.brief,
   };
 }

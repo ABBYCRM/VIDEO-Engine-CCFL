@@ -61,9 +61,19 @@ Open `/computer` for the live screen.
 
 ## Claw Swarm
 
-Grok-style multi-agent runtime: supervisor, planner, durable SQLite tasks, in-process workers, leader synthesis. Bitdeer routes planner/critic/leader to Mistral Large 3 675B and researchers to GLM-5. Caps: 4 agents, depth 2, 8 LLM calls. Does not steal Computer Chrome or Forge sessions. Does not farm CAPTCHAs.
+Default path is **dynamic on-spot spawn** (Grok Task-like): `POST /api/swarm` `op=spawn` with `goal`, optional `context`, `tools`, `successCriteria`. Workers are ephemeral `role=worker` unless you pass an optional preset (`researcher` / `critic` / `synthesizer`). Parallel spawn, `swarm_message` steer, `swarm_stop` one wedged worker, then cleanup. `swarm_run` remains the optional planner DAG.
 
-Open `/swarm`. Claw tools: `swarm_run`, `swarm_status`, `swarm_cancel`. NATS / managed Postgres / DOKS is the scale-up path; this node uses SQLite because Computer and Forge already share the App Platform instance.
+Open `/swarm`. Claw tools: `swarm_spawn`, `swarm_wait`, `swarm_message`, `swarm_stop`, `swarm_status`, `swarm_run` (preset). Optional `runner=aion` sends that worker through Aion-Brain `POST /api/claw/execute`.
+
+## Cursor Cloud Agents (Grok Bot CloudAgent)
+
+CCFL owns Cursor Cloud Agent control. The live assistant **knows and runs** it:
+
+- Non-trivial repo work → `cursor_launch` on the spot (goal + repo + successCriteria). Not a prefab agent menu. Not inline heavy coding.
+- Server auth is `CURSOR_API_KEY` only (DigitalOcean secret). Missing key → Trinity **HOLD**, never a silent pass.
+- `cursor_status` / `cursor_reply` / `cursor_cancel` await, steer, and stop like Grok Bot Task.
+- HTTP: `POST /api/cursor/agents` (spawn), `GET /api/cursor/agents` or `GET /api/cursor/agents/:id`, `POST /api/cursor/agents/:id/reply` (steer alias), `POST /api/cursor/agents/:id/cancel`.
+- Aion-Brain `POST /api/agent/run` stays `aion_execute`. Do not break that handshake. See `docs/CURSOR_CLOUD_AGENTS.md`.
 
 ## Local setup
 

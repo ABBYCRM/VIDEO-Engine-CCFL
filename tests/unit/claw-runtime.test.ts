@@ -29,6 +29,8 @@ function harness(responses: any[], result: unknown = { ok: true, id: "f1", size:
     toolsCatalog: () => "save_file",
     toolsAsOpenAI: () => [],
     CLAW_TOOL_NAMES: ["save_file"],
+    connectorInventory: () => ({ resend: { configured: false }, exa: { configured: false }, tavily: { configured: false } }),
+    composioHealth: async () => ({ configured: false, live: false, toolkits: [] }),
     isAionConfigured: () => false,
     isToolfulGoal: () => false,
     aionAcceptanceForGoal: () => [],

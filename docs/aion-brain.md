@@ -3,6 +3,13 @@
 Claw calls the running Aion-Brain API with the same keys (`AION_BASE_URL` +
 `AION_API_KEY`). For work that must use tools, Claw prefers
 `POST /api/claw/execute` (`aion_execute`; alias `/api/agent/run`).
+Aion `/api/agent/run` is **brain tool execution**, not Cursor Cloud Agents.
+CCFL owns Cursor jobs locally (`CURSOR_API_KEY` → `https://api.cursor.com`,
+routes under `/api/cursor/agents`, Claw tools `cursor_launch` /
+`cursor_status` / `cursor_reply` / `cursor_cancel`). There is **no**
+`/api/agents` handshake with Aion-Brain and no `agent_jobs` proxy for
+Cursor. Do not forward Cursor spawn/steer/cancel to Brain.
+
 `aion_status` and `aion_consult` stay advice-only: consult still posts
 `/api/chat` without `"agentic"` unless the caller sets `agentic: true`.
 `previous_tool_results` are the only Aion evidence; Claw never marks a
