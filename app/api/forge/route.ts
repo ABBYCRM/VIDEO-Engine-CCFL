@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 import {
   cookiesForge,
   createForgeSession,
@@ -19,6 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     return NextResponse.json(forgeStatus());
   } catch (e) {
@@ -27,6 +29,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const body = await req.json().catch(() => ({}));
     const op = String(body.op || "status");

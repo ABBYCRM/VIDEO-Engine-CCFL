@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 import { ensureSession, getActiveSession, runAction, setControlOwner, takeOver, resetSession, stageUpload } from "@/lib/browser-computer";
 import type { ComputerAction } from "@/lib/browser-computer";
 import { searchViaSteel } from "@/lib/steel-search";
@@ -7,6 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     return NextResponse.json({ ok: true, session: getActiveSession() });
   } catch (e) {
@@ -15,6 +17,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const body = await req.json().catch(() => ({}));
     const op = String(body.op || "boot");
