@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { X, MessageSquare, Menu, Plug, Settings, Monitor, CalendarClock } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
+import { AuthGuard } from "@/components/auth-guard";
 
 type NavItem = { href: string; label: string; icon: any };
 
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background text-foreground">
       {/* Sticky header — glass in dark mode */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur
@@ -125,5 +127,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="min-h-[calc(100vh-49px)] flex-1">{children}</main>
       </div>
     </div>
+    </AuthGuard>
   );
 }

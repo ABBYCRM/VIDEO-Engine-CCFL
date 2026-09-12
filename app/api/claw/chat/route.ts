@@ -16,7 +16,7 @@ function sse(event: ClawEvent) {
 const SSE_PREAMBLE = `: connected ${" ".repeat(2048)}\n\n`;
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) {
+  if (!(await requireAdmin(req))) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
   }
   // Operator directive 2026-08-30: kill every Claw external connection.

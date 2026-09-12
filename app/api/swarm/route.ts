@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unauthorized } from "@/lib/auth";
 import {
   cancelSwarm,
   cleanupSwarm,
@@ -17,6 +18,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -35,6 +38,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const op = String(body.op || "status");

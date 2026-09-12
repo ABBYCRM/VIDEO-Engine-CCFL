@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
 import { listDevSkillCategories, searchDevSkills } from "@/lib/claw/dev-skills";
 
 export const runtime = "nodejs";
@@ -459,7 +460,8 @@ const TOOL_SUGGESTIONS: Array<{ label: string; prompt: string }> = [
   }
 ];
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!(await requireAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const categories = listDevSkillCategories();
   const suggestions: Array<{ label: string; prompt: string; source: "tool" | "rag" | "category" | "creative"; category?: string; skillIds?: string[] }> = [];
   // Tool-driven prompts first — these exercise real Claw tools.

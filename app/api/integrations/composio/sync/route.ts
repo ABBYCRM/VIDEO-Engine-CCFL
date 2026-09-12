@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { ComposioAuthError, isComposioConfigured, syncConnectedAccounts } from "@/lib/composio/client";
 
-export async function POST() {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  if (!(await requireAdmin(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isComposioConfigured()) return NextResponse.json({ error: "Composio not configured" }, { status: 400 });
   try {
     const result = await syncConnectedAccounts();
