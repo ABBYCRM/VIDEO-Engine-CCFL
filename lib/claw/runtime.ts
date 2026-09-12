@@ -6,6 +6,7 @@ import { composioHealth } from "@/lib/composio/client";
 import { connectorInventory } from "@/lib/claw/connectors";
 import { Execution, parseToolCalls, awaitWithSignal, type ParsedToolCall } from "./execution";
 import { SelfStateController, createSelfState, type PublicSelfState } from "./self-state";
+import { humanToolProgress, looksLikeInternalState, sanitizeUserVisibleMessage, toUserVisibleAssistant } from "./user-visible";
 
 const MAX_ROUNDS = 18;
 const TURN_BUDGET_MS = 120_000;
@@ -14,6 +15,7 @@ const MAX_CONTINUATIONS = 3;
 export type ClawEvent =
   | { type: "meta"; conversationId: string; model: string }
   | { type: "token"; text: string }
+  | { type: "status"; text: string }
   | { type: "tool_start"; name: string; args: Record<string, unknown> }
   | { type: "tool_end"; name: string; ok: boolean; via?: string; preview: string }
   | { type: "self_state"; health: string; issue: string; phase: string; progress: number; strategy: string; blockers: string[]; step: string; toolsRun: number }
@@ -23,34 +25,40 @@ export type ClawEvent =
 function systemPrompt(): string {
   return `You are Claw, a Grok-style operator agent: warm, concise, tool-first, evidence-only.
 You ACT LIKE GROK BOT: execution over explanation. Never ask the operator to fix code this system can fix. Never dump a plan instead of calling a tool. Be warm and short; lead with what you did and the evidence.
-You operate inside an AGENTIC SELF-STATE CONTROL LOOP. The runtime — not your prose — decides when work is complete.
-Trinity language: GO (act), HOLD (need evidence / change strategy), ABORT (blocked or unsafe). GO is permission to use tools, not proof of done. Consequential actions (send mail, write repos, spawn cloud agents, cancel runs) require a Trinity read: GO → call the tool; HOLD → missing key/evidence; ABORT → unsafe or refused.
 
-Each cycle the runtime runs: SELF-OBSERVATION → SELF-MONITORING → INTROSPECTION → METACOGNITION → SELF-REFLECTION → METACONTROL → ACTION → TERMINATION CHECK.
-SELF_STATE tracks your goal, plan, steps, memory, assumptions, facts, unknowns, strategy, tools, prior tool results, errors, blockers, budget, progress, and confidence.
+USER-VISIBLE MESSAGE CONTRACT (hard rule):
+The assistant message is ONLY what the operator should read — a warm, concise, result-first answer in plain language.
+Default mode is EXECUTE. Talking about state is not executing. Call tools this turn.
+FORBIDDEN in the assistant message (never write these to the user, even if a system/tool payload contains them):
+- Control-loop phases or labels: SELF_OBSERVATION, SELF-MONITORING, INTROSPECTION, METACOGNITION, SELF-REFLECTION, METACONTROL, TERMINATION_CHECK, SELF_STATE, self_state
+- free_energy, cycle dumps, execution_plan blobs, previous_tool_results, evidence IDs as the answer
+- Trinity reason arrays, COMMIT/DEFER (unless the operator explicitly asked for a decision)
+- Raw tool JSON, tool_call XML, Status:/PASS:/NOT VERIFIED checklists
+After tools run, answer with the outcome. Never paste the tool result JSON as the reply.
+The runtime owns completion. System SELF_STATE / checkpoint payloads are for you, not for the operator.
+
+Trinity language (internal): GO (act), HOLD (need evidence / change strategy), ABORT (blocked or unsafe). GO is permission to use tools, not proof of done. Consequential actions (send mail, write repos, spawn cloud agents, cancel runs) require a Trinity read: GO → call the tool; HOLD → missing key/evidence; ABORT → unsafe or refused.
 
 Hard rules:
 - Never treat assumptions as facts, intended tool actions as completed, missing information as negative evidence, or confidence as proof.
-- Epistemic labels are KNOWN / INFERRED / ASSUMED / UNKNOWN / CONTRADICTED.
-- Identical strategy ≥2 failures with no new evidence is LOOP_DETECTED: do not retry that action. Take a materially different action (different tool, different arguments, aion_execute, aion_consult, or execution_blocked).
+- Identical strategy ≥2 failures with no new evidence: do not retry that action. Take a materially different action (different tool, different arguments, aion_execute, or execution_blocked).
 - COMPLETE is refused unless acceptance criteria are verified against recorded tool evidence.
 - Do not emit a plan instead of a tool call. If you need a tool, call it this turn.
 
 You can call external services through the tool surface. You also have a curated dev-skills knowledge base — use it when relevant; retrieval is not implementation or verification.
-Be precise and honest. Don't fake tool results. If a tool fails, report the upstream error verbatim.
+Be precise and honest. Don't fake tool results. If a tool fails, report the upstream error in plain language.
 
 When developer reference material is needed, call dev_search (or dev_skill_get if you already know the id).
 dev_search is a two-stage RAG: keyword prefilter then NVIDIA rerank. When "reranked": true, the FIRST match is the best.
 
 Execution contract:
-For requests to build, fix, create, edit, deploy, or test, call execution_plan BEFORE taking action.
-Observe -> Plan -> Act -> Verify -> Compare -> Correct -> Repeat.
+For requests to build, fix, create, edit, deploy, or test, call execution_plan BEFORE taking action, then immediately call the next tool. Do not narrate the plan to the operator.
 Write deliverables with save_file or an available coding tool, one complete file at a time.
 save_file stores artifacts only; it is not a shell. Discover execution tools through Composio or e2b_run.
 Tool results have runtime evidence IDs. Use execution_verify only against actual current evidence.
 Exhausted budget, missing tools, interrupted output or absent evidence means blocked/partial, never Done.
 
-Aion-Brain is the connected brain. Prefer aion_execute for work that must use brain tools (search, scrape, n8n, live research). Keep aion_status / aion_consult / aion_n8n as advice. Treat previous_tool_results as the only Aion evidence. Never mark local work verified from Aion prose or complete=true. If Aion is configured, call it — do not pretend it is offline.
+Aion-Brain is the connected brain. Default to aion_execute for work that must use brain tools (search, scrape, n8n, live research, send, launch). Keep aion_status / aion_consult / aion_n8n as advice-only. If you call aion_consult on an actionable ask, the runtime routes it to execute. Treat previous_tool_results as the only Aion evidence. Never mark local work verified from Aion prose or complete=true. If Aion is configured, call it — do not pretend it is offline. Never dump Brain SELF_STATE / cycles / trinity into the assistant message.
 
 Composio is the integration bus. ak_ project keys are live. oak_ org keys are optional and fail soft — do not treat oak_ as connected. Flow: composio_health → composio_list_tools(toolkit or search) → composio_tool_schema if args are unclear → composio_action(exact slug). Email and GitHub go through Composio when those toolkits are connected (composio_list_tools toolkit=gmail|resend|github then composio_action). Never invent slugs. Never tell the operator to open Integrations unless health says nothing is connected.
 
@@ -70,7 +78,7 @@ Business wiring (loaded keys → tools → when). Settings-store first, then env
 - COMPOSIO_API_KEY (ak_) → composio_health / composio_list_tools / composio_action — email/GitHub when connected
 Already taught: steel_scrape, firecrawl_scrape, scrapingbee_scrape, scrapfly_scrape, web_search, web_screenshot, e2b_run/shell_run, resend_send, github_request.
 
-When you cannot do something, or a tool fails: web_search the current error/docs, or aion_execute the same question, then retry with a different tool or slug. LOOP_DETECTED means change strategy, not repeat.
+When you cannot do something, or a tool fails: web_search the current error/docs, or aion_execute the same question, then retry with a different tool or slug. A repeated failed strategy means change approach, not repeat.
 
 Claw is a Grok-style supervisor. The operator talks ONLY to you in this chat.
 You choose the specialist, you build it, you task it. Never tell them to open /computer, /forge, or /swarm, or to click New session, Probe lab, Scrape, Run swarm, or Take over.
@@ -110,7 +118,31 @@ ${toolsCatalog()}
 Preferred: use native function/tool calling when the API offers it.
 Fallback: emit one or more XML blocks and nothing else that round:
 <tool_call name="TOOL_NAME">{"arg":"value"}</tool_call>
-After tool_result, either call more tools or answer the operator in plain English. Never invent tool results.`;
+After tool_result, either call more tools or answer the operator in plain English. Never invent tool results. Never paste tool JSON or SELF_STATE into that answer.`;
+}
+
+function userFacingFallback(reason: string): string {
+  const text = String(reason || "");
+  if (/stopped by operator/i.test(text)) return "Stopped. Saved files and checkpoints are still here.";
+  if (/time budget|turn time/i.test(text)) return "I ran out of time on this turn. Saved files and checkpoints are still here — ask me to continue.";
+  if (/provider/i.test(text)) return "The model request stopped before I could finish. Checkpoints are saved if you want me to continue.";
+  if (/continuation limit|did not complete/i.test(text)) return "I got cut off before I could finish. Ask me to continue and I'll pick up from the last checkpoint.";
+  if (/Acceptance checks passed|No acceptance gate required/i.test(text)) return "Done.";
+  if (/blocked|unverified|acceptance criteria|required evidence|LOOP_DETECTED|not confirmed complete|round limit/i.test(text)) {
+    return "I ran what I could, but I don't have enough verified evidence to call this done. Ask me to continue and I'll try a different path.";
+  }
+  return "I couldn't finish that yet. Ask me to continue and I'll keep going.";
+}
+
+function finalizeAssistant(text: string, reason?: string): string {
+  return toUserVisibleAssistant(text, { fallback: userFacingFallback(reason || text) });
+}
+
+function emitUserToken(onEvent: (e: ClawEvent) => void, accumulated: string, chunk: string) {
+  if (!chunk) return;
+  if (looksLikeInternalState(accumulated) || /<tool_call\b/i.test(accumulated)) return;
+  const visible = sanitizeUserVisibleMessage(chunk);
+  if (visible) onEvent({ type: "token", text: visible });
 }
 
 async function liveOperatorSurface(): Promise<string> {
@@ -294,7 +326,8 @@ export async function runClawTurn(input: {
 
   const toolful = isToolfulGoal(userText) || requiresPlan;
   if (isAionConfigured() && toolful) {
-    input.onEvent({ type: "tool_start", name: "aion_execute", args: { goal: userText.slice(0, 400) } });
+    input.onEvent({ type: "tool_start", name: "aion_execute", args: { goal: userText.slice(0, 80) } });
+    input.onEvent({ type: "status", text: humanToolProgress("aion_execute") });
     try {
       const ran = await aionExecute({
         goal: userText,
@@ -338,7 +371,7 @@ export async function runClawTurn(input: {
   try {
     for (let round = 0; round < MAX_ROUNDS; round++) {
       if (turnSignal.aborted) {
-        finalText = execution.report(input.signal?.aborted ? "Stopped by operator. Saved files and checkpoints are retained." : "Turn time budget reached. Saved files and checkpoints are retained; remaining checks were not completed. An interrupted external operation may still be running; inspect it before retrying.");
+        finalText = finalizeAssistant("", input.signal?.aborted ? "Stopped by operator. Saved files and checkpoints are retained." : "Turn time budget reached. Saved files and checkpoints are retained; remaining checks were not completed. An interrupted external operation may still be running; inspect it before retrying.");
         break;
       }
 
@@ -367,11 +400,14 @@ export async function runClawTurn(input: {
           tools: toolsAsOpenAI(),
           toolChoice: cycle.forceTool && (requiresPlan || cycle.health === "LOOP_DETECTED" || cycle.issue === "EXECUTION_FAILURE") ? "required" : "auto",
           signal: turnSignal
-        }, chunk => { streamed += chunk; });
+        }, chunk => {
+          streamed += chunk;
+          emitUserToken(input.onEvent, streamed, chunk);
+        });
       } catch (error) {
         checkpoint(`Provider interrupted: ${error instanceof Error ? error.message : String(error)}. No incomplete tool calls executed.`);
         self.state.errors = [...self.state.errors, "provider interrupted"];
-        finalText = execution.report("Provider request stopped or failed. Work remains unverified; inspect the saved checkpoint before continuing.");
+        finalText = finalizeAssistant("", "Provider request stopped or failed. Work remains unverified; inspect the saved checkpoint before continuing.");
         break;
       }
       const text = continuation + (result.text || streamed);
@@ -380,11 +416,16 @@ export async function runClawTurn(input: {
         continuation = text;
         checkpoint(`Provider finish reason: ${result.finishReason}. Response incomplete; no actions from it executed.`);
         if (++continuations <= MAX_CONTINUATIONS && text.length < 120_000 && ["length", "interrupted"].includes(result.finishReason)) {
-          input.onEvent({ type: "token", text: "Response interrupted; continuing before executing or marking it complete.\n" });
+          input.onEvent({ type: "status", text: "Continuing…" });
           continue;
         }
-        addMessage({ conversationId: input.conversationId, role: "assistant", content: `Unfinished draft (not executed or verified):\n${text}` });
-        finalText = execution.report(`Generation did not complete (${result.finishReason}); continuation limit reached.`);
+        addMessage({
+          conversationId: input.conversationId,
+          role: "tool",
+          content: `Unfinished draft (not executed or verified):\n${text}`,
+          toolJson: { name: "unfinished_draft" }
+        });
+        finalText = finalizeAssistant("", `Generation did not complete (${result.finishReason}); continuation limit reached.`);
         break;
       }
       continuation = "";
@@ -410,9 +451,9 @@ export async function runClawTurn(input: {
             emitSelf(input.onEvent, self.publicSnapshot(), "TERMINATION_CHECK");
             continue;
           }
-          finalText = execution.report(gate.reason || "The model attempted to finish without the required evidence. Work is not confirmed complete.");
+          finalText = finalizeAssistant("", gate.reason || "The model attempted to finish without the required evidence. Work is not confirmed complete.");
         } else {
-          finalText = execution.goal ? `${execution.report("Acceptance checks passed against recorded tool evidence.")}\n\n${text}` : text;
+          finalText = finalizeAssistant(text, execution.goal ? "Acceptance checks passed against recorded tool evidence." : "");
         }
         break;
       }
@@ -442,6 +483,7 @@ export async function runClawTurn(input: {
           continue;
         }
         input.onEvent({ type: "tool_start", name: call.name, args: call.args });
+        input.onEvent({ type: "status", text: humanToolProgress(call.name) });
         self.state.tool_status[call.name] = "running";
         emitSelf(input.onEvent, self.publicSnapshot(), "ACTION");
         try {
@@ -455,7 +497,7 @@ export async function runClawTurn(input: {
           } else if (call.name === "execution_blocked") {
             if (typeof call.args.reason !== "string" || !call.args.reason.trim()) throw new Error("Provide an exact blocker.");
             self.state.blockers = [...self.state.blockers, call.args.reason];
-            finalText = execution.report(`Blocker reported by model: ${call.args.reason}`);
+            finalText = finalizeAssistant("", `Blocker reported by model: ${call.args.reason}`);
             value = { ok: false, blocked: true, reason: call.args.reason };
           } else {
             if (requiresPlan && !execution.goal) {
@@ -509,11 +551,17 @@ export async function runClawTurn(input: {
       requiresAcceptance: Boolean(requiresPlan || execution.goal),
       hasPendingToolIntent: false
     });
-    finalText = execution.report(gate.complete ? gate.reason : "Execution round limit reached. Remaining work is unverified; checkpoints and saved files are retained.");
+    finalText = finalizeAssistant("", gate.complete ? gate.reason : "Execution round limit reached. Remaining work is unverified; checkpoints and saved files are retained.");
   }
-  if (continuation && !finalText.includes("Generation did not complete")) {
-    addMessage({ conversationId: input.conversationId, role: "assistant", content: `Unfinished draft (not executed or verified):\n${continuation}` });
+  if (continuation && !/cut off|continue/i.test(finalText)) {
+    addMessage({
+      conversationId: input.conversationId,
+      role: "tool",
+      content: `Unfinished draft (not executed or verified):\n${continuation}`,
+      toolJson: { name: "unfinished_draft" }
+    });
   }
+  finalText = finalizeAssistant(finalText, finalText);
   addMessage({ conversationId: input.conversationId, role: "assistant", content: finalText });
   input.onEvent({ type: "done", assistant: finalText });
   return finalText;

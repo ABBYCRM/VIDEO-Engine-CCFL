@@ -1,6 +1,7 @@
 // Server-side Aion-Brain bridge. Credentials and destination never come from tool arguments.
 // Endpoint shapes match docs/claw-contract.md on Aion-Brain main (0613977). Do not invent fields.
 import { PRIMARY_CLAW_NVIDIA_MODEL } from "../nvidia/models.ts";
+import { filterAionSseDelta, isInternalAionSseType, preferAionExecute, routeAionMode, sanitizeUserVisibleMessage } from "./user-visible";
 export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string; agentic?: boolean };
 
 export type AionAcceptance = { id: string; description: string; tool?: string };
@@ -117,8 +118,10 @@ export function aionAcceptanceForGoal(goal: string): AionAcceptance[] {
 }
 
 export function isToolfulGoal(text: string): boolean {
-  return /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint|rag|public records?)\b/i.test(text);
+  return preferAionExecute(text);
 }
+
+export { preferAionExecute, routeAionMode };
 
 export async function aionStatus(context: AionContext = {}) {
   const response = await request("/api/state", context);
@@ -196,10 +199,16 @@ export async function aionConsult(prompt: string, context: AionContext = {}) {
     const data = frame.split(/\r?\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
     if (!data || data === "[DONE]") return;
     const event = JSON.parse(data);
-    if (event.type === "delta" && typeof event.text === "string") answer += event.text;
+    if (isInternalAionSseType(event.type)) {
+      if (event.type === "decision") decision = event.decision;
+      if (event.type === "lattice") lattice = { consensus: event.consensus, rationale: event.rationale };
+      return;
+    }
+    if (event.type === "delta" && typeof event.text === "string") {
+      const visible = filterAionSseDelta(event.text);
+      if (visible) answer += visible;
+    }
     if (event.type === "done") done = event;
-    if (event.type === "decision") decision = event.decision;
-    if (event.type === "lattice") lattice = { consensus: event.consensus, rationale: event.rationale };
     // An error can be followed by a successful provider fallback. Require a done event below.
   };
   try {
@@ -222,7 +231,8 @@ export async function aionConsult(prompt: string, context: AionContext = {}) {
     reader.releaseLock();
   }
   if (!done || !answer.trim()) throw new Error("Aion-Brain did not complete an answer. Check its provider configuration and logs.");
-  return { ok: true, source: "aion-brain", answer, provider: done.provider, model: done.model,
+  const visible = sanitizeUserVisibleMessage(answer) || "Aion completed without a user-facing answer.";
+  return { ok: true, source: "aion-brain", answer: visible, provider: done.provider, model: done.model,
     echoOnly: done.provider === "echo", decision, lattice };
 }
 
@@ -272,7 +282,7 @@ export async function aionExecute(input: AionExecuteInput, context: AionContext 
     status,
     complete: body.complete === true,
     verified: body.verified === true,
-    answer: typeof body.answer === "string" ? body.answer : "",
+    answer: typeof body.answer === "string" ? sanitizeUserVisibleMessage(body.answer) : "",
     session_id: asString(body.session_id) || session_id,
     self_state: {
       previous_tool_results: sanitizeAionToolResults(selfState.previous_tool_results) || previous,
@@ -282,6 +292,21 @@ export async function aionExecute(input: AionExecuteInput, context: AionContext 
     cycles: sanitizeCycles(body.cycles),
     previous_tool_results: previous
   };
+}
+
+export async function dispatchAionPrompt(prompt: string, context: AionContext = {}) {
+  const goal = String(prompt || "").trim();
+  if (routeAionMode(goal) === "execute") {
+    const result = await aionExecute({
+      goal,
+      acceptance: aionAcceptanceForGoal(goal),
+      sessionId: context.conversationId ? `claw:${context.conversationId}` : undefined,
+      maxCycles: 8
+    }, context);
+    return { mode: "execute" as const, ...result };
+  }
+  const result = await aionConsult(goal, context);
+  return { mode: "consult" as const, ...result };
 }
 
 export async function aionContract(context: AionContext = {}) {
