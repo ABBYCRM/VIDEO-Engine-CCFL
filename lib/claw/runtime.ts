@@ -56,12 +56,15 @@ Composio is the integration bus. ak_ project keys are live. oak_ org keys are op
 
 Email / contact people: when they ask you to email, contact, reach, or follow up — write a professional email (specific subject, relevant body, no fluff, match their intent) then SEND it. Prefer resend_send. If Resend API is missing, composio_list_tools toolkit=resend (or gmail) then composio_action. Do not reply that you cannot send mail. Do not claim sent without a tool result ok:true.
 
+Claw runtime is Bitdeer (NVIDIA catalog on api-inference.bitdeer.ai): this chat, analyze_image, embed, and rerank. Do not route default turns through Gemini, xAI, Kimi, or OpenAI.
+
 Business wiring (loaded keys → tools → when). Settings-store first, then env. Fail-soft MISSING_KEY — never invent results:
+- BITDEER_API_KEY / NVIDIA_API_KEY → PRIMARY Claw chat + analyze_image + embed + rerank
 - YOUTUBE_API_KEY → youtube_search / youtube_video — YouTube Data API v3 lookup
-- GEMINI_API_KEY → llm_gemini — Gemini chat/vision (NVIDIA remains default Claw chat)
-- XAI_API_KEY → llm_xai — xAI Grok chat/completions
-- KIMI_API_KEY → llm_kimi — Moonshot Kimi chat
-- OPENAI_API_KEY / OPENAI_EMBEDDINGS → openai_chat / openai_embed
+- GEMINI_API_KEY → gemini_generate — OPTIONAL alternate; only when the operator names Gemini
+- XAI_API_KEY → xai_chat — OPTIONAL alternate; only when the operator names xAI/Grok chat
+- KIMI_API_KEY → kimi_chat — OPTIONAL alternate; only when the operator names Kimi
+- OPENAI_API_KEY / OPENAI_EMBEDDINGS → openai_chat / openai_embed — OPTIONAL alternate
 - PINECONE_API_KEY → pinecone_query / pinecone_upsert (local vectors; BOS stays bos_memory)
 - HEDRA_API_KEY → hedra_status / hedra_start / hedra_job — Hedra v3 image default; video when the model accepts the inputs
 - COMPOSIO_API_KEY (ak_) → composio_health / composio_list_tools / composio_action — email/GitHub when connected
@@ -135,15 +138,18 @@ async function liveOperatorSurface(): Promise<string> {
     ? "Resend ready — resend_send is the email path"
     : "Resend API key missing — try composio_list_tools toolkit=resend";
   const search = inv.exa.configured || inv.tavily.configured ? "web_search ready" : "no web_search key";
+  const bitdeer = inv.bitdeer?.configured || inv.nvidia?.configured
+    ? "Bitdeer PRIMARY — this Claw turn is Bitdeer chat/vision/embed/rerank. Do not switch the default path."
+    : "Bitdeer HOLD — BITDEER_API_KEY missing; Claw chat cannot run.";
   const youtube = inv.youtube?.configured
     ? "YouTube ready — youtube_search / youtube_video"
     : "YouTube HOLD — YOUTUBE_API_KEY missing";
   const llms = [
-    inv.gemini?.configured ? "llm_gemini" : null,
-    inv.xai?.configured ? "llm_xai" : null,
-    inv.kimi?.configured ? "llm_kimi" : null,
+    inv.gemini?.configured ? "gemini_generate" : null,
+    inv.xai?.configured ? "xai_chat" : null,
+    inv.kimi?.configured ? "kimi_chat" : null,
     inv.openai?.configured ? "openai_chat/openai_embed" : null
-  ].filter(Boolean).join(", ") || "no extra LLM keys";
+  ].filter(Boolean).join(", ") || "none configured";
   const pinecone = inv.pinecone?.configured
     ? "Pinecone ready — pinecone_query / pinecone_upsert (BOS stays bos_memory)"
     : "Pinecone HOLD — PINECONE_API_KEY missing";
@@ -161,8 +167,9 @@ async function liveOperatorSurface(): Promise<string> {
 - ${composioLine}
 - ${resend}
 - ${search}
+- ${bitdeer}
 - ${youtube}
-- Extra LLMs: ${llms}
+- Optional alternate LLMs (operator-named only): ${llms}
 - ${pinecone}
 - ${hedra}
 - ${cursor}
