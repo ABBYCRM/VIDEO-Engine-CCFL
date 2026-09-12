@@ -172,6 +172,21 @@ export const CLAW_TOOLS: ToolDef[] = [
     handler: async (a, context) => aionN8n(a.action, a.args, context)
   },
   {
+    name: "bos_memory",
+    description: "Retrieve BOS / Book of Secrets / operator memory from Aion-Brain BEFORE answering BOS questions. Forwards to Brain n8n_aura memory_search. Do not invent BOS facts. Write only if the operator asked (memory_write).",
+    args: "{\"query\":\"Trinity GO HOLD ABORT\",\"write\":false}",
+    when: "Any BOS, Book of Secrets, canon, continuity, or operator-memory question. Retrieve first.",
+    handler: async (a, context) => {
+      const query = str(a.query || a.q || a.text || a.prompt);
+      if (!query) return { ok: false, trinity: "HOLD", error: "query is required" };
+      const write = a.write === true || a.op === "write";
+      if (write) {
+        return aionN8n("n8n_aura", { name: "memory_write", payload: { text: query, ...(a.payload && typeof a.payload === "object" ? a.payload : {}) } }, context);
+      }
+      return aionN8n("n8n_aura", { name: "memory_search", payload: { query, q: query, ...(a.payload && typeof a.payload === "object" ? a.payload : {}) } }, context);
+    }
+  },
+  {
     name: "aion_curriculum",
     description: "Build a Software & Technology SQM curriculum using Aion-Brain's real skill corpus and save the full Markdown or JSON document in this conversation's file panel. Omit topics for all 42 topics or pass exact topic names such as Python, GitHub, DigitalOcean, OSINT, OPSEC, Windows Administration, Linux Administration, Playwright. Return the saved file URL to the operator. Retrieved matches are learning material, not a guarantee of complete coverage.",
     args: "{\"topics\":[\"Python\",\"GitHub\"],\"format\":\"markdown\"}",

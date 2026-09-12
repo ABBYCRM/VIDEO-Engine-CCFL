@@ -800,6 +800,21 @@ export function ClawConsole() {
 
           {/* Footer nav */}
           <div className="border-t border-border p-2">
+            <button
+              type="button"
+              onClick={() => {
+                setFilesOpen(true);
+                setComputerOpen(false);
+                setForgeOpen(false);
+                setSwarmOpen(false);
+                setSidebarOpen(false);
+              }}
+              aria-label="Files"
+              className="mb-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+            >
+              <FolderOpen size={14} />
+              Files
+            </button>
             <Link href="/computer" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
               <Monitor size={14} />
               Computer
@@ -847,6 +862,24 @@ export function ClawConsole() {
               )}
             </div>
 
+            <button
+              type="button"
+              onClick={() => {
+                setFilesOpen((v) => !v);
+                setComputerOpen(false);
+                setForgeOpen(false);
+                setSwarmOpen(false);
+              }}
+              aria-label="Files"
+              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
+                filesOpen
+                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
+                  : "border-border bg-muted/40 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FolderOpen size={13} />
+              Files
+            </button>
             <button
               type="button"
               onClick={() => {
