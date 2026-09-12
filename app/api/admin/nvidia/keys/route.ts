@@ -1,29 +1,30 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
-import { getNvidiaApiKeys, setNvidiaApiKeys } from "@/lib/nvidia/client";
+import { requireAdmin, unauthorized } from "@/lib/auth";
+import { addNvidiaApiKey, nvidiaKeyCount, setNvidiaApiKeys } from "@/lib/nvidia/client";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const keys = getNvidiaApiKeys();
-    return NextResponse.json({ count: keys.length, sample: keys[0]?.slice(0, 12) + "…" });
-  } catch {
-    return NextResponse.json({ count: 0 });
-  }
+  if (!(await requireAdmin())) return unauthorized();
+  const count = nvidiaKeyCount();
+  return NextResponse.json({ count, configured: count > 0 });
 }
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await requireAdmin())) return unauthorized();
   const body = await req.json().catch(() => null);
-  const keys = body?.keys;
-  if (!Array.isArray(keys) || !keys.every((k) => typeof k === "string" && k.trim().length >= 8))
-    return NextResponse.json({ error: "keys must be an array of Bitdeer API key strings" }, { status: 400 });
   try {
+    if (typeof body?.add === "string") {
+      const count = addNvidiaApiKey(body.add);
+      return NextResponse.json({ ok: true, count });
+    }
+    const keys = body?.keys;
+    if (!Array.isArray(keys) || !keys.every((k: unknown) => typeof k === "string" && k.trim().length >= 8)) {
+      return NextResponse.json({ error: "keys must be an array of Bitdeer API key strings, or pass add" }, { status: 400 });
+    }
     setNvidiaApiKeys((keys as string[]).map((k) => k.trim()));
     return NextResponse.json({ ok: true, count: keys.length });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 });
   }
 }

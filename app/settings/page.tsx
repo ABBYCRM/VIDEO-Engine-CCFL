@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle, Check, CircleDot, Eye, EyeOff, Gauge, KeyRound,
-  Loader2, Plug, Plus, Save, ShieldCheck, Trash2, Zap
+  Loader2, Plug, Plus, Save, ShieldCheck, Zap
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { AuthGuard } from "@/components/auth-guard";
 
 /* ─────────────────────────────────────────────────────────
  * TYPES
@@ -34,11 +35,6 @@ type Flash = { kind: "success" | "error" | "info"; msg: string };
 /* ─────────────────────────────────────────────────────────
  * HELPERS
  * ───────────────────────────────────────────────────────── */
-function maskKey(k: string) {
-  if (k.length < 8) return "•".repeat(k.length);
-  return k.slice(0, 6) + "•".repeat(Math.max(0, k.length - 8)) + k.slice(-2);
-}
-
 function SpeedBadge({ notes }: { notes: string }) {
   const fast = notes.includes("FAST");
   const warn = notes.includes("⚠") || notes.includes("SLOW");
@@ -73,9 +69,11 @@ function NvidiaPanel() {
       const [modelRes] = await Promise.all([fetch("/api/claw/model", { cache: "no-store" })]);
       if (modelRes.ok) {
         const d = await modelRes.json();
+        const keysRes = await fetch("/api/admin/nvidia/keys", { cache: "no-store" });
+        const keysBody = keysRes.ok ? await keysRes.json() : { count: 0 };
         setState({
-          configured: true,
-          keyCount: 11, // pool count not exposed, show known count
+          configured: Boolean(keysBody.configured ?? (keysBody.count > 0)),
+          keyCount: Number(keysBody.count || 0),
           model: d.model,
           models: d.models || [],
           envOverridden: d.envOverridden || false,
@@ -100,51 +98,21 @@ function NvidiaPanel() {
     setSaving(true);
     try {
       // Fetch current keys, add new one
-      const r = await fetch("/api/admin/nvidia/keys");
-      const d = r.ok ? await r.json() : { keys: [] };
-      const currentKeys: string[] = d.keys || [];
-      if (currentKeys.includes(key)) {
-        setFlash({ kind: "error", msg: "This key is already in the pool." });
-        return;
-      }
-      const updated = [...currentKeys, key];
       const putRes = await fetch("/api/admin/nvidia/keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keys: updated }),
+        body: JSON.stringify({ add: key }),
       });
       if (!putRes.ok) {
         const err = await putRes.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${putRes.status}`);
       }
-      setFlash({ kind: "success", msg: `Key added. Pool now has ${updated.length} key(s).` });
+      const saved = await putRes.json().catch(() => ({}));
+      setFlash({ kind: "success", msg: `Key added. Pool now has ${saved.count ?? "?"} key(s).` });
       setNewKey("");
       await load();
     } catch (e) {
       setFlash({ kind: "error", msg: e instanceof Error ? e.message : "Failed to add key." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeKey(index: number) {
-    if (!confirm("Remove this key from the pool?")) return;
-    setSaving(true);
-    try {
-      const r = await fetch("/api/admin/nvidia/keys");
-      const d = r.ok ? await r.json() : { keys: [] };
-      const currentKeys: string[] = d.keys || [];
-      const updated = currentKeys.filter((_, i) => i !== index);
-      const putRes = await fetch("/api/admin/nvidia/keys", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keys: updated }),
-      });
-      if (!putRes.ok) throw new Error(`HTTP ${putRes.status}`);
-      setFlash({ kind: "success", msg: `Key removed. Pool now has ${updated.length} key(s).` });
-      await load();
-    } catch (e) {
-      setFlash({ kind: "error", msg: e instanceof Error ? e.message : "Failed to remove key." });
     } finally {
       setSaving(false);
     }
@@ -425,8 +393,135 @@ function ComposioPanel() {
 /* ─────────────────────────────────────────────────────────
  * MAIN SETTINGS PAGE
  * ───────────────────────────────────────────────────────── */
+function VideoProvidersPanel() {
+  const [flash, setFlash] = useState<Flash | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [configured, setConfigured] = useState<Record<string, boolean>>({});
+  const [keys, setKeys] = useState({ geminiApiKey: "", xaiApiKey: "", a2eApiKey: "", hedraApiKey: "" });
+
+  useEffect(() => {
+    fetch("/api/admin/settings", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (!d?.providers) return;
+        setConfigured({
+          veo: d.providers.veo?.keyConfigured,
+          grok: d.providers.grok?.keyConfigured,
+          a2e: d.providers.a2e?.keyConfigured,
+          hedra: d.providers.hedra?.keyConfigured,
+        });
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const body: Record<string, string> = {};
+      for (const [k, v] of Object.entries(keys)) if (v.trim()) body[k] = v.trim();
+      const r = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+      setFlash({ kind: "success", msg: "Provider keys saved encrypted." });
+      setKeys({ geminiApiKey: "", xaiApiKey: "", a2eApiKey: "", hedraApiKey: "" });
+    } catch (e) {
+      setFlash({ kind: "error", msg: e instanceof Error ? e.message : "Save failed" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <KeyRound size={14} className="text-muted-foreground" />
+        <span className="text-[13px] font-semibold text-foreground">Video providers</span>
+      </div>
+      <p className="mb-3 text-[12px] text-muted-foreground">
+        Keys are encrypted at rest. The browser never receives a stored key back.
+      </p>
+      {(["hedraApiKey", "geminiApiKey", "xaiApiKey", "a2eApiKey"] as const).map((field) => {
+        const label = field === "geminiApiKey" ? "Gemini / Veo" : field === "xaiApiKey" ? "xAI Grok" : field === "a2eApiKey" ? "A2E" : "Hedra";
+        const id = field === "geminiApiKey" ? "veo" : field === "xaiApiKey" ? "grok" : field === "a2eApiKey" ? "a2e" : "hedra";
+        return (
+          <label key={field} className="mb-2 grid gap-1 text-[12px]">
+            <span className="text-muted-foreground">
+              {label} {configured[id] ? "(configured)" : "(missing)"}
+            </span>
+            <input
+              type="password"
+              value={keys[field]}
+              onChange={(e) => setKeys((prev) => ({ ...prev, [field]: e.target.value }))}
+              placeholder={`Paste ${label} key`}
+              className="w-full rounded-xl border border-border bg-[hsl(var(--background))] px-3 py-2 text-[13px]"
+            />
+          </label>
+        );
+      })}
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void save()}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] font-semibold text-emerald-400"
+      >
+        {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+        Save provider keys
+      </button>
+      {flash && <p className={`mt-2 text-[12px] ${flash.kind === "error" ? "text-rose-400" : "text-emerald-400"}`}>{flash.msg}</p>}
+    </div>
+  );
+}
+
+function TokensPanel() {
+  const [name, setName] = useState("");
+  const [issued, setIssued] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<Array<{ id: string; name: string; prefix: string }>>([]);
+
+  const load = useCallback(async () => {
+    const r = await fetch("/api/admin/tokens", { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    setTokens(d.tokens || []);
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <div className="rounded-xl border border-border bg-[hsl(var(--claw-elevated))] p-4">
+      <div className="mb-3 text-[13px] font-semibold text-foreground">API tokens</div>
+      <p className="mb-3 text-[12px] text-muted-foreground">Raw `ve_live_*` tokens are shown once. Only a SHA-256 hash is stored.</p>
+      <div className="mb-3 flex gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Token name" className="flex-1 rounded-xl border border-border bg-[hsl(var(--background))] px-3 py-2 text-[13px]" />
+        <button
+          type="button"
+          onClick={async () => {
+            const r = await fetch("/api/admin/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) });
+            const d = await r.json();
+            if (r.ok) { setIssued(d.token); setName(""); await load(); }
+          }}
+          className="rounded-xl border border-border px-3 py-2 text-[13px]"
+        >
+          Issue
+        </button>
+      </div>
+      {issued && <p className="mb-2 break-all text-[12px] text-amber-400">Copy now: {issued}</p>}
+      <ul className="grid gap-1 text-[12px] text-muted-foreground">
+        {tokens.map((t) => (
+          <li key={t.id} className="flex items-center justify-between">
+            <span>{t.name} · {t.prefix}…</span>
+            <button type="button" onClick={async () => { await fetch(`/api/admin/tokens/${t.id}`, { method: "DELETE" }); await load(); }}>Revoke</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
+    <AuthGuard>
     <AppShell>
       <div className="mx-auto w-full max-w-2xl px-3 py-8 sm:px-4">
         {/* Page header */}
@@ -437,15 +532,18 @@ export default function SettingsPage() {
           </div>
           <h1 className="text-[32px] font-semibold tracking-tight text-foreground">Settings</h1>
           <p className="mt-1 text-[14px] text-muted-foreground">
-            Configure NVIDIA, Composio, and model preferences for Claw.
+            Configure video providers, NVIDIA, Composio, and API tokens.
           </p>
         </div>
 
         <div className="space-y-6">
+          <VideoProvidersPanel />
+          <TokensPanel />
           <NvidiaPanel />
           <ComposioPanel />
         </div>
       </div>
     </AppShell>
+    </AuthGuard>
   );
 }

@@ -316,21 +316,17 @@ describe("business connectors e2e (mock HTTP)", () => {
     noLeak(started); noLeak(job);
   });
 
-  it("GET /api/connectors surfaces the new rows without secrets", async () => {
+  it("GET /api/connectors is admin-gated and inventory has the new rows without secrets", async () => {
     const res = await connectorsGet();
-    const json = await res.json();
-    const ids = (json.connectors as Array<{ id: string; when: string }>).map((c) => c.id);
+    assert.equal(res.status, 401);
+    const inventory = connectorInventory() as Record<string, { when?: string; role?: string }>;
     for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "bitdeer", "nvidia"]) {
-      assert.ok(ids.includes(id), id);
+      assert.ok(id in inventory, id);
     }
-    const youtube = json.connectors.find((c: { id: string }) => c.id === "youtube");
-    assert.match(youtube.when, /youtube_search/);
-    const bitdeer = json.connectors.find((c: { id: string; kind?: string; role?: string }) => c.id === "bitdeer");
-    assert.equal(bitdeer.kind, "claw-brain");
-    assert.equal(bitdeer.role, "primary");
-    assert.equal(json.clawBrain.provider, "bitdeer");
-    noLeak(json);
-    assert.equal(JSON.stringify(json).includes("sk-"), false);
+    assert.match(String(inventory.youtube.when), /youtube_search/);
+    assert.equal(inventory.bitdeer.role, "primary");
+    noLeak(inventory);
+    assert.equal(JSON.stringify(inventory).includes("sk-"), false);
   });
 
   it("composio ak_ stays live; oak_ remains optional / not live", () => {

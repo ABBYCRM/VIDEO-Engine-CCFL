@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { runCursorControl } from "@/lib/cursor";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Alias of Brain-shaped /api/cursor + /api/cursor/launch. Still a proxy — no local Cursor client. */
 export async function GET(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   const url = new URL(req.url);
   const result = await runCursorControl({
     op: url.searchParams.get("id") ? "status" : "list",
@@ -18,6 +20,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   const body = await req.json().catch(() => ({}));
   const result = await runCursorControl({ ...body, op: body.op || "launch" });
   const status = result.ok ? 202 : result.code === "AION_UNCONFIGURED" ? 503 : 400;

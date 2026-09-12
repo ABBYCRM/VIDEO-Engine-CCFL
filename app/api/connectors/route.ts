@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { connectorInventory } from "@/lib/claw/connectors";
 import { isAionConfigured } from "@/lib/claw/aion";
 import { isComposioConfigured } from "@/lib/composio/client";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Live connector / MCP registry. Booleans and when-to-use only — never raw keys. */
 export async function GET() {
+  if (!(await requireAdmin())) return unauthorized();
   const connectors = connectorInventory();
   const rows = Object.entries(connectors).map(([id, meta]) => {
     const row = meta as { configured?: boolean; when?: string; owner?: string; keyType?: string; note?: string; enabled?: boolean; role?: string };

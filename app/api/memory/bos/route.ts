@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { aionBosMemory } from "@/lib/claw/aion";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ function statusFor(result: { ok: boolean; code?: string; status?: number }) {
 
 /** Proxy → Aion-Brain GET /api/memory/bos. Durable BOS RAG lives in bos-omega.sqlite. */
 export async function GET(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q") || searchParams.get("query") || "";
@@ -37,6 +39,7 @@ export async function GET(req: Request) {
 
 /** Proxy → Aion-Brain POST /api/memory/bos. Append Continuity only; never wipe Canon/Patch. */
 export async function POST(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const body = await req.json().catch(() => ({}));
     const text = body.text || body.content || body.query || body.q || "";
