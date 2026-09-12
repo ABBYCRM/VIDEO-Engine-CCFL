@@ -819,6 +819,9 @@ export function ClawConsole() {
               <Monitor size={14} />
               Computer
             </Link>
+            <Link href="/routines" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
+              Routines
+            </Link>
             <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
               <Plug size={14} />
               Integrations

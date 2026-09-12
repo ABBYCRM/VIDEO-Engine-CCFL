@@ -483,3 +483,142 @@ export async function aionCursorCancel(input: { id?: string; runId?: string }, c
   if (!id) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "id_required", code: "BAD_ARGS", tool: "cursor_cancel" };
   return aionCursorHttp("POST", `/api/cursor/${encodeURIComponent(id)}/cancel`, { runId: input.runId }, context);
 }
+
+export type TrinityState = "GO" | "HOLD" | "ABORT";
+
+export type AionBrainProxy = {
+  ok: boolean;
+  source: "aion-brain" | "ccfl-proxy";
+  owner: "aion-brain";
+  trinity: TrinityState;
+  error?: string;
+  code?: string;
+  hint?: string;
+  persist?: string;
+  status?: number;
+  [key: string]: unknown;
+};
+
+function aionMissing(hint: string): AionBrainProxy {
+  return {
+    ok: false,
+    source: "ccfl-proxy",
+    owner: "aion-brain",
+    trinity: "HOLD",
+    error: "Aion-Brain is not configured.",
+    code: "AION_UNCONFIGURED",
+    hint,
+  };
+}
+
+async function aionBrainHttp(
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  body?: unknown,
+  context: AionContext = {},
+): Promise<AionBrainProxy> {
+  if (!isAionConfigured()) {
+    return aionMissing("Set AION_BASE_URL and AION_API_KEY. Brain owns BOS / routines / Trinity.");
+  }
+  const { origin, key } = config();
+  const timeout = AbortSignal.timeout(30_000);
+  const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
+  try {
+    const response = await fetch(origin + path, {
+      method,
+      headers: { "X-AION-Key": key, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      redirect: "error",
+      cache: "no-store",
+      signal,
+    });
+    const json = await response.json().catch(() => ({})) as Record<string, unknown>;
+    const trinityRaw = String(json.trinity || "").toUpperCase();
+    const trinity: TrinityState = trinityRaw === "GO" || trinityRaw === "HOLD" || trinityRaw === "ABORT"
+      ? trinityRaw
+      : json.ok === true ? "GO" : response.status === 401 || response.status === 403 ? "ABORT" : "HOLD";
+    return {
+      ...json,
+      ok: json.ok === true || (response.ok && json.ok !== false),
+      source: "aion-brain",
+      owner: "aion-brain",
+      trinity,
+      error: asString(json.error) || asString(json.detail),
+      persist: asString(json.persist),
+      status: response.status,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      source: "ccfl-proxy",
+      owner: "aion-brain",
+      trinity: "HOLD",
+      error: /abort|timeout/i.test(message) ? "Aion-Brain proxy timed out" : "Aion-Brain proxy failed",
+      code: /abort|timeout/i.test(message) ? "TIMEOUT" : "TRANSPORT",
+      hint: "Check AION_BASE_URL reachability. Do not invent a local BOS/routines/Trinity store.",
+    };
+  }
+}
+
+export async function aionBosMemory(input: { query?: string; write?: boolean; text?: string; title?: string; topK?: number }, context: AionContext = {}) {
+  if (input.write === true) {
+    const text = String(input.text || input.query || "").trim();
+    if (!text) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "text is required", code: "BAD_ARGS" };
+    return aionBrainHttp("POST", "/api/memory/bos", { text, title: input.title || "operator-note" }, context);
+  }
+  const query = String(input.query || "").trim();
+  if (!query) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "query is required", code: "BAD_ARGS" };
+  const q = new URLSearchParams({ q: query });
+  if (input.topK) q.set("topK", String(input.topK));
+  return aionBrainHttp("GET", `/api/memory/bos?${q}`, undefined, context);
+}
+
+export async function aionRoutines(input: {
+  op?: string;
+  name?: string;
+  trigger?: string;
+  text?: string;
+  steps?: unknown;
+  success?: string;
+}, context: AionContext = {}) {
+  const op = String(input.op || "list").toLowerCase();
+  if (op === "list") return aionBrainHttp("GET", "/api/routines", undefined, context);
+  if (op === "create" || op === "upsert" || op === "schedule") {
+    const name = String(input.name || "").trim();
+    const trigger = String(input.trigger || input.text || "").trim();
+    if (!name) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "name is required", code: "BAD_ARGS" };
+    return aionBrainHttp("POST", "/api/routines", {
+      name,
+      trigger,
+      steps: Array.isArray(input.steps) ? input.steps : [{ note: trigger || name }],
+      success: input.success || "operator-defined",
+    }, context);
+  }
+  const name = String(input.name || "").trim();
+  if (!name) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "name is required", code: "BAD_ARGS" };
+  if (op === "pause") return aionBrainHttp("POST", `/api/routines/${encodeURIComponent(name)}/pause`, {}, context);
+  if (op === "resume") return aionBrainHttp("POST", `/api/routines/${encodeURIComponent(name)}/resume`, {}, context);
+  if (op === "delete" || op === "cancel") return aionBrainHttp("DELETE", `/api/routines/${encodeURIComponent(name)}`, undefined, context);
+  return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "op must be list, create, pause, resume, or delete", code: "BAD_ARGS" };
+}
+
+export async function aionDecision(input: {
+  user_input?: string;
+  prompt?: string;
+  goal?: string;
+  history?: unknown;
+  retrieved?: boolean;
+  metadata?: unknown;
+}, context: AionContext = {}) {
+  const user_input = String(input.user_input || input.prompt || input.goal || "").trim();
+  if (!user_input) {
+    return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "ABORT" as const, error: "user_input_required", reason: "empty_input", reasons: ["empty_input"] };
+  }
+  return aionBrainHttp("POST", "/api/decision", {
+    user_input,
+    history: Array.isArray(input.history) ? input.history : [],
+    retrieved: Boolean(input.retrieved),
+    metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
+  }, context);
+}

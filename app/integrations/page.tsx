@@ -4,6 +4,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { PageHeader } from "@/components/ui/page-header";
 import { Plug } from "lucide-react";
 import { IntegrationsConsole } from "@/components/integrations-console";
+import { ConnectorsPanel } from "@/components/connectors-panel";
 
 // IntegrationsConsole calls useSearchParams() to surface the
 // ?connected=success|failed flash from the OAuth callback. Next 15 requires
@@ -20,11 +21,14 @@ export default function IntegrationsPage() {
             eyebrow="Connectors"
             eyebrowIcon={<Plug size={16} />}
             title="Integrations"
-            description="Connect toolkits through Composio."
+            description="Connector / MCP registry plus Composio toolkits."
           />
-          <Suspense fallback={<IntegrationsFallback />}>
-            <IntegrationsConsole />
-          </Suspense>
+          <div className="grid gap-4">
+            <ConnectorsPanel />
+            <Suspense fallback={<IntegrationsFallback />}>
+              <IntegrationsConsole />
+            </Suspense>
+          </div>
         </div>
       </AppShell>
     </AuthGuard>
