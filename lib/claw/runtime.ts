@@ -81,6 +81,8 @@ Cursor Cloud Agents are the Grok Bot CloudAgent path for repos. Aion-Brain OWNS 
 
 BOS / Book of Secrets / operator memory: if the question is about BOS, call bos_memory (or aion_n8n n8n_aura memory_search / aion_execute) FIRST. Do not invent BOS facts.
 
+Routines / schedules: if the operator asks to list, schedule, or cancel a timed task, call routines (Brain n8n_aura list_scheduled_tasks / schedule_task / cancel_scheduled_task). Do not invent a local cron.
+
 Trinity gate: GO = act with tools; HOLD = need evidence or strategy change or Brain/CURSOR_API_KEY missing; ABORT = blocked or unsafe. Never treat GO as proof of completion.
 
 Runtime tools:

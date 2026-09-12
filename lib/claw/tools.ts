@@ -187,6 +187,30 @@ export const CLAW_TOOLS: ToolDef[] = [
     }
   },
   {
+    name: "routines",
+    description: "List, schedule, or cancel operator routines through Aion-Brain n8n_aura (list_scheduled_tasks / schedule_task / cancel_scheduled_task). No local cron and no invented scheduler. Writes only if the operator asked.",
+    args: "{\"op\":\"list\"}",
+    when: "Operator asks to schedule, list, or cancel a timed/recurring task.",
+    handler: async (a, context) => {
+      const op = str(a.op || a.action || a.name || "list").toLowerCase();
+      const extra = a.payload && typeof a.payload === "object" ? a.payload as Record<string, unknown> : {};
+      if (op === "list" || op === "list_scheduled_tasks") {
+        return aionN8n("n8n_aura", { name: "list_scheduled_tasks", payload: extra }, context);
+      }
+      if (op === "schedule" || op === "schedule_task") {
+        const text = str(a.text || a.task || a.prompt || a.query);
+        if (!text) return { ok: false, trinity: "HOLD", error: "text is required to schedule" };
+        return aionN8n("n8n_aura", { name: "schedule_task", payload: { text, ...extra } }, context);
+      }
+      if (op === "cancel" || op === "cancel_scheduled_task") {
+        const id = str(a.id || a.taskId || a.task_id);
+        if (!id) return { ok: false, trinity: "HOLD", error: "id is required to cancel" };
+        return aionN8n("n8n_aura", { name: "cancel_scheduled_task", payload: { id, ...extra } }, context);
+      }
+      return { ok: false, trinity: "HOLD", error: "op must be list, schedule, or cancel" };
+    }
+  },
+  {
     name: "aion_curriculum",
     description: "Build a Software & Technology SQM curriculum using Aion-Brain's real skill corpus and save the full Markdown or JSON document in this conversation's file panel. Omit topics for all 42 topics or pass exact topic names such as Python, GitHub, DigitalOcean, OSINT, OPSEC, Windows Administration, Linux Administration, Playwright. Return the saved file URL to the operator. Retrieved matches are learning material, not a guarantee of complete coverage.",
     args: "{\"topics\":[\"Python\",\"GitHub\"],\"format\":\"markdown\"}",
