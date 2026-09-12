@@ -71,12 +71,16 @@ function NvidiaPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [modelRes] = await Promise.all([fetch("/api/claw/model", { cache: "no-store" })]);
+      const [modelRes, keysRes] = await Promise.all([
+        fetch("/api/claw/model", { cache: "no-store" }),
+        fetch("/api/admin/nvidia/keys", { cache: "no-store" }),
+      ]);
       if (modelRes.ok) {
         const d = await modelRes.json();
+        const keys = keysRes.ok ? await keysRes.json().catch(() => ({})) : {};
         setState({
-          configured: true,
-          keyCount: 11, // pool count not exposed, show known count
+          configured: Boolean(keys.configured ?? (typeof keys.count === "number" && keys.count > 0)),
+          keyCount: typeof keys.count === "number" ? keys.count : 0,
           model: d.model,
           models: d.models || [],
           envOverridden: d.envOverridden || false,
@@ -100,25 +104,19 @@ function NvidiaPanel() {
     }
     setSaving(true);
     try {
-      // Fetch current keys, add new one
-      const r = await fetch("/api/admin/nvidia/keys");
-      const d = r.ok ? await r.json() : { keys: [] };
-      const currentKeys: string[] = d.keys || [];
-      if (currentKeys.includes(key)) {
-        setFlash({ kind: "error", msg: "This key is already in the pool." });
-        return;
-      }
-      const updated = [...currentKeys, key];
       const putRes = await fetch("/api/admin/nvidia/keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keys: updated }),
+        body: JSON.stringify({ op: "add", key }),
       });
+      const err = await putRes.json().catch(() => ({}));
       if (!putRes.ok) {
-        const err = await putRes.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${putRes.status}`);
       }
-      setFlash({ kind: "success", msg: `Key added. Pool now has ${updated.length} key(s).` });
+      if (typeof err.sample === "string" || Array.isArray(err.keys)) {
+        throw new Error("Refusing to display key material returned by the API.");
+      }
+      setFlash({ kind: "success", msg: `Key added. Pool now has ${err.count ?? "?"} key(s).` });
       setNewKey("");
       await load();
     } catch (e) {
@@ -132,17 +130,14 @@ function NvidiaPanel() {
     if (!confirm("Remove this key from the pool?")) return;
     setSaving(true);
     try {
-      const r = await fetch("/api/admin/nvidia/keys");
-      const d = r.ok ? await r.json() : { keys: [] };
-      const currentKeys: string[] = d.keys || [];
-      const updated = currentKeys.filter((_, i) => i !== index);
       const putRes = await fetch("/api/admin/nvidia/keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keys: updated }),
+        body: JSON.stringify({ op: "remove", index }),
       });
-      if (!putRes.ok) throw new Error(`HTTP ${putRes.status}`);
-      setFlash({ kind: "success", msg: `Key removed. Pool now has ${updated.length} key(s).` });
+      const err = await putRes.json().catch(() => ({}));
+      if (!putRes.ok) throw new Error(err.error || `HTTP ${putRes.status}`);
+      setFlash({ kind: "success", msg: `Key removed. Pool now has ${err.count ?? "?"} key(s).` });
       await load();
     } catch (e) {
       setFlash({ kind: "error", msg: e instanceof Error ? e.message : "Failed to remove key." });
