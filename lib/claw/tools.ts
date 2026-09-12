@@ -43,6 +43,10 @@ import {
   connectorInventory, scrapeFirecrawl, scrapeScrapingBee, scrapeScrapfly,
   e2bRun, githubRequest, resendSend, hedraStatus, heliconeStatus
 } from "@/lib/claw/connectors";
+import {
+  youtubeSearch, youtubeVideo, llmGemini, llmXai, llmKimi,
+  openaiChat, openaiEmbed, pineconeQuery, pineconeUpsert, hedraStart, hedraJob
+} from "@/lib/claw/business";
 import { isHeliconeEnabled } from "@/lib/nvidia/helicone";
 import { isGdyConfigured, gdySearch, gdyRagContext, gdyCategories, gdyTools } from "@/lib/claw/gdy";
 import { arxivSearch } from "@/lib/claw/arxiv";
@@ -175,7 +179,7 @@ export const CLAW_TOOLS: ToolDef[] = [
     name: "bos_memory",
     description: "Retrieve or write durable BOS / Book of Secrets memory. First-class CCFL route GET/POST /api/memory/bos proxies Aion-Brain with AION_BASE_URL + X-AION-Key. This tool uses the same aionBosMemory helper (Brain GET/POST /api/memory/bos → bos-omega.sqlite Continuity). Write only if the operator asked. Do not invent BOS facts.",
     args: "{\"query\":\"Trinity GO HOLD ABORT\",\"write\":false}",
-    when: "Any BOS, Book of Secrets, canon, continuity, or operator-memory question. Retrieve first.",
+    when: "Any BOS, Book of Secrets, canon, continuity, or operator-memory question. Retrieve first. Local vectors use pinecone_query / pinecone_upsert — do not treat Pinecone as BOS.",
     handler: async (a, context) => {
       const query = str(a.query || a.q || a.text || a.prompt);
       const write = a.write === true || a.op === "write";
@@ -331,8 +335,9 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Composio (granular in/out passthrough) ──────────────────────
   {
     name: "composio_health",
-    description: "Ping Composio and list CONNECTED toolkits (resend, gmail, github, …). Call this first, then composio_list_tools, then composio_action. If the operator asked to email/contact people and Resend is connected, use resend_send OR a RESEND_* slug — do not skip the send.",
+    description: "Ping Composio and list CONNECTED toolkits (resend, gmail, github, …). ak_ project keys are live. oak_ org keys fail soft. Call this first, then composio_list_tools, then composio_action. Email and GitHub go through Composio when those toolkits are connected.",
     args: "{}",
+    when: "First step for email/GitHub/any connected app via Composio. ak_ is live; oak_ is optional and not treated as live.",
     handler: async () => composioHealth()
   },
   {
@@ -1083,10 +1088,114 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "hedra_status",
-    description: "Check Hedra v3 connectivity and list available models. Does NOT start a video generation job. Fail-soft if HEDRA_API_KEY is missing.",
+    description: "Check Hedra v3 connectivity and list available models. Fail-soft if HEDRA_API_KEY is missing. Start jobs with hedra_start; poll with hedra_job.",
     args: "{}",
-    when: "Operator asks whether Hedra is wired. Never use this to generate video — that stays on the Hedra generate path.",
+    when: "Operator asks whether Hedra is wired or which models the key can run.",
     handler: async () => hedraStatus()
+  },
+  {
+    name: "hedra_start",
+    description: "Start one Hedra v3 job. Default model gpt-image-2 (image). Same key shape (Authorization: Key) starts video models when the model accepts the inputs (prompt; optional imageUrl/audioUrl/durationMs). Returns jobId — poll hedra_job. Fail-soft if HEDRA_API_KEY is missing. Never claim media exists from the 202 ack alone.",
+    args: "{\"prompt\":\"a space cat\",\"model\":\"gpt-image-2\",\"quality\":\"medium\",\"aspectRatio\":\"1:1\"}",
+    when: "Operator asks Hedra to generate an image or a video. Image is the default path; video only when they named a video model and supplied any required start assets.",
+    handler: async (a) => hedraStart({
+      prompt: str(a.prompt || a.text),
+      model: str(a.model) || undefined,
+      quality: str(a.quality) || undefined,
+      aspectRatio: str(a.aspectRatio || a.aspect_ratio) || undefined,
+      resolution: str(a.resolution) || undefined,
+      durationMs: a.durationMs == null && a.duration_ms == null ? undefined : num(a.durationMs ?? a.duration_ms, 8_000),
+      imageUrl: str(a.imageUrl || a.image_url) || undefined,
+      audioUrl: str(a.audioUrl || a.audio_url) || undefined
+    })
+  },
+  {
+    name: "hedra_job",
+    description: "Poll a Hedra v3 job (GET /v3/jobs/{id}/status, then GET /v3/jobs/{id} when completed). Fail-soft if HEDRA_API_KEY is missing.",
+    args: "{\"jobId\":\"job_...\"}",
+    when: "After hedra_start, or when the operator asks whether a Hedra job finished.",
+    handler: async (a) => hedraJob({ jobId: str(a.jobId || a.id || a.job_id) })
+  },
+  {
+    name: "youtube_search",
+    description: "Search public YouTube videos via Data API v3. Returns videoId, title, channel. Fail-soft if YOUTUBE_API_KEY is missing. Never invent results.",
+    args: "{\"q\":\"personal injury explainer\",\"maxResults\":5}",
+    when: "Operator asks to find YouTube videos, channels, or a clip by topic.",
+    handler: async (a) => youtubeSearch({ q: str(a.q || a.query), maxResults: num(a.maxResults, 5), type: str(a.type, "video") || undefined })
+  },
+  {
+    name: "youtube_video",
+    description: "Look up one YouTube video by id via Data API v3 (snippet, duration, views). Fail-soft if YOUTUBE_API_KEY is missing.",
+    args: "{\"id\":\"dQw4w9WgXcQ\"}",
+    when: "Operator pasted a YouTube video id or asked for details on a specific video.",
+    handler: async (a) => youtubeVideo({ id: str(a.id || a.videoId || a.video_id) })
+  },
+  {
+    name: "llm_gemini",
+    description: "Call Google Gemini generateContent (chat + optional vision). NVIDIA remains the default Claw chat path — use this when the operator names Gemini or needs Gemini vision. Fail-soft if GEMINI_API_KEY is missing.",
+    args: "{\"prompt\":\"Summarize this\",\"model\":\"gemini-2.0-flash\"}",
+    when: "Operator named Gemini, or analyze_image/NVIDIA is the wrong path for this vision request.",
+    handler: async (a) => llmGemini({
+      prompt: str(a.prompt || a.text || a.q),
+      model: str(a.model) || undefined,
+      imageUrl: str(a.imageUrl || a.image_url || a.url) || undefined,
+      imageBase64: str(a.imageBase64 || a.image_base64) || undefined,
+      mimeType: str(a.mimeType || a.mime) || undefined
+    })
+  },
+  {
+    name: "llm_xai",
+    description: "Call xAI Grok chat/completions with XAI_API_KEY. Fail-soft if the key is missing. NVIDIA remains default Claw chat.",
+    args: "{\"prompt\":\"Answer briefly\",\"model\":\"grok-4-fast-non-reasoning\"}",
+    when: "Operator named xAI, Grok chat, or wants a Grok completion (not Grok video).",
+    handler: async (a) => llmXai({ prompt: str(a.prompt || a.text || a.q), model: str(a.model) || undefined })
+  },
+  {
+    name: "llm_kimi",
+    description: "Call Moonshot Kimi chat/completions with KIMI_API_KEY. Fail-soft if the key is missing.",
+    args: "{\"prompt\":\"Answer briefly\",\"model\":\"moonshot-v1-auto\"}",
+    when: "Operator named Kimi or Moonshot.",
+    handler: async (a) => llmKimi({ prompt: str(a.prompt || a.text || a.q), model: str(a.model) || undefined })
+  },
+  {
+    name: "openai_chat",
+    description: "Call OpenAI chat/completions with OPENAI_API_KEY. Optional path — NVIDIA remains default Claw chat. Fail-soft if unconfigured.",
+    args: "{\"prompt\":\"Answer briefly\",\"model\":\"gpt-4o-mini\"}",
+    when: "Operator named OpenAI or GPT chat.",
+    handler: async (a) => openaiChat({ prompt: str(a.prompt || a.text || a.q), model: str(a.model) || undefined })
+  },
+  {
+    name: "openai_embed",
+    description: "Create an OpenAI embedding (text-embedding-3-small default). Uses OPENAI_EMBEDDINGS_API_KEY when set, else OPENAI_API_KEY. Fail-soft if neither is present.",
+    args: "{\"text\":\"chunk to embed\"}",
+    when: "Need a vector for Pinecone or local retrieval. Pair with pinecone_query / pinecone_upsert.",
+    handler: async (a) => openaiEmbed({ text: str(a.text || a.input || a.prompt), model: str(a.model) || undefined })
+  },
+  {
+    name: "pinecone_query",
+    description: "Query Pinecone, or list indexes when no vector/text is passed. text= embeds via openai_embed first. BOS / Book of Secrets stays Brain bos_memory — this is the local vector path. Fail-soft if PINECONE_API_KEY is missing.",
+    args: "{\"text\":\"Trinity gate\",\"topK\":5}",
+    when: "Operator asks to search Pinecone or local vectors. Do not substitute this for bos_memory.",
+    handler: async (a) => pineconeQuery({
+      vector: Array.isArray(a.vector) ? a.vector.map(Number) : undefined,
+      text: str(a.text || a.query || a.q) || undefined,
+      topK: a.topK == null ? undefined : num(a.topK, 5),
+      namespace: str(a.namespace) || undefined,
+      includeMetadata: a.includeMetadata !== false
+    })
+  },
+  {
+    name: "pinecone_upsert",
+    description: "Upsert one Pinecone vector. text= embeds via openai_embed. Requires PINECONE_API_KEY and an index host (PINECONE_INDEX_HOST or PINECONE_INDEX). Write only if the operator asked.",
+    args: "{\"id\":\"note-1\",\"text\":\"remember this\"}",
+    when: "Operator asked to store a vector in Pinecone. Not a BOS write.",
+    handler: async (a) => pineconeUpsert({
+      id: str(a.id || a.vectorId),
+      vector: Array.isArray(a.vector) ? a.vector.map(Number) : undefined,
+      text: str(a.text || a.metadata_text) || undefined,
+      metadata: a.metadata,
+      namespace: str(a.namespace) || undefined
+    })
   },
   {
     name: "helicone_status",
