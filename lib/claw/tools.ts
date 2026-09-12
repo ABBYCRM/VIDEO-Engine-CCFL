@@ -173,13 +173,14 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "bos_memory",
-    description: "Retrieve or write BOS / Book of Secrets memory on Aion-Brain. Retrieve: GET /api/memory/bos?q=. Write (only if the operator asked): POST /api/memory/bos into bos-omega.sqlite Continuity. Do not invent BOS facts.",
+    description: "Retrieve or write durable BOS / Book of Secrets memory. First-class CCFL route GET/POST /api/memory/bos proxies Aion-Brain with AION_BASE_URL + X-AION-Key. This tool uses the same aionBosMemory helper (Brain GET/POST /api/memory/bos → bos-omega.sqlite Continuity). Write only if the operator asked. Do not invent BOS facts.",
     args: "{\"query\":\"Trinity GO HOLD ABORT\",\"write\":false}",
     when: "Any BOS, Book of Secrets, canon, continuity, or operator-memory question. Retrieve first.",
     handler: async (a, context) => {
       const query = str(a.query || a.q || a.text || a.prompt);
       const write = a.write === true || a.op === "write";
       if (!query) return { ok: false, trinity: "HOLD", error: "query is required" };
+      // Same helper as app/api/memory/bos — Brain directly, no local store.
       return aionBosMemory({ query, write, text: query, title: str(a.title) || "operator-note", topK: num(a.topK, 6) }, context);
     }
   },
