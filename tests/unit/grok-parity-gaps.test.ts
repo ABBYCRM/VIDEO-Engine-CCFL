@@ -6,6 +6,7 @@ import { executeClawTool, CLAW_TOOL_NAMES } from "../../lib/claw/tools.ts";
 import { aionBosMemory, aionRoutines, aionDecision } from "../../lib/claw/aion.ts";
 import { POST as decisionPost } from "../../app/api/decision/route.ts";
 import { GET as connectorsGet } from "../../app/api/connectors/route.ts";
+import { GET as bosGet, POST as bosPost } from "../../app/api/memory/bos/route.ts";
 
 const originalFetch = globalThis.fetch;
 const previousUrl = process.env.AION_BASE_URL;
@@ -104,6 +105,50 @@ describe("first-class Brain BOS / routines / Trinity", () => {
     assert.deepEqual(calls[0].body, { text: "remember this", title: "operator-note" });
   });
 
+  it("GET /api/memory/bos?q=Trinity proxies Brain with X-AION-Key", async () => {
+    const res = await bosGet(new Request("http://local/api/memory/bos?q=Trinity"));
+    const json = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(json.ok, true);
+    assert.equal(json.persist, "bos-omega.sqlite");
+    assert.equal(json.source, "aion-brain");
+    assert.equal(json.owner, "aion-brain");
+    assert.ok(Array.isArray(json.chunks));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, "GET");
+    assert.equal(calls[0].url, "http://aion-brain:10000/api/memory/bos?q=Trinity");
+    assert.equal(calls[0].headers["X-AION-Key"], AION_KEY);
+    assert.ok(!calls.some((c) => c.url.includes("api.cursor.com")));
+  });
+
+  it("POST /api/memory/bos forwards Continuity write to Brain", async () => {
+    const res = await bosPost(new Request("http://local/api/memory/bos", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "remember Trinity gate", title: "operator-note" }),
+    }));
+    const json = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(json.ok, true);
+    assert.equal(json.persist, "bos-omega.sqlite");
+    assert.equal(calls[0].method, "POST");
+    assert.equal(calls[0].url, "http://aion-brain:10000/api/memory/bos");
+    assert.equal(calls[0].headers["X-AION-Key"], AION_KEY);
+    assert.deepEqual(calls[0].body, { text: "remember Trinity gate", title: "operator-note" });
+  });
+
+  it("GET /api/memory/bos without Brain returns 503 HOLD and does not invent a store", async () => {
+    delete process.env.AION_BASE_URL;
+    delete process.env.AION_API_KEY;
+    const res = await bosGet(new Request("http://local/api/memory/bos?q=Trinity"));
+    const json = await res.json();
+    assert.equal(res.status, 503);
+    assert.equal(json.ok, false);
+    assert.equal(json.trinity, "HOLD");
+    assert.equal(json.code, "AION_UNCONFIGURED");
+    assert.equal(calls.length, 0);
+  });
+
   it("routines list/create/pause/resume/delete hit Brain RoutineStore", async () => {
     await executeClawTool("routines", { op: "list" });
     await executeClawTool("routines", { op: "create", name: "nightly", trigger: "morning" });
@@ -156,6 +201,7 @@ describe("Files tray + connectors registry + runtime", () => {
 
   it("ships connectors + decision + routines routes and pages", () => {
     for (const rel of [
+      "app/api/memory/bos/route.ts",
       "app/api/decision/route.ts",
       "app/api/routines/route.ts",
       "app/api/routines/[name]/pause/route.ts",
