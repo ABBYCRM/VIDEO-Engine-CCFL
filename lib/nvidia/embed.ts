@@ -84,8 +84,8 @@ export function isEmbedModelId(v: unknown): v is EmbedModelId {
  * only when explicitly selected so existing installations fail visibly at
  * the upstream instead of being silently rewritten. */
 export function getClawEmbedModel(): EmbedModelId {
-  const raw = process.env.CLAW_EMBED_MODEL || getRaw(EMBED_MODEL_KEY);
-  if (isEmbedModelId(raw)) return raw;
+  const raw = process.env.CLAW_EMBED_MODEL || process.env.BITDEER_EMBED_MODEL || getRaw(EMBED_MODEL_KEY);
+  if (isEmbedModelId(raw)) return LEGACY_TO_BITDEER[raw] || raw;
   return DEFAULT_CLAW_EMBED_MODEL;
 }
 

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import {
   cancelSwarm,
+  cleanupSwarm,
   completeSwarm,
   getSwarm,
   listSwarm,
   messageSwarm,
-  spawnSwarmTask,
+  spawnEphemeralAgent,
   startSwarmRun,
+  stopSwarmTask,
   swarmStatus,
   waitSwarmTask,
 } from "@/lib/swarm";
@@ -55,15 +57,40 @@ export async function POST(req: Request) {
       return NextResponse.json(result, { status: 202 });
     }
     if (op === "spawn") {
-      const result = spawnSwarmTask({
+      const result = spawnEphemeralAgent({
         runId: body.runId || body.id,
+        goal: String(body.goal || body.objective || body.task || ""),
+        context: body.context,
+        tools: body.tools,
+        successCriteria: body.successCriteria ?? body.criteria,
+        label: body.label,
+        preset: body.preset || body.role,
         role: body.role,
-        objective: String(body.objective || body.task || body.goal || ""),
-        dependsOn: body.dependsOn,
+        runner: body.runner === "aion" ? "aion" : "local",
         urls: body.urls,
+        dependsOn: body.dependsOn,
+        parentId: body.parentId,
+        ephemeral: body.ephemeral,
       });
       if (!result.ok) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result, { status: 202 });
+    }
+    if (op === "stop") {
+      const result = stopSwarmTask({
+        runId: String(body.runId || body.id || ""),
+        taskId: String(body.taskId || ""),
+      });
+      if (!result.ok) return NextResponse.json(result, { status: 400 });
+      return NextResponse.json(result);
+    }
+    if (op === "cleanup") {
+      const result = cleanupSwarm({
+        runId: String(body.runId || body.id || ""),
+        taskId: body.taskId ? String(body.taskId) : undefined,
+        deleteRun: body.deleteRun === true,
+      });
+      if (!result.ok) return NextResponse.json(result, { status: 400 });
+      return NextResponse.json(result);
     }
     if (op === "wait") {
       const result = await waitSwarmTask({
@@ -92,7 +119,7 @@ export async function POST(req: Request) {
       if (!run) return NextResponse.json({ ok: false, error: "Unknown run" }, { status: 404 });
       return NextResponse.json({ ok: true, run });
     }
-    return NextResponse.json({ ok: false, error: "unknown op. Use status, list, get, create, spawn, wait, message, complete, cancel." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "unknown op. Use status, list, get, create, spawn, wait, message, stop, cleanup, complete, cancel." }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "swarm failed" }, { status: 500 });
   }

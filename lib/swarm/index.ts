@@ -7,9 +7,13 @@ export {
   getSwarm,
   listSwarm,
   spawnSwarmTask,
+  spawnEphemeralAgent,
+  stopSwarmTask,
+  cleanupSwarm,
   waitSwarmTask,
   messageSwarm,
   completeSwarm,
   resumeOpenSwarm,
 } from "./supervisor";
+export { parseSpawnSpec, buildTaskBrief } from "./spawn";
 export { parseLimits, defaultPlan, validatePlan, guardFetchUrl, sanitizeObjective } from "./policy";

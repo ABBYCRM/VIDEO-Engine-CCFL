@@ -19,6 +19,8 @@ function task(partial: Partial<SwarmTask> & Pick<SwarmTask, "id" | "role" | "obj
     usage: { promptTokens: 0, completionTokens: 0, calls: 0 },
     startedAt: null,
     completedAt: null,
+    brief: null,
+    cleanedUpAt: null,
     ...partial,
   };
 }

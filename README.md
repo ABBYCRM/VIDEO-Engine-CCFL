@@ -61,9 +61,19 @@ Open `/computer` for the live screen.
 
 ## Claw Swarm
 
-Grok-style multi-agent runtime: supervisor, planner, durable SQLite tasks, in-process workers, leader synthesis. Bitdeer routes planner/critic/leader to Mistral Large 3 675B and researchers to GLM-5. Caps: 4 agents, depth 2, 8 LLM calls. Does not steal Computer Chrome or Forge sessions. Does not farm CAPTCHAs.
+Default path is **dynamic on-spot spawn** (Grok Task-like): `POST /api/swarm` `op=spawn` with `goal`, optional `context`, `tools`, `successCriteria`. Workers are ephemeral `role=worker` unless you pass an optional preset (`researcher` / `critic` / `synthesizer`). Parallel spawn, `swarm_message` steer, `swarm_stop` one wedged worker, then cleanup. `swarm_run` remains the optional planner DAG.
 
-Open `/swarm`. Claw tools: `swarm_run`, `swarm_status`, `swarm_cancel`. NATS / managed Postgres / DOKS is the scale-up path; this node uses SQLite because Computer and Forge already share the App Platform instance.
+Open `/swarm`. Claw tools: `swarm_spawn`, `swarm_wait`, `swarm_message`, `swarm_stop`, `swarm_status`, `swarm_run` (preset). Optional `runner=aion` sends that worker through Aion-Brain `POST /api/claw/execute`.
+
+## Cursor Cloud Agents (via Aion-Brain)
+
+Aion-Brain **owns** Cursor (`lib/cursor_cloud.js`). CCFL only proxies:
+
+- Non-trivial repo work → Claw `cursor_launch` → Brain `POST /api/cursor/launch`. Dynamic, not a prefab menu. Not inline heavy coding.
+- Handshake: `AION_BASE_URL` + `AION_API_KEY` (`X-AION-Key`). `CURSOR_API_KEY` stays on Brain (name in `.env.example` for co-host only).
+- Missing Brain or Brain missing the key → Trinity **HOLD**.
+- `cursor_status` / `cursor_reply` / `cursor_cancel` map to Brain `/api/cursor/:id`, `.../reply`, `.../cancel`.
+- `POST /api/agent/run` stays `aion_execute`. See `docs/CURSOR_CLOUD_AGENTS.md`.
 
 ## Local setup
 

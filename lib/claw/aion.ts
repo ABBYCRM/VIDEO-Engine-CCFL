@@ -327,3 +327,159 @@ export async function aionTool(name: unknown, args: unknown, context: AionContex
   const response = await request(`/api/claw/tools/${tool}`, context, args && typeof args === "object" ? args : {});
   return response.json();
 }
+
+/** Cursor Cloud Agents — Brain owns lib/cursor_cloud.js. CCFL only forwards. */
+export type AionCursorResult = {
+  ok: boolean;
+  source: "aion-brain" | "ccfl-proxy";
+  owner: "aion-brain";
+  trinity: "GO" | "HOLD" | "ABORT";
+  tool?: string;
+  error?: string;
+  env?: string;
+  detail?: string;
+  hint?: string;
+  code?: string;
+  evidence?: { agent?: unknown; run?: unknown; items?: unknown; count?: number; nextCursor?: unknown };
+  status?: number;
+};
+
+function cursorId(raw: unknown): string {
+  const id = String(raw || "").trim();
+  if (!id || id.length > 128 || /[/?#]/.test(id)) return "";
+  return id;
+}
+
+function aionMissingCursor(): AionCursorResult {
+  return {
+    ok: false,
+    source: "ccfl-proxy",
+    owner: "aion-brain",
+    trinity: "HOLD",
+    error: "Aion-Brain is not configured.",
+    code: "AION_UNCONFIGURED",
+    hint: "Set AION_BASE_URL and AION_API_KEY. Brain owns Cursor (CURSOR_API_KEY on the Brain host, or on this box only if Brain is co-hosted). Do not invent a local Cursor client.",
+  };
+}
+
+function sanitizeCursorEvidence(raw: unknown): AionCursorResult["evidence"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const e = raw as Record<string, unknown>;
+  return {
+    agent: e.agent && typeof e.agent === "object" ? e.agent : undefined,
+    run: e.run && typeof e.run === "object" ? e.run : undefined,
+    items: Array.isArray(e.items) ? e.items.slice(0, 50) : undefined,
+    count: typeof e.count === "number" ? e.count : undefined,
+    nextCursor: typeof e.nextCursor === "string" ? e.nextCursor : undefined,
+  };
+}
+
+async function aionCursorHttp(
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  context: AionContext = {},
+): Promise<AionCursorResult> {
+  if (!isAionConfigured()) return aionMissingCursor();
+  const { origin, key } = config();
+  const timeout = AbortSignal.timeout(30_000);
+  const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
+  try {
+    const response = await fetch(origin + path, {
+      method,
+      headers: { "X-AION-Key": key, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      redirect: "error",
+      cache: "no-store",
+      signal,
+    });
+    const json = await response.json().catch(() => ({})) as Record<string, unknown>;
+    const error = asString(json.error);
+    const unconfigured = Boolean(error && /unconfigured/i.test(error));
+    const trinity: AionCursorResult["trinity"] = json.ok === true ? "GO" : unconfigured ? "HOLD" : response.status === 401 || response.status === 403 ? "ABORT" : "HOLD";
+    return {
+      ok: json.ok === true,
+      source: "aion-brain",
+      owner: "aion-brain",
+      trinity,
+      tool: asString(json.tool),
+      error: error,
+      env: asString(json.env),
+      detail: asString(json.detail)?.slice(0, 240),
+      hint: unconfigured
+        ? "Brain is missing CURSOR_API_KEY. Set that env name on the Aion-Brain host (same DigitalOcean secret name). Never paste the value."
+        : undefined,
+      code: unconfigured ? "MISSING_KEY" : error,
+      evidence: sanitizeCursorEvidence(json.evidence),
+      status: response.status,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      source: "ccfl-proxy",
+      owner: "aion-brain",
+      trinity: "HOLD",
+      error: /abort|timeout/i.test(message) ? "Aion-Brain cursor proxy timed out" : "Aion-Brain cursor proxy failed",
+      code: /abort|timeout/i.test(message) ? "TIMEOUT" : "TRANSPORT",
+      hint: "Check AION_BASE_URL reachability. Do not fall back to a local Cursor stub.",
+    };
+  }
+}
+
+export async function aionCursorLaunch(input: {
+  prompt?: string;
+  repo?: string;
+  repository?: string;
+  repos?: unknown;
+  branch?: string;
+  startingRef?: string;
+  name?: string;
+  model?: unknown;
+  autoCreatePR?: boolean;
+  workOnCurrentBranch?: boolean;
+  mode?: string;
+}, context: AionContext = {}) {
+  const prompt = String(input.prompt || "").trim();
+  if (!prompt) {
+    return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "prompt_required", code: "BAD_ARGS", tool: "cursor_launch" };
+  }
+  return aionCursorHttp("POST", "/api/cursor/launch", {
+    prompt,
+    repository: input.repository || input.repo,
+    repos: input.repos,
+    branch: input.branch,
+    startingRef: input.startingRef,
+    name: input.name,
+    model: input.model,
+    autoCreatePR: input.autoCreatePR,
+    workOnCurrentBranch: input.workOnCurrentBranch,
+    mode: input.mode,
+  }, context);
+}
+
+export async function aionCursorStatus(input: { id?: string; runId?: string; limit?: number; cursor?: string } = {}, context: AionContext = {}) {
+  const id = cursorId(input.id);
+  if (!id) {
+    const q = new URLSearchParams();
+    if (input.limit) q.set("limit", String(input.limit));
+    if (input.cursor) q.set("cursor", String(input.cursor));
+    return aionCursorHttp("GET", `/api/cursor${q.toString() ? `?${q}` : ""}`, undefined, context);
+  }
+  const q = input.runId ? `?runId=${encodeURIComponent(input.runId)}` : "";
+  return aionCursorHttp("GET", `/api/cursor/${encodeURIComponent(id)}${q}`, undefined, context);
+}
+
+export async function aionCursorReply(input: { id?: string; prompt?: string; mode?: string }, context: AionContext = {}) {
+  const id = cursorId(input.id);
+  const prompt = String(input.prompt || "").trim();
+  if (!id) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "id_required", code: "BAD_ARGS", tool: "cursor_reply" };
+  if (!prompt) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "prompt_required", code: "BAD_ARGS", tool: "cursor_reply" };
+  return aionCursorHttp("POST", `/api/cursor/${encodeURIComponent(id)}/reply`, { prompt, mode: input.mode }, context);
+}
+
+export async function aionCursorCancel(input: { id?: string; runId?: string }, context: AionContext = {}) {
+  const id = cursorId(input.id);
+  if (!id) return { ok: false, source: "ccfl-proxy" as const, owner: "aion-brain" as const, trinity: "HOLD" as const, error: "id_required", code: "BAD_ARGS", tool: "cursor_cancel" };
+  return aionCursorHttp("POST", `/api/cursor/${encodeURIComponent(id)}/cancel`, { runId: input.runId }, context);
+}

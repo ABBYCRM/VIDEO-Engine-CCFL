@@ -179,6 +179,24 @@ test("acceptance helpers stay on documented brain tools", () => {
   assert.deepEqual(aionAcceptanceForGoal("run osint on the subject"), []);
   assert.deepEqual(sanitizeAionToolResults([{ tool: "datetime", ok: true, id: "t1" }]), [{ name: "datetime", ok: true, evidence_id: "t1" }]);
 });
+test("cursor proxy forwards launch to Brain /api/cursor/launch with X-AION-Key and never hits api.cursor.com", async () => {
+  const { aionCursorLaunch } = await import("../../lib/claw/aion.ts");
+  let seen = "";
+  globalThis.fetch = async (url, options) => {
+    seen = String(url);
+    assert.equal((options?.headers as Record<string, string>)["X-AION-Key"], "test-only-key");
+    assert.equal(options?.redirect, "error");
+    const body = JSON.parse(String(options?.body));
+    assert.equal(body.prompt, "land the fix");
+    assert.ok(!seen.includes("api.cursor.com"));
+    return Response.json({ ok: true, source: "aion-brain", tool: "cursor_launch", evidence: { agent: { id: "bc-1" }, run: { id: "run-1" } } }, { status: 202 });
+  };
+  const result = await aionCursorLaunch({ prompt: "land the fix", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" });
+  assert.equal(seen, "http://aion-brain:10000/api/cursor/launch");
+  assert.equal(result.ok, true);
+  assert.equal(result.source, "aion-brain");
+  assert.equal(result.trinity, "GO");
+});
 test("n8n bridge forwards exact read/write arguments to Aion's actual tool route", async () => {
   globalThis.fetch=async(url,options)=>{
     assert.equal(url,"http://aion-brain:10000/api/tools/n8n_aura");

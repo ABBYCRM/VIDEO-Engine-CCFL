@@ -4,10 +4,16 @@ import { planTasks } from "./planner";
 import {
   activeRunCount,
   appendEvent,
-  claimTask,
+  abortTaskController,
+  cancelOneTask,
+  cleanupTask,
   createRunRecord,
+  deleteRunRecord,
+  claimTask,
   getController,
   getRun,
+  getTask,
+  getTaskController,
   getTasks,
   heartbeatTask,
   insertTask,
@@ -25,6 +31,7 @@ import {
   snapshot,
   swarmStoreStatus,
 } from "./store";
+import { buildTaskBrief, parseSpawnSpec } from "./spawn";
 import { hydrateSwarmFromPg } from "./pg-mirror";
 import { collectUpstream, runWorker } from "./worker";
 import type { ModelGateway, PublicSwarmRun, SwarmLimits } from "./types";
@@ -43,7 +50,7 @@ export function swarmStatus(gateway?: ModelGateway) {
     store: swarmStoreStatus(),
     active: activeRunCount(),
     cap: SWARM_MAX_CONCURRENT_RUNS,
-    note: "Computer keeps its Chrome. Forge keeps its lab. Swarm is planner + workers + leader.",
+    note: "Default path is ad-hoc spawn (goal + context + tools + criteria). Planner DAG is an optional preset. Computer keeps Chrome. Forge keeps its lab.",
   };
 }
 
@@ -98,7 +105,91 @@ function nid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 }
 
-const WORKER_ROLES = ["researcher", "critic", "synthesizer"] as const;
+export function spawnEphemeralAgent(input: {
+  goal?: string;
+  objective?: string;
+  task?: string;
+  context?: string;
+  tools?: unknown;
+  successCriteria?: unknown;
+  criteria?: unknown;
+  label?: string;
+  urls?: string[];
+  dependsOn?: string[];
+  parentId?: string;
+  runId?: string;
+  preset?: string;
+  role?: string;
+  runner?: "local" | "aion";
+  ephemeral?: boolean;
+  gateway?: ModelGateway;
+}): { ok: true; run: PublicSwarmRun; taskId: string; brief: ReturnType<typeof buildTaskBrief> } | { ok: false; error: string } {
+  const parsed = parseSpawnSpec(input);
+  if (!parsed.ok) return parsed;
+  const spec = parsed.spec;
+  const objective = sanitizeObjective(spec.goal);
+  if (!objective.ok) return objective;
+  const gw = input.gateway ?? productionGateway();
+  if (!gw.available) return { ok: false, error: gw.note };
+
+  const brief = buildTaskBrief(spec);
+  const role = brief.preset ?? "worker";
+
+  let runId = spec.runId;
+  if (!runId) {
+    const openLed = listOpenRuns().find((r) => r.limits.mode === "led");
+    if (openLed) {
+      runId = openLed.id;
+    } else {
+      if (activeRunCount() >= SWARM_MAX_CONCURRENT_RUNS) {
+        return { ok: false, error: "A swarm is already running. Pass that runId to spawn onto it, or cancel it." };
+      }
+      const run = createRunRecord(objective.objective, parseLimits({ mode: "led", maxAgents: 8, maxLlmCalls: 16 }), gw.note);
+      runId = run.id;
+      const createdId = run.id;
+      void executeRun(createdId, gw).catch((e) => {
+        const message = e instanceof Error ? e.message : "swarm failed";
+        try {
+          patchRun(createdId, { status: "failed", error: message, completedAt: Date.now() });
+          appendEvent(createdId, null, "run.failed", { error: message });
+        } catch {
+          /* gone */
+        }
+      });
+    }
+  }
+
+  if (!runId) return { ok: false, error: "Failed to open a spawn session" };
+  const live = getRun(runId);
+  if (!live) return { ok: false, error: "Unknown run" };
+  if (["completed", "failed", "cancelled"].includes(live.status)) {
+    return { ok: false, error: "Run is closed. Spawn again without runId to start a new ephemeral session." };
+  }
+  const existing = getTasks(runId).filter((t) => !t.cleanedUpAt);
+  if (existing.length >= live.limits.maxAgents) {
+    return { ok: false, error: `max agents (${live.limits.maxAgents}) reached` };
+  }
+  const task = insertTask(
+    runId,
+    {
+      id: nid(brief.label.replace(/[^a-z0-9]+/gi, "").slice(0, 3) || "wrk"),
+      role,
+      objective: objective.objective,
+      dependsOn: spec.dependsOn,
+      urls: spec.urls,
+      brief,
+    },
+    gw.name,
+    routeLabel(role),
+  );
+  appendEvent(runId, task.id, "task.spawned.adhoc", { role, label: brief.label });
+  if (brief.runner === "aion") {
+    void runAionWorker(runId, task.id, gw).catch(() => undefined);
+  } else if (!executing.has(runId)) {
+    void executeRun(runId, gw).catch(() => undefined);
+  }
+  return { ok: true, run: snapshot(runId)!, taskId: task.id, brief };
+}
 
 export function spawnSwarmTask(input: {
   runId?: string;
@@ -106,58 +197,109 @@ export function spawnSwarmTask(input: {
   objective: string;
   dependsOn?: string[];
   urls?: string[];
+  context?: string;
+  tools?: unknown;
+  successCriteria?: unknown;
+  label?: string;
+  runner?: "local" | "aion";
   gateway?: ModelGateway;
 }): { ok: true; run: PublicSwarmRun; taskId: string } | { ok: false; error: string } {
-  const objective = sanitizeObjective(input.objective);
-  if (!objective.ok) return objective;
-  const roleRaw = String(input.role || "researcher").toLowerCase();
-  const role = (WORKER_ROLES as readonly string[]).includes(roleRaw) ? (roleRaw as (typeof WORKER_ROLES)[number]) : "researcher";
-  const gw = input.gateway ?? productionGateway();
-  if (!gw.available) return { ok: false, error: gw.note };
+  const spawned = spawnEphemeralAgent({
+    goal: input.objective,
+    runId: input.runId,
+    role: input.role,
+    preset: input.role,
+    dependsOn: input.dependsOn,
+    urls: input.urls,
+    context: input.context,
+    tools: input.tools,
+    successCriteria: input.successCriteria,
+    label: input.label,
+    runner: input.runner,
+    gateway: input.gateway,
+  });
+  if (!spawned.ok) return spawned;
+  return { ok: true, run: spawned.run, taskId: spawned.taskId };
+}
 
-  let runId = String(input.runId || "").trim();
-  if (!runId) {
-    if (activeRunCount() >= SWARM_MAX_CONCURRENT_RUNS) {
-      return { ok: false, error: "A swarm is already running. Spawn onto that runId or cancel it." };
-    }
-    const run = createRunRecord(objective.objective, parseLimits({ mode: "led", maxAgents: 4 }), gw.note);
-    runId = run.id;
-    void executeRun(runId, gw).catch((e) => {
-      const message = e instanceof Error ? e.message : "swarm failed";
-      try {
-        patchRun(runId, { status: "failed", error: message, completedAt: Date.now() });
-        appendEvent(runId, null, "run.failed", { error: message });
-      } catch {
-        /* gone */
-      }
+export function stopSwarmTask(input: {
+  runId: string;
+  taskId: string;
+}): { ok: true; run: PublicSwarmRun | null; taskId: string } | { ok: false; error: string } {
+  const runId = String(input.runId || "").trim();
+  const taskId = String(input.taskId || "").trim();
+  if (!runId || !taskId) return { ok: false, error: "runId and taskId are required" };
+  if (!getRun(runId)) return { ok: false, error: "Unknown run" };
+  const task = cancelOneTask(runId, taskId);
+  if (!task) return { ok: false, error: "Unknown task" };
+  return { ok: true, run: snapshot(runId), taskId };
+}
+
+export function cleanupSwarm(input: {
+  runId: string;
+  taskId?: string;
+  deleteRun?: boolean;
+}): { ok: true; run: PublicSwarmRun | null; deleted?: boolean } | { ok: false; error: string } {
+  const runId = String(input.runId || "").trim();
+  if (!runId) return { ok: false, error: "runId is required" };
+  const run = getRun(runId);
+  if (!run) return { ok: false, error: "Unknown run" };
+  if (input.taskId) {
+    const task = cleanupTask(runId, String(input.taskId));
+    if (!task) return { ok: false, error: "Unknown task" };
+    return { ok: true, run: snapshot(runId) };
+  }
+  for (const task of getTasks(runId)) {
+    if (task.brief?.ephemeral !== false) cleanupTask(runId, task.id);
+  }
+  if (input.deleteRun || (run.limits.mode === "led" && ["completed", "failed", "cancelled"].includes(run.status))) {
+    deleteRunRecord(runId);
+    return { ok: true, run: null, deleted: true };
+  }
+  return { ok: true, run: snapshot(runId) };
+}
+
+async function runAionWorker(runId: string, taskId: string, gateway: ModelGateway) {
+  const task = getTask(runId, taskId);
+  if (!task) return;
+  patchTask(runId, taskId, { state: "running", startedAt: Date.now(), model: "aion-brain" });
+  appendEvent(runId, taskId, "task.started", { role: task.role, via: "aion" });
+  try {
+    const { aionExecute, aionAcceptanceForGoal, isAionConfigured } = await import("@/lib/claw/aion");
+    if (!isAionConfigured()) throw new Error("Aion-Brain is not configured (AION_BASE_URL + AION_API_KEY).");
+    const acceptance = (task.brief?.successCriteria || []).map((description, i) => ({
+      id: `c${i + 1}`,
+      description,
+    }));
+    const ran = await aionExecute({
+      goal: [task.objective, task.brief?.context ? `Context: ${task.brief.context}` : ""].filter(Boolean).join("\n\n"),
+      acceptance: acceptance.length ? acceptance : aionAcceptanceForGoal(task.objective),
+      sessionId: `swarm:${runId}:${taskId}`,
+      maxCycles: 8,
     });
+    const text = [
+      ran.answer,
+      ran.previous_tool_results.length
+        ? `previous_tool_results: ${JSON.stringify(ran.previous_tool_results)}`
+        : "",
+    ].filter(Boolean).join("\n\n");
+    patchTask(runId, taskId, {
+      state: ran.status === "BLOCKED" ? "failed" : "completed",
+      result: text || ran.status,
+      evidence: ran.previous_tool_results.map((r) => `${r.name}:${r.ok}:${r.preview || r.evidence_id || ""}`),
+      provider: "aion-brain",
+      model: "aion-brain",
+      completedAt: Date.now(),
+      error: ran.status === "BLOCKED" ? "Aion execute blocked" : null,
+    });
+    saveTaskResult(runId, taskId, ran.status === "BLOCKED" ? "failed" : "succeeded", text, ran);
+    appendEvent(runId, taskId, ran.status === "BLOCKED" ? "task.failed" : "task.completed", { role: task.role, via: "aion" });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "aion worker failed";
+    patchTask(runId, taskId, { state: "failed", error: message, completedAt: Date.now() });
+    appendEvent(runId, taskId, "task.failed", { error: message, via: "aion" });
   }
-
-  const live = getRun(runId);
-  if (!live) return { ok: false, error: "Unknown run" };
-  if (["completed", "failed", "cancelled"].includes(live.status)) {
-    return { ok: false, error: "Run is closed. Start a new swarm." };
-  }
-  const existing = getTasks(runId);
-  if (existing.length >= live.limits.maxAgents) {
-    return { ok: false, error: `max agents (${live.limits.maxAgents}) reached` };
-  }
-  const task = insertTask(
-    runId,
-    {
-      id: nid(role.slice(0, 3)),
-      role,
-      objective: objective.objective,
-      dependsOn: Array.isArray(input.dependsOn) ? input.dependsOn.map(String).slice(0, 4) : [],
-      urls: Array.isArray(input.urls) ? input.urls.map(String).slice(0, 3) : [],
-    },
-    gw.name,
-    routeLabel(role),
-  );
-  if (!executing.has(runId)) {
-    void executeRun(runId, gw).catch(() => undefined);
-  }
-  return { ok: true, run: snapshot(runId)!, taskId: task.id };
+  void gateway;
 }
 
 export async function waitSwarmTask(input: {
@@ -311,9 +453,12 @@ export async function executeRun(runId: string, gateway: ModelGateway) {
         work.map(async (task) => {
           const live = getRun(runId);
           if (!live || live.status === "cancelled" || live.status === "cancelling" || signal?.aborted) return;
+          if (task.brief?.runner === "aion") return;
           const owner = `web-${process.pid}-${task.id}`;
           if (!claimTask(runId, task.id, owner)) return;
           heartbeatTask(runId, task.id);
+          const taskSignal = getTaskController(runId, task.id).signal;
+          const combined = signal ? AbortSignal.any([signal, taskSignal]) : taskSignal;
           patchTask(runId, task.id, {
             state: "running",
             attempt: task.attempt + 1,
@@ -332,11 +477,11 @@ export async function executeRun(runId: string, gateway: ModelGateway) {
               .filter(Boolean)
               .join("\n\n");
             const result = await runWorker({
-              task: { ...task, attempt: task.attempt + 1 },
+              task: { ...getTask(runId, task.id)!, attempt: task.attempt + 1 },
               upstream,
               gateway,
               remainingFetches: fetchesLeft,
-              signal,
+              signal: combined,
             });
             fetchesLeft = Math.max(0, fetchesLeft - result.fetchesUsed);
             const latest = getRun(runId)!;
@@ -358,8 +503,9 @@ export async function executeRun(runId: string, gateway: ModelGateway) {
             }
           } catch (e) {
             const message = e instanceof Error ? e.message : "worker failed";
-            if (signal?.aborted) {
-              patchTask(runId, task.id, { state: "cancelled", error: "Cancelled", completedAt: Date.now() });
+            if (signal?.aborted || taskSignal.aborted || getTask(runId, task.id)?.state === "cancelled") {
+              patchTask(runId, task.id, { state: "cancelled", error: "Stopped", completedAt: Date.now() });
+              abortTaskController(runId, task.id);
               return;
             }
             const attempt = task.attempt + 1;

@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { emptyUsage } from "./policy";
 import { queueSwarmMirror } from "./pg-mirror";
-import type { PlannedTask, PublicSwarmRun, SwarmEvent, SwarmLimits, SwarmMessage, SwarmRun, SwarmTask } from "./types";
+import type { PlannedTask, PublicSwarmRun, SwarmEvent, SwarmLimits, SwarmMessage, SwarmRun, SwarmTask, TaskBrief } from "./types";
 
 const controllers = new Map<string, AbortController>();
+const taskControllers = new Map<string, AbortController>();
+
+function taskAbortKey(runId: string, taskId: string) {
+  return `${runId}:${taskId}`;
+}
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS swarm_runs (
@@ -77,6 +82,8 @@ CREATE TABLE IF NOT EXISTS swarm_task_results (
 
 try { db.exec("ALTER TABLE swarm_tasks ADD COLUMN lease_owner TEXT"); } catch { /* exists */ }
 try { db.exec("ALTER TABLE swarm_tasks ADD COLUMN lease_until INTEGER"); } catch { /* exists */ }
+try { db.exec("ALTER TABLE swarm_tasks ADD COLUMN brief_json TEXT"); } catch { /* exists */ }
+try { db.exec("ALTER TABLE swarm_tasks ADD COLUMN cleaned_up_at INTEGER"); } catch { /* exists */ }
 
 type RunRow = {
   id: string;
@@ -111,7 +118,20 @@ type TaskRow = {
   usage_json: string;
   started_at: number | null;
   completed_at: number | null;
+  brief_json?: string | null;
+  cleaned_up_at?: number | null;
 };
+
+function parseBrief(raw: string | null | undefined): TaskBrief | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as TaskBrief;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 function now() {
   return Date.now();
@@ -157,6 +177,8 @@ function taskFromRow(row: TaskRow): SwarmTask {
     usage: JSON.parse(row.usage_json),
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    brief: parseBrief(row.brief_json),
+    cleanedUpAt: row.cleaned_up_at ?? null,
   };
 }
 
@@ -211,6 +233,21 @@ export function getController(runId: string): AbortController | undefined {
   return controllers.get(runId);
 }
 
+export function getTaskController(runId: string, taskId: string): AbortController {
+  const key = taskAbortKey(runId, taskId);
+  const existing = taskControllers.get(key);
+  if (existing) return existing;
+  const created = new AbortController();
+  taskControllers.set(key, created);
+  return created;
+}
+
+export function abortTaskController(runId: string, taskId: string) {
+  const key = taskAbortKey(runId, taskId);
+  taskControllers.get(key)?.abort();
+  taskControllers.delete(key);
+}
+
 export function getRun(runId: string): SwarmRun | undefined {
   const row = db.prepare("SELECT * FROM swarm_runs WHERE id = ?").get(runId) as RunRow | undefined;
   return row ? runFromRow(row) : undefined;
@@ -260,6 +297,8 @@ export function snapshot(runId: string): PublicSwarmRun | null {
       usage: t.usage,
       startedAt: t.startedAt,
       completedAt: t.completedAt,
+      brief: t.brief,
+      cleanedUpAt: t.cleanedUpAt,
     })),
     events: getEvents(runId).slice(-80),
   };
@@ -291,8 +330,8 @@ export function patchRun(runId: string, patch: Partial<SwarmRun>): SwarmRun {
 
 export function seedTasks(runId: string, planned: PlannedTask[], provider: string, model: string): SwarmTask[] {
   const insert = db.prepare(
-    `INSERT INTO swarm_tasks (id, run_id, parent_id, role, objective, depends_json, urls_json, state, attempt, provider, model, result, evidence_json, error, usage_json, started_at, completed_at)
-     VALUES (@id, @run_id, @parent_id, @role, @objective, @depends_json, @urls_json, @state, @attempt, @provider, @model, @result, @evidence_json, @error, @usage_json, @started_at, @completed_at)`,
+    `INSERT INTO swarm_tasks (id, run_id, parent_id, role, objective, depends_json, urls_json, state, attempt, provider, model, result, evidence_json, error, usage_json, started_at, completed_at, brief_json, cleaned_up_at)
+     VALUES (@id, @run_id, @parent_id, @role, @objective, @depends_json, @urls_json, @state, @attempt, @provider, @model, @result, @evidence_json, @error, @usage_json, @started_at, @completed_at, @brief_json, @cleaned_up_at)`,
   );
   const rows: SwarmTask[] = [];
   const tx = db.transaction(() => {
@@ -315,6 +354,8 @@ export function seedTasks(runId: string, planned: PlannedTask[], provider: strin
         usage: emptyUsage(),
         startedAt: null,
         completedAt: null,
+        brief: p.brief ?? null,
+        cleanedUpAt: null,
       };
       insert.run({
         id: task.id,
@@ -334,6 +375,8 @@ export function seedTasks(runId: string, planned: PlannedTask[], provider: strin
         usage_json: JSON.stringify(task.usage),
         started_at: task.startedAt,
         completed_at: task.completedAt,
+        brief_json: task.brief ? JSON.stringify(task.brief) : null,
+        cleaned_up_at: task.cleanedUpAt,
       });
       rows.push(task);
     }
@@ -362,10 +405,12 @@ export function insertTask(runId: string, planned: PlannedTask, provider: string
     usage: emptyUsage(),
     startedAt: null,
     completedAt: null,
+    brief: planned.brief ?? null,
+    cleanedUpAt: null,
   };
   db.prepare(
-    `INSERT INTO swarm_tasks (id, run_id, parent_id, role, objective, depends_json, urls_json, state, attempt, provider, model, result, evidence_json, error, usage_json, started_at, completed_at)
-     VALUES (@id, @run_id, @parent_id, @role, @objective, @depends_json, @urls_json, @state, @attempt, @provider, @model, @result, @evidence_json, @error, @usage_json, @started_at, @completed_at)`,
+    `INSERT INTO swarm_tasks (id, run_id, parent_id, role, objective, depends_json, urls_json, state, attempt, provider, model, result, evidence_json, error, usage_json, started_at, completed_at, brief_json, cleaned_up_at)
+     VALUES (@id, @run_id, @parent_id, @role, @objective, @depends_json, @urls_json, @state, @attempt, @provider, @model, @result, @evidence_json, @error, @usage_json, @started_at, @completed_at, @brief_json, @cleaned_up_at)`,
   ).run({
     id: task.id,
     run_id: task.runId,
@@ -384,9 +429,15 @@ export function insertTask(runId: string, planned: PlannedTask, provider: string
     usage_json: JSON.stringify(task.usage),
     started_at: task.startedAt,
     completed_at: task.completedAt,
+    brief_json: task.brief ? JSON.stringify(task.brief) : null,
+    cleaned_up_at: task.cleanedUpAt,
   });
-  appendEvent(runId, task.id, "task.spawned", { role: task.role });
+  appendEvent(runId, task.id, "task.spawned", { role: task.role, label: task.brief?.label });
   return task;
+}
+
+export function getTask(runId: string, taskId: string): SwarmTask | undefined {
+  return getTasks(runId).find((t) => t.id === taskId);
 }
 
 export function saveTaskResult(runId: string, taskId: string, status: string, summary: string, usage: unknown) {
@@ -438,7 +489,8 @@ export function patchTask(runId: string, taskId: string, patch: Partial<SwarmTas
   db.prepare(
     `UPDATE swarm_tasks SET parent_id=@parent_id, role=@role, objective=@objective, depends_json=@depends_json,
      urls_json=@urls_json, state=@state, attempt=@attempt, provider=@provider, model=@model, result=@result,
-     evidence_json=@evidence_json, error=@error, usage_json=@usage_json, started_at=@started_at, completed_at=@completed_at
+     evidence_json=@evidence_json, error=@error, usage_json=@usage_json, started_at=@started_at, completed_at=@completed_at,
+     brief_json=@brief_json, cleaned_up_at=@cleaned_up_at
      WHERE run_id=@run_id AND id=@id`,
   ).run({
     id: next.id,
@@ -458,8 +510,57 @@ export function patchTask(runId: string, taskId: string, patch: Partial<SwarmTas
     usage_json: JSON.stringify(next.usage),
     started_at: next.startedAt,
     completed_at: next.completedAt,
+    brief_json: next.brief ? JSON.stringify(next.brief) : null,
+    cleaned_up_at: next.cleanedUpAt,
   });
   return next;
+}
+
+export function cancelOneTask(runId: string, taskId: string, reason = "Operator stopped"): SwarmTask | undefined {
+  const task = getTask(runId, taskId);
+  if (!task) return undefined;
+  abortTaskController(runId, taskId);
+  if (["completed", "failed", "cancelled"].includes(task.state)) return task;
+  const next = patchTask(runId, taskId, { state: "cancelled", error: reason, completedAt: now() });
+  appendEvent(runId, taskId, "task.stopped", { role: task.role, reason });
+  return next;
+}
+
+export function cleanupTask(runId: string, taskId: string): SwarmTask | undefined {
+  const task = getTask(runId, taskId);
+  if (!task) return undefined;
+  if (!["completed", "failed", "cancelled"].includes(task.state)) {
+    cancelOneTask(runId, taskId, "Cleanup requested");
+  }
+  abortTaskController(runId, taskId);
+  const live = getTask(runId, taskId);
+  if (!live) return undefined;
+  const next = patchTask(runId, taskId, {
+    evidence: [],
+    cleanedUpAt: now(),
+  });
+  appendEvent(runId, taskId, "task.cleaned", { role: live.role });
+  return next;
+}
+
+export function deleteRunRecord(runId: string) {
+  abortTaskControllersForRun(runId);
+  controllers.get(runId)?.abort();
+  controllers.delete(runId);
+  db.prepare("DELETE FROM swarm_messages WHERE run_id = ?").run(runId);
+  db.prepare("DELETE FROM swarm_events WHERE run_id = ?").run(runId);
+  db.prepare("DELETE FROM swarm_task_results WHERE run_id = ?").run(runId);
+  db.prepare("DELETE FROM swarm_tasks WHERE run_id = ?").run(runId);
+  db.prepare("DELETE FROM swarm_runs WHERE id = ?").run(runId);
+}
+
+function abortTaskControllersForRun(runId: string) {
+  for (const key of [...taskControllers.keys()]) {
+    if (key.startsWith(`${runId}:`)) {
+      taskControllers.get(key)?.abort();
+      taskControllers.delete(key);
+    }
+  }
 }
 
 export function claimTask(runId: string, taskId: string, owner: string, ttlMs = 45_000): boolean {
@@ -517,6 +618,7 @@ export function appendEvent(runId: string, taskId: string | null, type: string, 
 }
 
 export function markCancelled(runId: string, reason = "Cancelled") {
+  abortTaskControllersForRun(runId);
   controllers.get(runId)?.abort();
   const run = getRun(runId);
   if (!run) return;
