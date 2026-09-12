@@ -6,12 +6,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, MessageSquare, Menu, Plug, Settings, Monitor, CalendarClock } from "lucide-react";
+import { X, MessageSquare, Menu, Plug, Settings, Monitor, CalendarClock, Clapperboard, LogOut } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
 
 type NavItem = { href: string; label: string; icon: any };
 
 const NAV: NavItem[] = [
+  { href: "/create", label: "Create", icon: Clapperboard },
   { href: "/claw", label: "Claw", icon: MessageSquare },
   { href: "/computer", label: "Computer", icon: Monitor },
   { href: "/routines", label: "Routines", icon: CalendarClock },
@@ -110,6 +111,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 })}
               </ul>
             </nav>
+            <div className="border-t border-border p-2 dark:border-[rgba(180,180,255,0.10)]">
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch("/api/admin/logout", { method: "POST" });
+                  window.location.href = "/login";
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <LogOut size={16} />
+                Sign out
+              </button>
+            </div>
           </div>
         </aside>
 

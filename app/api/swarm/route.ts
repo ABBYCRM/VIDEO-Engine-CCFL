@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 import {
   cancelSwarm,
   cleanupSwarm,
@@ -17,6 +18,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
@@ -35,6 +37,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const body = await req.json().catch(() => ({}));
     const op = String(body.op || "status");

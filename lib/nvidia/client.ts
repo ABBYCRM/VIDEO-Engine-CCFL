@@ -88,6 +88,21 @@ export function setNvidiaApiKeys(keys: string[]): void {
   ).run(SETTINGS_KEYS, encrypted);
 }
 
+export function addNvidiaApiKey(key: string): number {
+  const trimmed = key.trim();
+  if (trimmed.length < 8) throw new Error("Bitdeer API key looks too short");
+  let current: string[] = [];
+  try { current = getNvidiaApiKeys(); } catch { current = []; }
+  if (current.includes(trimmed)) throw new Error("This key is already in the pool");
+  const next = [...current, trimmed];
+  setNvidiaApiKeys(next);
+  return next.length;
+}
+
+export function nvidiaKeyCount(): number {
+  try { return getNvidiaApiKeys().length; } catch { return 0; }
+}
+
 // Legacy single-key getter (used by isNvidiaEnabled check)
 export function getNvidiaApiKey(): string {
   const keys = getNvidiaApiKeys();

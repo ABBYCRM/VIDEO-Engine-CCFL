@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { aionCursorStatus } from "@/lib/claw/aion";
+import { requireAdmin, unauthorized } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain GET /api/cursor (list). */
 export async function GET(req: Request) {
+  if (!(await requireAdmin())) return unauthorized();
   try {
     const url = new URL(req.url);
     const result = await aionCursorStatus({

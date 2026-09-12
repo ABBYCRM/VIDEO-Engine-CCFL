@@ -72,6 +72,24 @@ CREATE TABLE IF NOT EXISTS connected_accounts (
   UNIQUE(toolkit, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_connected_accounts_toolkit ON connected_accounts(toolkit);
+
+CREATE TABLE IF NOT EXISTS video_jobs (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL,
+  category TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'veo',
+  model TEXT NOT NULL,
+  aspect_ratio TEXT NOT NULL,
+  resolution TEXT NOT NULL,
+  provider_operation TEXT,
+  status TEXT NOT NULL,
+  error TEXT,
+  output_path TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_video_jobs_created ON video_jobs (created_at);
 `);
 
 // Claw chat tables. The Claw console owns these end-to-end; no other

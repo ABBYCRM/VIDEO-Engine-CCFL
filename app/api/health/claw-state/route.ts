@@ -18,13 +18,10 @@ export async function GET() {
     // them here is informational only — none of them are actually
     // contacted by this endpoint.
     disconnectsWhenDisabled: [
-      "nvidia (chat completion stream — LLM call)",
-      "composio (Reddit, Instagram OAuth tool calls)",
-      "instagram-graph (publishing, comments, DMs, insights)",
+      "bitdeer (chat completion stream — LLM call)",
+      "composio (connected toolkit actions)",
       "steel (live web scrape)",
-      "firecrawl (alt web scrape)",
       "nvidia-vision (image analysis)",
-      "hedra / a2e / gemini / openai / grok (image generation)",
       "screenshotone (web screenshot)",
       "exa / tavily (web search)"
     ]
