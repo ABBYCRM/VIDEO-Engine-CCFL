@@ -95,6 +95,5 @@ test("Swarm console spawns an ephemeral worker without a prefab picker", async (
   await expect(page.getByText(/Computer and Forge keep their own Chrome/i)).toBeVisible();
   await expect(page.getByRole("button", { name: /Spawn worker/i })).toBeVisible();
   await page.getByRole("button", { name: /Spawn worker/i }).click();
-  await expect(page.getByText(/wrk_e2e/i)).toBeVisible();
-  await expect(page.getByText(/ad-hoc/i)).toBeVisible();
+  await expect(page.getByText("ad-hoc · wrk_e2e")).toBeVisible();
 });
