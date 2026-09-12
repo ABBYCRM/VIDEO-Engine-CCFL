@@ -76,7 +76,7 @@ import {
   waitSwarmTask,
 } from "@/lib/swarm";
 import { dispatchAgent } from "@/lib/claw/dispatch";
-import { isCursorConfigured, runCursorControl } from "@/lib/cursor";
+import { isCursorProxyReady, runCursorControl } from "@/lib/cursor";
 import {
   deleteClawFile, getFile as getClawFile,
   listFiles, readClawFileText, renameClawFile, saveClawFile
@@ -264,7 +264,7 @@ export const CLAW_TOOLS: ToolDef[] = [
           search: { exa: isExaConfigured(), tavily: isTavilyConfigured() },
           helicone: { enabled: isHeliconeEnabled() },
           gdy: { configured: isGdyConfigured() },
-          cursor: { configured: isCursorConfigured(), note: "CURSOR_API_KEY. CCFL owns launch/status/reply/cancel. Not Aion /api/agent/run." },
+          cursor: { configured: isCursorProxyReady(), note: "Proxy to Aion-Brain /api/cursor/*. Brain owns CURSOR_API_KEY. /api/agent/run stays execute." },
           arxiv: { configured: true }
         }
       };
@@ -508,26 +508,32 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "cursor_launch",
-    description: "Grok Bot Cloud Agent: spawn a Cursor cloud agent ON THE SPOT for non-trivial repo/coding work. Required: prompt (goal). Optional: repo (defaults to https://github.com/ABBYCRM/VIDEO-Engine-CCFL), ref, successCriteria, context, name, model, autoCreatePR. Compiles a brief with evidence rules (methodical-notes branches, no stubs, no hallucination). Uses server CURSOR_API_KEY — never pass a key. Missing key returns Trinity HOLD. Then cursor_status / cursor_reply / cursor_cancel. Do NOT do heavy repo work inline. Do NOT pick from a prefab agent menu.",
-    args: "{\"prompt\":\"Add Cursor control and prove it\",\"repo\":\"https://github.com/ABBYCRM/VIDEO-Engine-CCFL\",\"successCriteria\":[\"routes exist\",\"mocked spawn→status\"],\"context\":\"CCFL Claw-only\"}",
-    when: "Operator asked to build, fix, review, or land code on a GitHub repo that is more than a one-line local edit. Default path for repo work.",
-    handler: async (a) => runCursorControl({
-      op: "launch",
-      prompt: str(a.prompt || a.goal || a.task || a.text),
-      repo: str(a.repo || a.repository || a.url) || undefined,
-      ref: str(a.ref || a.startingRef || a.branch) || undefined,
-      name: str(a.name) || undefined,
-      model: str(a.model) || undefined,
-      mode: str(a.mode) || undefined,
-      autoCreatePR: a.autoCreatePR === true || a.auto_create_pr === true,
-      successCriteria: a.successCriteria ?? a.criteria,
-      context: str(a.context) || undefined,
-      noRepo: a.noRepo === true,
-    })
+    description: "Ask Aion-Brain to spawn a Cursor cloud agent ON THE SPOT (Grok Bot CloudAgent). Brain owns the client (POST /api/cursor/launch). Required: prompt/goal. Optional: repo/repository, branch, name, model, autoCreatePR. Dynamic — not a prefab menu. Do NOT do heavy repo work inline. CCFL only forwards with AION_BASE_URL + AION_API_KEY. CURSOR_API_KEY stays on Brain. Missing Brain or Brain missing the key → Trinity HOLD.",
+    args: "{\"prompt\":\"Add Cursor control and prove it\",\"repo\":\"https://github.com/ABBYCRM/VIDEO-Engine-CCFL\"}",
+    when: "Non-trivial coding/repo/PR work. Ask Brain. Then cursor_status / cursor_reply / cursor_cancel.",
+    handler: async (a) => {
+      const goal = str(a.prompt || a.goal || a.task || a.text);
+      const context = str(a.context);
+      const criteria = Array.isArray(a.successCriteria) ? a.successCriteria : a.criteria;
+      const extra = [
+        context ? `Context: ${context}` : "",
+        Array.isArray(criteria) && criteria.length ? `Success criteria:\n${criteria.map((c) => `- ${String(c)}`).join("\n")}` : "",
+      ].filter(Boolean).join("\n\n");
+      return runCursorControl({
+        op: "launch",
+        prompt: extra ? `${goal}\n\n${extra}` : goal,
+        repo: str(a.repo || a.repository || a.url) || undefined,
+        ref: str(a.ref || a.startingRef || a.branch) || undefined,
+        name: str(a.name) || undefined,
+        model: str(a.model) || undefined,
+        mode: str(a.mode) || undefined,
+        autoCreatePR: a.autoCreatePR === true || a.auto_create_pr === true,
+      });
+    }
   },
   {
     name: "cursor_status",
-    description: "Read a Cursor cloud agent (and latest run result) or list recent agents when id is omitted. Await like Grok Bot Task: poll until FINISHED/ERROR/CANCELLED. Trinity HOLD if CURSOR_API_KEY is missing.",
+    description: "Ask Brain for Cursor agent status (GET /api/cursor/:id) or list (GET /api/cursor). Await like Grok Bot Task. HOLD if Brain or CURSOR_API_KEY is missing.",
     args: "{\"id\":\"bc-...\"}",
     when: "After cursor_launch, or when the operator asks whether the cloud agent finished.",
     handler: async (a) => runCursorControl({
@@ -538,7 +544,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "cursor_reply",
-    description: "Steer a live Cursor cloud agent with a follow-up prompt (Grok Bot Task reply). 409 agent_busy → HOLD, wait or cursor_cancel first. Never pass CURSOR_API_KEY.",
+    description: "Ask Brain to steer a live Cursor cloud agent (POST /api/cursor/:id/reply). Grok Bot Task reply. Never pass CURSOR_API_KEY.",
     args: "{\"id\":\"bc-...\",\"prompt\":\"Also add contract tests and do not stub the client\"}",
     when: "The cloud agent needs a course correction, extra acceptance criteria, or a follow-up.",
     handler: async (a) => runCursorControl({
@@ -1010,10 +1016,17 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "e2b_run",
-    description: "Run a short Python or JavaScript snippet in an E2B hosted sandbox. Never executes in this process. Returns stdout/stderr/exitCode. Fail-soft if E2B_API_KEY is missing.",
+    description: "Run a short Python or JavaScript snippet in an E2B hosted sandbox. Never executes in this process. Returns stdout/stderr/exitCode. Fail-soft if E2B_API_KEY is missing. Alias: shell_run.",
     args: "{\"code\":\"print(1+1)\",\"language\":\"python\"}",
     when: "Operator asks to execute, evaluate, or test code that must not run on the Claw host.",
-    handler: async (a) => e2bRun({ code: str(a.code), language: str(a.language, "python"), timeoutMs: num(a.timeoutMs, 15_000) })
+    handler: async (a) => e2bRun({ code: str(a.code || a.cmd || a.command), language: str(a.language, "python"), timeoutMs: num(a.timeoutMs, 15_000) })
+  },
+  {
+    name: "shell_run",
+    description: "Grok-style shell: run a short command or snippet in the E2B sandbox (never on this host). Prefer this for local compute/proof. Non-trivial repo work goes to Brain cursor_launch. Fail-soft if E2B_API_KEY is missing.",
+    args: "{\"cmd\":\"print(2+2)\",\"language\":\"python\"}",
+    when: "Need a command result, a quick script, or to prove a fix locally. Computer is for the browser; this is the shell.",
+    handler: async (a) => e2bRun({ code: str(a.cmd || a.command || a.code), language: str(a.language, "python"), timeoutMs: num(a.timeoutMs, 15_000) })
   },
   {
     name: "github_request",

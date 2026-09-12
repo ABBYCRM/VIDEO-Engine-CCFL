@@ -115,7 +115,7 @@ export async function dispatchAgent(input: DispatchInput) {
       built: launched.ok,
       tasked: launched.ok,
       note: launched.ok
-        ? "Cursor cloud agent launched on the spot. Poll cursor_status, steer with cursor_reply, stop with cursor_cancel. Do not do the repo work inline."
+        ? "Brain launched a Cursor cloud agent. Poll cursor_status, steer with cursor_reply, stop with cursor_cancel. Do not do the repo work inline."
         : launched.error,
     };
   }

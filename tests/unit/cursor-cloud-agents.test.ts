@@ -3,306 +3,226 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { executeClawTool, CLAW_TOOL_NAMES } from "../../lib/claw/tools.ts";
-import { GET as collectionGet, POST as collectionPost } from "../../app/api/cursor/agents/route.ts";
-import { GET as itemGet } from "../../app/api/cursor/agents/[id]/route.ts";
-import { POST as replyPost } from "../../app/api/cursor/agents/[id]/reply/route.ts";
-import { POST as cancelPost } from "../../app/api/cursor/agents/[id]/cancel/route.ts";
-import {
-  buildCursorBrief,
-  compileLaunchBody,
-  cursorApiBase,
-  isCursorConfigured,
-  launchCursorAgent,
-  runCursorControl,
-} from "../../lib/cursor/index.ts";
+import { aionCursorLaunch, aionCursorStatus, aionCursorReply, aionCursorCancel } from "../../lib/claw/aion.ts";
+import { POST as launchPost } from "../../app/api/cursor/launch/route.ts";
+import { GET as itemGet } from "../../app/api/cursor/[id]/route.ts";
+import { POST as replyPost } from "../../app/api/cursor/[id]/reply/route.ts";
+import { POST as cancelPost } from "../../app/api/cursor/[id]/cancel/route.ts";
+import { isCursorProxyReady, runCursorControl } from "../../lib/cursor/index.ts";
 
 const originalFetch = globalThis.fetch;
-const previousKey = process.env.CURSOR_API_KEY;
-const previousBase = process.env.CURSOR_API_BASE_URL;
-const TEST_KEY = "test-cursor-key-not-real";
+const previousUrl = process.env.AION_BASE_URL;
+const previousKey = process.env.AION_API_KEY;
+const previousCursor = process.env.CURSOR_API_KEY;
+const AION_KEY = "test-only-key";
+const AGENT_ID = "bc-00000000-0000-0000-0000-000000000001";
 
-const AGENT = {
-  id: "bc-00000000-0000-0000-0000-000000000001",
-  name: "Add Cursor control",
-  status: "ACTIVE",
-  url: "https://cursor.com/agents/bc-00000000-0000-0000-0000-000000000001",
-  latestRunId: "run-00000000-0000-0000-0000-000000000001",
-  repos: [{ url: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL", startingRef: "main" }],
-};
-const RUN = {
-  id: "run-00000000-0000-0000-0000-000000000001",
-  agentId: AGENT.id,
-  status: "CREATING",
-  createdAt: "2026-09-12T00:00:00.000Z",
-  updatedAt: "2026-09-12T00:00:00.000Z",
-};
-
-type Call = { method: string; url: string; auth: string; body: unknown };
+type Call = { method: string; url: string; headers: Record<string, string>; body: unknown };
 const calls: Call[] = [];
 
-function authExpected() {
-  return `Basic ${Buffer.from(`${TEST_KEY}:`, "utf8").toString("base64")}`;
-}
-
-function mockCursor() {
+function mockBrain() {
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     const href = String(url);
     const method = String(init?.method || "GET").toUpperCase();
-    const headers = init?.headers as Record<string, string> | undefined;
-    const auth = headers?.Authorization || "";
+    const headers = (init?.headers || {}) as Record<string, string>;
     let body: unknown = null;
     if (init?.body) {
       try { body = JSON.parse(String(init.body)); } catch { body = init.body; }
     }
-    calls.push({ method, url: href, auth, body });
-    if (auth !== authExpected()) {
-      return Response.json({ error: { code: "unauthorized", message: "bad key" } }, { status: 401 });
+    calls.push({ method, url: href, headers, body });
+    if (headers["X-AION-Key"] !== AION_KEY) {
+      return Response.json({ detail: "unauthorized" }, { status: 401 });
     }
-    if (method === "POST" && href.endsWith("/v1/agents")) {
-      return Response.json({ agent: AGENT, run: RUN }, { status: 201 });
+    if (href.includes("api.cursor.com")) {
+      return Response.json({ error: "ccfl_must_not_call_cursor_api" }, { status: 599 });
     }
-    if (method === "GET" && href.includes("/v1/agents?") || (method === "GET" && href.endsWith("/v1/agents"))) {
-      return Response.json({ items: [AGENT] });
+    if (method === "POST" && href.endsWith("/api/cursor/launch")) {
+      return Response.json({
+        ok: true,
+        source: "aion-brain",
+        tool: "cursor_launch",
+        evidence: { agent: { id: AGENT_ID, status: "ACTIVE" }, run: { id: "run-1", status: "CREATING" } },
+      }, { status: 202 });
     }
-    if (method === "GET" && href.includes(`/v1/agents/${AGENT.id}/runs/${RUN.id}`)) {
-      return Response.json({ ...RUN, status: "FINISHED", result: "Added Cursor control and tests." });
+    if (method === "GET" && href.includes(`/api/cursor/${AGENT_ID}`)) {
+      return Response.json({
+        ok: true,
+        source: "aion-brain",
+        tool: "cursor_status",
+        evidence: { agent: { id: AGENT_ID, latestRunId: "run-1" }, run: { id: "run-1", status: "FINISHED", result: "landed" } },
+      });
     }
-    if (method === "GET" && href.endsWith(`/v1/agents/${AGENT.id}`)) {
-      return Response.json(AGENT);
+    if (method === "POST" && href.endsWith(`/api/cursor/${AGENT_ID}/reply`)) {
+      return Response.json({
+        ok: true,
+        source: "aion-brain",
+        tool: "cursor_reply",
+        evidence: { agent: { id: AGENT_ID }, run: { id: "run-2", status: "CREATING" } },
+      }, { status: 202 });
     }
-    if (method === "POST" && href.endsWith(`/v1/agents/${AGENT.id}/runs`)) {
-      return Response.json({ run: { ...RUN, id: "run-00000000-0000-0000-0000-000000000002", status: "CREATING" } }, { status: 201 });
+    if (method === "POST" && href.endsWith(`/api/cursor/${AGENT_ID}/cancel`)) {
+      return Response.json({
+        ok: true,
+        source: "aion-brain",
+        tool: "cursor_cancel",
+        evidence: { agent: { id: AGENT_ID }, run: { id: "run-1", status: "CANCELLED" } },
+      });
     }
-    if (method === "POST" && href.endsWith(`/v1/agents/${AGENT.id}/runs/${RUN.id}/cancel`)) {
-      return Response.json({ id: RUN.id, status: "CANCELLED" });
+    if (method === "POST" && href.endsWith("/api/cursor/launch") === false && href.includes("/api/cursor/launch") === false) {
+      /* continue */
     }
-    if (method === "GET" && href.endsWith("/v1/me")) {
-      return Response.json({ apiKeyName: "test", createdAt: "2026-09-12T00:00:00.000Z" });
-    }
-    return Response.json({ error: { code: "not_found", message: href } }, { status: 404 });
+    return Response.json({ ok: false, error: "not_found", path: href }, { status: 404 });
   }) as typeof fetch;
 }
 
 beforeEach(() => {
   calls.length = 0;
-  process.env.CURSOR_API_KEY = TEST_KEY;
-  delete process.env.CURSOR_API_BASE_URL;
-  mockCursor();
+  process.env.AION_BASE_URL = "http://aion-brain:10000";
+  process.env.AION_API_KEY = AION_KEY;
+  delete process.env.CURSOR_API_KEY;
+  mockBrain();
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  if (previousKey === undefined) delete process.env.CURSOR_API_KEY;
-  else process.env.CURSOR_API_KEY = previousKey;
-  if (previousBase === undefined) delete process.env.CURSOR_API_BASE_URL;
-  else process.env.CURSOR_API_BASE_URL = previousBase;
+  if (previousUrl === undefined) delete process.env.AION_BASE_URL; else process.env.AION_BASE_URL = previousUrl;
+  if (previousKey === undefined) delete process.env.AION_API_KEY; else process.env.AION_API_KEY = previousKey;
+  if (previousCursor === undefined) delete process.env.CURSOR_API_KEY; else process.env.CURSOR_API_KEY = previousCursor;
 });
 
-describe("Cursor Cloud Agents client", () => {
-  it("compiles a Grok-style brief with repo, criteria, and evidence rules", () => {
-    const brief = buildCursorBrief({
-      goal: "Add Cursor control",
-      repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL",
-      successCriteria: ["routes exist", "mocked spawn→status"],
-      context: "Claw-only strip",
-    });
-    assert.match(brief, /Add Cursor control/);
-    assert.match(brief, /VIDEO-Engine-CCFL/);
-    assert.match(brief, /routes exist/);
-    assert.match(brief, /methodical-notes/);
-    assert.match(brief, /No stubs/);
-    const compiled = compileLaunchBody({ prompt: "Add Cursor control", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" });
-    assert.equal(compiled.ok, true);
-    if (!compiled.ok) return;
-    assert.equal((compiled.body.repos as { url: string }[])[0].url, "https://github.com/ABBYCRM/VIDEO-Engine-CCFL");
-    assert.match(String((compiled.body.prompt as { text: string }).text), /Evidence rules/);
-  });
-
-  it("HOLD when CURSOR_API_KEY is missing — not a silent pass", async () => {
-    delete process.env.CURSOR_API_KEY;
-    assert.equal(isCursorConfigured(), false);
-    const launched = await launchCursorAgent({ prompt: "x" });
+describe("CCFL → Brain cursor proxy (authoritative)", () => {
+  it("HOLD when Aion handshake is missing — does not call Cursor", async () => {
+    delete process.env.AION_BASE_URL;
+    delete process.env.AION_API_KEY;
+    assert.equal(isCursorProxyReady(), false);
+    const launched = await aionCursorLaunch({ prompt: "x" });
     assert.equal(launched.ok, false);
     assert.equal(launched.trinity, "HOLD");
-    assert.equal(launched.code, "MISSING_KEY");
-    assert.match(launched.error || "", /CURSOR_API_KEY/);
-    assert.ok(!JSON.stringify(launched).includes(TEST_KEY));
+    assert.equal(launched.code, "AION_UNCONFIGURED");
+    assert.equal(launched.owner, "aion-brain");
     assert.equal(calls.length, 0);
   });
 
-  it("POSTs /v1/agents with Basic auth and never echoes the key", async () => {
-    const launched = await launchCursorAgent({
-      prompt: "Add Cursor control",
-      repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL",
-      successCriteria: ["proof"],
-    });
-    assert.equal(launched.ok, true);
-    assert.equal(launched.trinity, "GO");
-    assert.equal(launched.agent?.id, AGENT.id);
-    assert.equal(calls[0].method, "POST");
-    assert.equal(calls[0].url, `${cursorApiBase()}/v1/agents`);
-    assert.equal(calls[0].auth, authExpected());
-    const dumped = JSON.stringify(launched);
-    assert.ok(!dumped.includes(TEST_KEY));
-    assert.ok(!dumped.includes(authExpected()));
-  });
-});
-
-describe("tool → control → client chain (Grok Bot spawn→status→reply→cancel)", () => {
-  it("exposes cursor_launch / cursor_status / cursor_reply / cursor_cancel", () => {
-    for (const name of ["cursor_launch", "cursor_status", "cursor_reply", "cursor_cancel"]) {
-      assert.ok(CLAW_TOOL_NAMES.includes(name), `missing tool ${name}`);
-    }
-  });
-
-  it("executeClawTool(cursor_launch) hits POST /v1/agents", async () => {
+  it("cursor_launch tool forwards to Brain POST /api/cursor/launch with X-AION-Key", async () => {
     const result = await executeClawTool("cursor_launch", {
-      prompt: "Wire Cursor like Grok Bot",
+      prompt: "Wire Cursor via Brain",
       repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL",
-      successCriteria: ["spawn", "status"],
     });
-    assert.equal((result as { ok: boolean }).ok, true);
-    assert.equal((result as { agent?: { id: string } }).agent?.id, AGENT.id);
-    assert.equal(calls[0].url, "https://api.cursor.com/v1/agents");
+    const row = result as { ok: boolean; source?: string; evidence?: { agent?: { id: string } } };
+    assert.equal(row.ok, true);
+    assert.equal(row.source, "aion-brain");
+    assert.equal(row.evidence?.agent?.id, AGENT_ID);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "http://aion-brain:10000/api/cursor/launch");
     assert.equal(calls[0].method, "POST");
-    assert.match(String((calls[0].body as { prompt: { text: string } }).prompt.text), /Wire Cursor like Grok Bot/);
+    assert.equal(calls[0].headers["X-AION-Key"], AION_KEY);
+    assert.equal((calls[0].body as { prompt: string }).prompt, "Wire Cursor via Brain");
+    assert.equal((calls[0].body as { repository: string }).repository, "https://github.com/ABBYCRM/VIDEO-Engine-CCFL");
+    assert.ok(!calls[0].url.includes("api.cursor.com"));
+    assert.ok(!JSON.stringify(calls[0].headers).includes("CURSOR_API_KEY"));
   });
 
-  it("routes use the same control module as tools", async () => {
-    const spawnRes = await collectionPost(new Request("http://local/api/cursor/agents", {
+  it("routes proxy launch → status → reply → cancel to Brain", async () => {
+    const spawn = await launchPost(new Request("http://local/api/cursor/launch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "Scripted spawn", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" }),
     }));
-    assert.equal(spawnRes.status, 202);
-    const spawnJson = await spawnRes.json();
+    assert.equal(spawn.status, 202);
+    const spawnJson = await spawn.json();
     assert.equal(spawnJson.ok, true);
-    assert.equal(spawnJson.agent.id, AGENT.id);
+    assert.equal(spawnJson.source, "aion-brain");
 
-    const listRes = await collectionGet(new Request("http://local/api/cursor/agents"));
-    assert.equal(listRes.status, 200);
-    const listJson = await listRes.json();
-    assert.equal(listJson.ok, true);
-    assert.equal(listJson.agents[0].id, AGENT.id);
+    const status = await itemGet(new Request(`http://local/api/cursor/${AGENT_ID}`), { params: Promise.resolve({ id: AGENT_ID }) });
+    assert.equal(status.status, 200);
+    assert.equal((await status.json()).evidence.run.result, "landed");
 
-    const statusRes = await itemGet(new Request(`http://local/api/cursor/agents/${AGENT.id}`), { params: Promise.resolve({ id: AGENT.id }) });
-    assert.equal(statusRes.status, 200);
-    const statusJson = await statusRes.json();
-    assert.equal(statusJson.agent.id, AGENT.id);
-    assert.equal(statusJson.run.result, "Added Cursor control and tests.");
-
-    const replyRes = await replyPost(new Request(`http://local/api/cursor/agents/${AGENT.id}/reply`, {
+    const reply = await replyPost(new Request(`http://local/api/cursor/${AGENT_ID}/reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Also add contract tests" }),
-    }), { params: Promise.resolve({ id: AGENT.id }) });
-    assert.equal(replyRes.status, 202);
-    const replyJson = await replyRes.json();
-    assert.equal(replyJson.run.id, "run-00000000-0000-0000-0000-000000000002");
+      body: JSON.stringify({ prompt: "steer" }),
+    }), { params: Promise.resolve({ id: AGENT_ID }) });
+    assert.equal(reply.status, 202);
 
-    const cancelRes = await cancelPost(new Request(`http://local/api/cursor/agents/${AGENT.id}/cancel`, {
+    const cancel = await cancelPost(new Request(`http://local/api/cursor/${AGENT_ID}/cancel`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
-    }), { params: Promise.resolve({ id: AGENT.id }) });
-    assert.equal(cancelRes.status, 200);
-    const cancelJson = await cancelRes.json();
-    assert.equal(cancelJson.ok, true);
+    }), { params: Promise.resolve({ id: AGENT_ID }) });
+    assert.equal(cancel.status, 200);
 
-    const viaTool = await executeClawTool("cursor_status", { id: AGENT.id });
-    assert.equal((viaTool as { ok: boolean }).ok, true);
-
-    assert.ok(calls.some((c) => c.method === "POST" && c.url.endsWith("/v1/agents")));
-    assert.ok(calls.some((c) => c.method === "POST" && c.url.endsWith("/runs")));
-    assert.ok(calls.some((c) => c.method === "POST" && c.url.endsWith("/cancel")));
+    assert.ok(calls.every((c) => c.url.startsWith("http://aion-brain:10000/api/cursor")));
+    assert.ok(calls.every((c) => !c.url.includes("api.cursor.com")));
   });
 
-  it("collection POST without key returns 503 HOLD", async () => {
-    delete process.env.CURSOR_API_KEY;
-    const res = await collectionPost(new Request("http://local/api/cursor/agents", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "should hold" }),
-    }));
-    assert.equal(res.status, 503);
-    const json = await res.json();
-    assert.equal(json.ok, false);
-    assert.equal(json.trinity, "HOLD");
-    assert.equal(json.code, "MISSING_KEY");
+  it("Brain unconfigured key becomes Trinity HOLD (not a silent pass)", async () => {
+    globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ method: "POST", url: String(url), headers: (init?.headers || {}) as Record<string, string>, body: null });
+      return Response.json({ ok: false, error: "cursor_launch_unconfigured", env: "CURSOR_API_KEY", tool: "cursor_launch" }, { status: 400 });
+    }) as typeof fetch;
+    const result = await runCursorControl({ op: "launch", prompt: "x" });
+    assert.equal(result.ok, false);
+    assert.equal(result.trinity, "HOLD");
+    assert.equal(result.code, "MISSING_KEY");
+    assert.equal(result.env, "CURSOR_API_KEY");
   });
 
-  it("runCursorControl launch/status/reply/cancel is the shared chain", async () => {
-    const launched = await runCursorControl({ op: "launch", prompt: "shared", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" });
-    assert.equal(launched.ok, true);
-    const status = await runCursorControl({ op: "status", id: AGENT.id });
-    assert.equal(status.ok, true);
-    const reply = await runCursorControl({ op: "reply", id: AGENT.id, prompt: "steer" });
-    assert.equal(reply.ok, true);
-    const cancel = await runCursorControl({ op: "cancel", id: AGENT.id, runId: RUN.id });
-    assert.equal(cancel.ok, true);
+  it("direct aionCursor* helpers hit Brain paths", async () => {
+    assert.equal((await aionCursorLaunch({ prompt: "p", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" })).ok, true);
+    assert.equal((await aionCursorStatus({ id: AGENT_ID })).ok, true);
+    assert.equal((await aionCursorReply({ id: AGENT_ID, prompt: "more" })).ok, true);
+    assert.equal((await aionCursorCancel({ id: AGENT_ID })).ok, true);
   });
 });
 
-describe("routes exist (contract)", () => {
-  it("ships collection + id + reply + steer + cancel handlers", () => {
-    const root = resolve(process.cwd());
-    const files = [
-      "app/api/cursor/agents/route.ts",
-      "app/api/cursor/agents/[id]/route.ts",
-      "app/api/cursor/agents/[id]/reply/route.ts",
-      "app/api/cursor/agents/[id]/steer/route.ts",
-      "app/api/cursor/agents/[id]/cancel/route.ts",
-    ];
-    for (const rel of files) {
-      const abs = resolve(root, rel);
-      assert.equal(existsSync(abs), true, rel);
-      const src = readFileSync(abs, "utf8");
-      assert.match(src, /export async function (GET|POST)/);
-      assert.match(src, /runCursorControl/);
+describe("tools and routes exist", () => {
+  it("exposes cursor_* and shell_run", () => {
+    for (const name of ["cursor_launch", "cursor_status", "cursor_reply", "cursor_cancel", "shell_run"]) {
+      assert.ok(CLAW_TOOL_NAMES.includes(name), `missing ${name}`);
     }
   });
+
+  it("ships Brain-shaped proxy routes", () => {
+    const files = [
+      "app/api/cursor/launch/route.ts",
+      "app/api/cursor/route.ts",
+      "app/api/cursor/[id]/route.ts",
+      "app/api/cursor/[id]/reply/route.ts",
+      "app/api/cursor/[id]/cancel/route.ts",
+    ];
+    for (const rel of files) {
+      const abs = resolve(process.cwd(), rel);
+      assert.equal(existsSync(abs), true, rel);
+      const src = readFileSync(abs, "utf8");
+      assert.match(src, /aionCursor|Aion-Brain/);
+      assert.doesNotMatch(src, /api\.cursor\.com/);
+    }
+    assert.equal(existsSync(resolve(process.cwd(), "lib/cursor/cloud-agents.ts")), false);
+  });
 });
 
-describe("Acts like Grok Bot — prompt + catalog excerpts", () => {
-  it("system prompt teaches Cursor spawn and Grok Bot behavior", () => {
+describe("Acts like Grok Bot + Cursor via Brain — excerpts", () => {
+  it("system prompt teaches ask-Brain cursor_launch", () => {
     const runtime = readFileSync(resolve(process.cwd(), "lib/claw/runtime.ts"), "utf8");
     assert.match(runtime, /ACT LIKE GROK BOT/);
-    assert.match(runtime, /cursor_launch/);
-    assert.match(runtime, /CURSOR_API_KEY/);
-    assert.match(runtime, /methodical-notes/);
-    assert.match(runtime, /Do NOT do heavy repo work inline/);
-    assert.match(runtime, /Do NOT pick from a prefab agent list/);
-    assert.match(runtime, /Trinity HOLD/);
-    assert.match(runtime, /memory_search/);
-    assert.match(runtime, /Never ask the operator to fix code/);
-    assert.match(runtime, /Computer\/browser\/shell/);
+    assert.match(runtime, /ASK AION-BRAIN to cursor_launch/);
+    assert.match(runtime, /POST \/api\/cursor\/launch/);
+    assert.match(runtime, /shell_run/);
+    assert.match(runtime, /computer_open/);
+    assert.match(runtime, /do not invent a local Cursor client/i);
   });
 
-  it("tool catalog describes launch/status/reply/cancel", () => {
+  it("tool catalog says Brain owns Cursor", () => {
     const tools = readFileSync(resolve(process.cwd(), "lib/claw/tools.ts"), "utf8");
-    assert.match(tools, /name: "cursor_launch"/);
-    assert.match(tools, /name: "cursor_status"/);
-    assert.match(tools, /name: "cursor_reply"/);
-    assert.match(tools, /name: "cursor_cancel"/);
-    assert.match(tools, /CURSOR_API_KEY/);
-    assert.match(tools, /methodical-notes/);
+    assert.match(tools, /Ask Aion-Brain to spawn a Cursor cloud agent/);
+    assert.match(tools, /POST \/api\/cursor\/launch/);
+    assert.match(tools, /name: "shell_run"/);
   });
 
-  it(".env.example documents the name only", () => {
+  it(".env.example documents CURSOR_API_KEY name only for co-host", () => {
     const env = readFileSync(resolve(process.cwd(), ".env.example"), "utf8");
     assert.match(env, /^CURSOR_API_KEY=$/m);
     assert.doesNotMatch(env, /CURSOR_API_KEY=\S/);
-  });
-});
-
-const live = Boolean(previousKey?.trim());
-describe("optional live smoke (skipped without CURSOR_API_KEY)", { skip: !live }, () => {
-  it("GET /v1/me with the real key (no spawn)", async () => {
-    globalThis.fetch = originalFetch;
-    process.env.CURSOR_API_KEY = previousKey;
-    const { cursorMe } = await import("../../lib/cursor/index.ts");
-    const me = await cursorMe();
-    assert.equal(me.ok, true, me.error || "live /v1/me failed");
-    assert.ok(!JSON.stringify(me).includes(previousKey || "nope"));
+    assert.match(env, /Brain-owned/);
   });
 });

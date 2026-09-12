@@ -1,17 +1,14 @@
-// Shared Cursor control surface used by Claw tools AND /api/cursor/* routes.
-// CCFL owns these jobs. Do not forward to Aion-Brain /api/agent/run or invent /api/agents.
+// Thin CCFL proxy. Aion-Brain owns Cursor (lib/cursor_cloud.js, PR #11).
+// Do not call api.cursor.com from this process.
 
 import {
-  cancelCursorRun,
-  cursorMe,
-  getCursorAgent,
-  isCursorConfigured,
-  launchCursorAgent,
-  listCursorAgents,
-  replyCursorAgent,
-  cursorMissingKey,
-} from "./cloud-agents";
-import type { CursorControlResult, CursorLaunchInput, CursorMode } from "./types";
+  aionCursorCancel,
+  aionCursorLaunch,
+  aionCursorReply,
+  aionCursorStatus,
+  isAionConfigured,
+  type AionCursorResult,
+} from "@/lib/claw/aion";
 
 export type CursorControlInput = {
   op?: string;
@@ -20,85 +17,69 @@ export type CursorControlInput = {
   prompt?: string;
   goal?: string;
   text?: string;
+  message?: string;
   repo?: string;
   repository?: string;
   url?: string;
+  repos?: unknown;
   ref?: string;
   startingRef?: string;
+  branch?: string;
   name?: string;
-  model?: string;
+  model?: unknown;
   mode?: string;
   autoCreatePR?: boolean;
-  successCriteria?: unknown;
-  criteria?: unknown;
-  context?: string;
-  noRepo?: boolean;
+  workOnCurrentBranch?: boolean;
   limit?: number;
   cursor?: string;
-  includeArchived?: boolean;
 };
 
-function modeOf(raw: unknown): CursorMode | undefined {
-  const m = String(raw || "").toLowerCase();
-  return m === "plan" || m === "agent" ? m : undefined;
-}
-
-function launchArgs(input: CursorControlInput): CursorLaunchInput {
-  return {
-    prompt: String(input.prompt || input.goal || input.text || "").trim(),
-    repo: String(input.repo || input.repository || input.url || "").trim() || undefined,
-    ref: String(input.ref || input.startingRef || "").trim() || undefined,
-    name: String(input.name || "").trim() || undefined,
-    model: String(input.model || "").trim() || undefined,
-    mode: modeOf(input.mode),
-    autoCreatePR: input.autoCreatePR,
-    successCriteria: (input.successCriteria ?? input.criteria) as string[] | string | undefined,
-    context: String(input.context || "").trim() || undefined,
-    noRepo: input.noRepo === true,
-  };
-}
-
-export async function runCursorControl(input: CursorControlInput): Promise<CursorControlResult> {
-  if (!isCursorConfigured()) return cursorMissingKey();
-  const op = String(input.op || "status").toLowerCase().trim();
-  if (op === "launch" || op === "spawn" || op === "create") {
-    return launchCursorAgent(launchArgs(input));
-  }
-  if (op === "list") {
-    return listCursorAgents({
-      limit: input.limit,
-      cursor: input.cursor,
-      includeArchived: input.includeArchived,
-    });
-  }
-  if (op === "status" || op === "get") {
-    const id = String(input.id || "").trim();
-    if (!id) return listCursorAgents({ limit: input.limit, cursor: input.cursor, includeArchived: input.includeArchived });
-    return getCursorAgent(id);
-  }
-  if (op === "reply" || op === "steer" || op === "followup" || op === "follow-up") {
-    return replyCursorAgent({
-      id: String(input.id || "").trim(),
-      prompt: String(input.prompt || input.goal || input.text || "").trim(),
-      mode: modeOf(input.mode),
-    });
-  }
-  if (op === "cancel" || op === "stop") {
-    return cancelCursorRun({ id: String(input.id || "").trim(), runId: String(input.runId || "").trim() || undefined });
-  }
-  if (op === "me" || op === "health") {
-    return cursorMe();
-  }
-  return {
-    ok: false,
-    trinity: "HOLD",
-    error: "unknown op. Use launch, status, reply, cancel, list, me.",
-    code: "BAD_ARGS",
-    owner: "ccfl",
-  };
+export function isCursorProxyReady(): boolean {
+  return isAionConfigured();
 }
 
 export const CURSOR_OWNERSHIP_CONTRACT =
-  "CCFL owns Cursor Cloud Agent orchestration (CURSOR_API_KEY → api.cursor.com). " +
-  "Aion-Brain POST /api/claw/execute (alias /api/agent/run) is brain tool execution — not Cursor. " +
-  "There is no /api/agents handshake with Aion-Brain. Do not invent agent_jobs on Brain for this path.";
+  "Aion-Brain owns Cursor Cloud Agents (lib/cursor_cloud.js → POST /api/cursor/launch). " +
+  "CCFL forwards with AION_BASE_URL + AION_API_KEY (X-AION-Key). " +
+  "CURSOR_API_KEY lives on Brain. Aion /api/agent/run remains claw execute — not this path.";
+
+export async function runCursorControl(input: CursorControlInput): Promise<AionCursorResult> {
+  const op = String(input.op || "status").toLowerCase().trim();
+  const prompt = String(input.prompt || input.goal || input.text || input.message || "").trim();
+  const repo = String(input.repo || input.repository || input.url || "").trim() || undefined;
+  if (op === "launch" || op === "spawn" || op === "create") {
+    return aionCursorLaunch({
+      prompt,
+      repo,
+      repository: repo,
+      repos: input.repos,
+      branch: input.branch || input.ref,
+      startingRef: input.startingRef || input.ref || input.branch,
+      name: input.name,
+      model: input.model,
+      autoCreatePR: input.autoCreatePR,
+      workOnCurrentBranch: input.workOnCurrentBranch,
+      mode: input.mode,
+    });
+  }
+  if (op === "list") {
+    return aionCursorStatus({ limit: input.limit, cursor: input.cursor });
+  }
+  if (op === "status" || op === "get" || op === "result") {
+    return aionCursorStatus({ id: input.id, runId: input.runId, limit: input.limit, cursor: input.cursor });
+  }
+  if (op === "reply" || op === "steer" || op === "followup" || op === "follow-up") {
+    return aionCursorReply({ id: input.id, prompt, mode: input.mode });
+  }
+  if (op === "cancel" || op === "stop") {
+    return aionCursorCancel({ id: input.id, runId: input.runId });
+  }
+  return {
+    ok: false,
+    source: "ccfl-proxy",
+    owner: "aion-brain",
+    trinity: "HOLD",
+    error: "unknown op. Use launch, status, reply, cancel.",
+    code: "BAD_ARGS",
+  };
+}

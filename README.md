@@ -65,15 +65,15 @@ Default path is **dynamic on-spot spawn** (Grok Task-like): `POST /api/swarm` `o
 
 Open `/swarm`. Claw tools: `swarm_spawn`, `swarm_wait`, `swarm_message`, `swarm_stop`, `swarm_status`, `swarm_run` (preset). Optional `runner=aion` sends that worker through Aion-Brain `POST /api/claw/execute`.
 
-## Cursor Cloud Agents (Grok Bot CloudAgent)
+## Cursor Cloud Agents (via Aion-Brain)
 
-CCFL owns Cursor Cloud Agent control. The live assistant **knows and runs** it:
+Aion-Brain **owns** Cursor (`lib/cursor_cloud.js`). CCFL only proxies:
 
-- Non-trivial repo work → `cursor_launch` on the spot (goal + repo + successCriteria). Not a prefab agent menu. Not inline heavy coding.
-- Server auth is `CURSOR_API_KEY` only (DigitalOcean secret). Missing key → Trinity **HOLD**, never a silent pass.
-- `cursor_status` / `cursor_reply` / `cursor_cancel` await, steer, and stop like Grok Bot Task.
-- HTTP: `POST /api/cursor/agents` (spawn), `GET /api/cursor/agents` or `GET /api/cursor/agents/:id`, `POST /api/cursor/agents/:id/reply` (steer alias), `POST /api/cursor/agents/:id/cancel`.
-- Aion-Brain `POST /api/agent/run` stays `aion_execute`. Do not break that handshake. See `docs/CURSOR_CLOUD_AGENTS.md`.
+- Non-trivial repo work → Claw `cursor_launch` → Brain `POST /api/cursor/launch`. Dynamic, not a prefab menu. Not inline heavy coding.
+- Handshake: `AION_BASE_URL` + `AION_API_KEY` (`X-AION-Key`). `CURSOR_API_KEY` stays on Brain (name in `.env.example` for co-host only).
+- Missing Brain or Brain missing the key → Trinity **HOLD**.
+- `cursor_status` / `cursor_reply` / `cursor_cancel` map to Brain `/api/cursor/:id`, `.../reply`, `.../cancel`.
+- `POST /api/agent/run` stays `aion_execute`. See `docs/CURSOR_CLOUD_AGENTS.md`.
 
 ## Local setup
 
