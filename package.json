@@ -9,6 +9,7 @@
     "start:e2e": "bash scripts/e2e-webserver.sh",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test tests/unit/*.test.ts",
     "test:unit": "npx tsx --test tests/unit/*.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
