@@ -68,7 +68,7 @@ describe("business connectors e2e (mock HTTP)", () => {
 
   it("registers every business tool and teaches existing scrapers/search/shell", () => {
     for (const name of [
-      "youtube_search", "youtube_video", "llm_gemini", "llm_xai", "llm_kimi",
+      "youtube_search", "youtube_video", "gemini_generate", "xai_chat", "kimi_chat",
       "openai_chat", "openai_embed", "pinecone_query", "pinecone_upsert",
       "hedra_start", "hedra_job", "hedra_status", "connector_status",
       "steel_scrape", "firecrawl_scrape", "scrapingbee_scrape", "scrapfly_scrape",
@@ -79,7 +79,12 @@ describe("business connectors e2e (mock HTTP)", () => {
     }
     const catalog = toolsCatalog();
     assert.match(catalog, /youtube_search/);
-    assert.match(catalog, /llm_gemini/);
+    assert.match(catalog, /gemini_generate/);
+    assert.match(catalog, /xai_chat/);
+    assert.match(catalog, /kimi_chat/);
+    assert.equal(CLAW_TOOL_NAMES.includes("llm_gemini"), false);
+    assert.equal(CLAW_TOOL_NAMES.includes("llm_xai"), false);
+    assert.equal(CLAW_TOOL_NAMES.includes("llm_kimi"), false);
     assert.match(catalog, /pinecone_query/);
     assert.match(catalog, /hedra_start/);
     assert.match(catalog, /steel_scrape/);
@@ -91,15 +96,18 @@ describe("business connectors e2e (mock HTTP)", () => {
 
   it("connector_status inventory lists every business key with a when string", () => {
     const inv = connectorInventory();
-    for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "exa", "e2b", "resend", "github"]) {
+    for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "exa", "e2b", "resend", "github", "bitdeer", "nvidia"]) {
       assert.ok(id in inv, id);
       assert.equal(typeof (inv as Record<string, { when?: string }>)[id].when, "string");
       assert.ok(((inv as Record<string, { when?: string }>)[id].when || "").length > 10, id);
     }
     assert.match(inv.youtube.when, /youtube_search/);
-    assert.match(inv.gemini.when, /llm_gemini/);
-    assert.match(inv.xai.when, /llm_xai/);
-    assert.match(inv.kimi.when, /llm_kimi/);
+    assert.match(inv.gemini.when, /gemini_generate/);
+    assert.match(inv.gemini.when, /OPTIONAL/);
+    assert.match(inv.xai.when, /xai_chat/);
+    assert.match(inv.kimi.when, /kimi_chat/);
+    assert.match(inv.bitdeer.when, /PRIMARY/);
+    assert.match(inv.nvidia.when, /PRIMARY/);
     assert.match(inv.openai.when, /openai_embed/);
     assert.match(inv.pinecone.when, /pinecone_query/);
     assert.match(inv.hedra.when, /hedra_start/);
@@ -112,9 +120,13 @@ describe("business connectors e2e (mock HTTP)", () => {
     const runtime = readFileSync(resolve(process.cwd(), "lib/claw/runtime.ts"), "utf8");
     assert.match(runtime, /Business wiring/);
     assert.match(runtime, /YOUTUBE_API_KEY → youtube_search/);
-    assert.match(runtime, /GEMINI_API_KEY → llm_gemini/);
-    assert.match(runtime, /XAI_API_KEY → llm_xai/);
-    assert.match(runtime, /KIMI_API_KEY → llm_kimi/);
+    assert.match(runtime, /Claw runtime is Bitdeer/);
+    assert.match(runtime, /from "@\/lib\/nvidia\/client"/);
+    assert.match(runtime, /chatCompletionStream/);
+    assert.match(runtime, /GEMINI_API_KEY → gemini_generate/);
+    assert.match(runtime, /XAI_API_KEY → xai_chat/);
+    assert.match(runtime, /KIMI_API_KEY → kimi_chat/);
+    assert.match(runtime, /OPTIONAL alternate/);
     assert.match(runtime, /OPENAI_API_KEY/);
     assert.match(runtime, /PINECONE_API_KEY → pinecone_query/);
     assert.match(runtime, /HEDRA_API_KEY → hedra_status \/ hedra_start/);
@@ -172,7 +184,7 @@ describe("business connectors e2e (mock HTTP)", () => {
     noLeak(video);
   });
 
-  it("llm_gemini / llm_xai / llm_kimi / openai_chat hit the real provider URLs", async () => {
+  it("gemini_generate / xai_chat / kimi_chat / openai_chat hit the real provider URLs", async () => {
     process.env.GEMINI_API_KEY = KEYS.GEMINI_API_KEY;
     process.env.XAI_API_KEY = KEYS.XAI_API_KEY;
     process.env.KIMI_API_KEY = KEYS.KIMI_API_KEY;
@@ -200,9 +212,9 @@ describe("business connectors e2e (mock HTTP)", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 599 });
     }) as typeof fetch;
-    const gemini = await executeClawTool("llm_gemini", { prompt: "hi" });
-    const xai = await executeClawTool("llm_xai", { prompt: "hi" });
-    const kimi = await executeClawTool("llm_kimi", { prompt: "hi" });
+    const gemini = await executeClawTool("gemini_generate", { prompt: "hi" });
+    const xai = await executeClawTool("xai_chat", { prompt: "hi" });
+    const kimi = await executeClawTool("kimi_chat", { prompt: "hi" });
     const openai = await executeClawTool("openai_chat", { prompt: "hi" });
     assert.equal((gemini as { text?: string }).text, "gemini-ok");
     assert.equal((xai as { text?: string }).text, "xai-ok");
@@ -308,11 +320,15 @@ describe("business connectors e2e (mock HTTP)", () => {
     const res = await connectorsGet();
     const json = await res.json();
     const ids = (json.connectors as Array<{ id: string; when: string }>).map((c) => c.id);
-    for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel"]) {
+    for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "bitdeer", "nvidia"]) {
       assert.ok(ids.includes(id), id);
     }
     const youtube = json.connectors.find((c: { id: string }) => c.id === "youtube");
     assert.match(youtube.when, /youtube_search/);
+    const bitdeer = json.connectors.find((c: { id: string; kind?: string; role?: string }) => c.id === "bitdeer");
+    assert.equal(bitdeer.kind, "claw-brain");
+    assert.equal(bitdeer.role, "primary");
+    assert.equal(json.clawBrain.provider, "bitdeer");
     noLeak(json);
     assert.equal(JSON.stringify(json).includes("sk-"), false);
   });
@@ -332,6 +348,16 @@ describe("business connectors e2e (mock HTTP)", () => {
     assert.ok(connectors.youtube.when);
     assert.ok(connectors.gemini.when);
     assert.ok(connectors.pinecone.when);
+    assert.match(connectors.bitdeer.when, /PRIMARY/);
+    noLeak(row);
+  });
+
+  it("app_status names Bitdeer as the live Claw brain", async () => {
+    const row = await executeClawTool("app_status", {});
+    const status = row as { clawBrain?: { provider?: string; role?: string }; external?: { bitdeer?: { role?: string } } };
+    assert.equal(status.clawBrain?.provider, "bitdeer");
+    assert.equal(status.clawBrain?.role, "primary");
+    assert.match(String(status.external?.bitdeer?.role || ""), /primary/i);
     noLeak(row);
   });
 });

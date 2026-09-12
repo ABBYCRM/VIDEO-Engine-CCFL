@@ -10,10 +10,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const connectors = connectorInventory();
   const rows = Object.entries(connectors).map(([id, meta]) => {
-    const row = meta as { configured?: boolean; when?: string; owner?: string; keyType?: string; note?: string; enabled?: boolean };
+    const row = meta as { configured?: boolean; when?: string; owner?: string; keyType?: string; note?: string; enabled?: boolean; role?: string };
     return {
       id,
-      kind: id === "composio" ? "mcp" : id === "aion" || id === "cursor" ? "brain" : "connector",
+      kind: id === "bitdeer" || id === "nvidia" ? "claw-brain" : id === "composio" ? "mcp" : id === "aion" || id === "cursor" ? "brain" : "connector",
       configured: Boolean(row.configured),
       missing: !row.configured,
       when: row.when || "",
@@ -21,11 +21,13 @@ export async function GET() {
       keyType: row.keyType,
       note: row.note,
       enabled: row.enabled,
+      role: row.role,
     };
   });
   return NextResponse.json({
     ok: true,
     refreshedAt: new Date().toISOString(),
+    clawBrain: { provider: "bitdeer", role: "primary", note: "Default Claw chat/vision/embed/rerank. Optional Gemini/xAI/Kimi/OpenAI tools do not replace this." },
     brain: { configured: isAionConfigured(), owner: "aion-brain" },
     composio: { configured: isComposioConfigured(), transport: "https://connect.composio.dev/mcp" },
     connectors: rows,

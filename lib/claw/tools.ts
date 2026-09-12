@@ -48,6 +48,7 @@ import {
   openaiChat, openaiEmbed, pineconeQuery, pineconeUpsert, hedraStart, hedraJob
 } from "@/lib/claw/business";
 import { isHeliconeEnabled } from "@/lib/nvidia/helicone";
+import { getClawModel, isNvidiaEnabled } from "@/lib/nvidia/client";
 import { isGdyConfigured, gdySearch, gdyRagContext, gdyCategories, gdyTools } from "@/lib/claw/gdy";
 import { arxivSearch } from "@/lib/claw/arxiv";
 import { isExaConfigured, isTavilyConfigured } from "@/lib/web-search";
@@ -280,7 +281,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Local app state ─────────────────────────────────────────────
   {
     name: "app_status",
-    description: "Return the live health of the Claw console: NVIDIA + Composio + Steel reachability, current Claw tool count, and the active LLM model.",
+    description: "Return the live health of the Claw console. Bitdeer is the PRIMARY Claw brain (chat/vision/embed/rerank). Gemini/xAI/Kimi/OpenAI are optional alternates only.",
     args: "{}",
     handler: async () => {
       // The previous build of this tool reached into video_jobs /
@@ -298,7 +299,15 @@ export const CLAW_TOOLS: ToolDef[] = [
         messageCount: messages,
         fileCount: files,
         connectors: connectorInventory(),
+        clawBrain: {
+          provider: "bitdeer",
+          role: "primary",
+          live: isNvidiaEnabled(),
+          model: isNvidiaEnabled() ? getClawModel() : null,
+          note: "Default Claw chat, analyze_image, embed, and rerank. Optional gemini_generate / xai_chat / kimi_chat / openai_chat do not replace this."
+        },
         external: {
+          bitdeer: { live: isNvidiaEnabled(), model: isNvidiaEnabled() ? getClawModel() : null, role: "primary Claw chat/vision/embed/rerank" },
           composio: { configured: composio.configured, live: composio.live, keyType: composio.keyType, toolkits: composio.toolkits?.length || 0, note: composio.note },
           steel: { configured: isSteelConfigured() },
           forge: { live: forgeStatus().live, cap: forgeStatus().cap, note: "Self-hosted Chromium control plane. Does not farm CAPTCHAs." },
@@ -911,7 +920,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Image analysis (NVIDIA Vision) ────────────────────────────
   {
     name: "analyze_image",
-    description: "Hand an image URL or a public http(s) path to NVIDIA Vision and ask a question about it. Returns the model's answer plus a short caption. Use this whenever the operator wants to know what an image LOOKS like, not what its caption says — captions are unreliable for visual content.",
+    description: "PRIMARY Claw vision: Bitdeer/NVIDIA catalog. Hand an image URL to the live Claw vision model. Use this for default image questions. gemini_generate is only if the operator named Gemini.",
     args: "{\"url\":\"https://...\",\"question\":\"What is in this image?\"}",
     handler: async (a) => {
       const url = str(a.url).trim();
@@ -1131,10 +1140,10 @@ export const CLAW_TOOLS: ToolDef[] = [
     handler: async (a) => youtubeVideo({ id: str(a.id || a.videoId || a.video_id) })
   },
   {
-    name: "llm_gemini",
-    description: "Call Google Gemini generateContent (chat + optional vision). NVIDIA remains the default Claw chat path — use this when the operator names Gemini or needs Gemini vision. Fail-soft if GEMINI_API_KEY is missing.",
+    name: "gemini_generate",
+    description: "OPTIONAL alternate: Google Gemini generateContent (chat + optional vision). Bitdeer remains the PRIMARY Claw chat/vision path — call this only when the operator names Gemini. Fail-soft if GEMINI_API_KEY is missing.",
     args: "{\"prompt\":\"Summarize this\",\"model\":\"gemini-2.0-flash\"}",
-    when: "Operator named Gemini, or analyze_image/NVIDIA is the wrong path for this vision request.",
+    when: "Operator explicitly named Gemini. Do not use this for default Claw chat or analyze_image.",
     handler: async (a) => llmGemini({
       prompt: str(a.prompt || a.text || a.q),
       model: str(a.model) || undefined,
@@ -1144,31 +1153,31 @@ export const CLAW_TOOLS: ToolDef[] = [
     })
   },
   {
-    name: "llm_xai",
-    description: "Call xAI Grok chat/completions with XAI_API_KEY. Fail-soft if the key is missing. NVIDIA remains default Claw chat.",
+    name: "xai_chat",
+    description: "OPTIONAL alternate: xAI Grok chat/completions. Bitdeer remains PRIMARY Claw chat. Fail-soft if XAI_API_KEY is missing.",
     args: "{\"prompt\":\"Answer briefly\",\"model\":\"grok-4-fast-non-reasoning\"}",
-    when: "Operator named xAI, Grok chat, or wants a Grok completion (not Grok video).",
+    when: "Operator explicitly named xAI or Grok chat (not Grok video). Do not use as the Claw runtime.",
     handler: async (a) => llmXai({ prompt: str(a.prompt || a.text || a.q), model: str(a.model) || undefined })
   },
   {
-    name: "llm_kimi",
-    description: "Call Moonshot Kimi chat/completions with KIMI_API_KEY. Fail-soft if the key is missing.",
+    name: "kimi_chat",
+    description: "OPTIONAL alternate: Moonshot Kimi chat/completions. Bitdeer remains PRIMARY Claw chat. Fail-soft if KIMI_API_KEY is missing.",
     args: "{\"prompt\":\"Answer briefly\",\"model\":\"moonshot-v1-auto\"}",
-    when: "Operator named Kimi or Moonshot.",
+    when: "Operator explicitly named Kimi or Moonshot. Do not use as the Claw runtime.",
     handler: async (a) => llmKimi({ prompt: str(a.prompt || a.text || a.q), model: str(a.model) || undefined })
   },
   {
     name: "openai_chat",
-    description: "Call OpenAI chat/completions with OPENAI_API_KEY. Optional path — NVIDIA remains default Claw chat. Fail-soft if unconfigured.",
+    description: "OPTIONAL alternate: OpenAI chat/completions. Bitdeer remains PRIMARY Claw chat. Fail-soft if OPENAI_API_KEY is missing.",
     args: "{\"prompt\":\"Answer briefly\",\"model\":\"gpt-4o-mini\"}",
-    when: "Operator named OpenAI or GPT chat.",
+    when: "Operator explicitly named OpenAI or GPT chat. Do not use as the Claw runtime.",
     handler: async (a) => openaiChat({ prompt: str(a.prompt || a.text || a.q), model: str(a.model) || undefined })
   },
   {
     name: "openai_embed",
-    description: "Create an OpenAI embedding (text-embedding-3-small default). Uses OPENAI_EMBEDDINGS_API_KEY when set, else OPENAI_API_KEY. Fail-soft if neither is present.",
+    description: "OPTIONAL alternate embedding (text-embedding-3-small). Bitdeer Nemotron embed remains the default RAG path. Uses OPENAI_EMBEDDINGS_API_KEY when set, else OPENAI_API_KEY. Fail-soft if neither is present.",
     args: "{\"text\":\"chunk to embed\"}",
-    when: "Need a vector for Pinecone or local retrieval. Pair with pinecone_query / pinecone_upsert.",
+    when: "Operator asked for an OpenAI vector (e.g. Pinecone). Do not replace Bitdeer embed/rerank.",
     handler: async (a) => openaiEmbed({ text: str(a.text || a.input || a.prompt), model: str(a.model) || undefined })
   },
   {
