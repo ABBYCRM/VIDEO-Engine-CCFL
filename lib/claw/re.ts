@@ -165,7 +165,7 @@ export async function reTriage(input: { url?: string; fileId?: string; id?: stri
   const cmd = `${stageSampleCmd(resolved.source)} && python3 -c ${JSON.stringify(TRIAGE_PY)} ${JSON.stringify(SAMPLE_PATH)}`;
   const ran = e2bOut(await e2bCommand({ cmd, timeoutMs: Math.min(45_000, Number(input.timeoutMs) || 25_000) }));
   if (!ran.ok) {
-    return { ok: false as const, ...ran, tool: "re_triage", note: "Static triage only. Sample stays in E2B — never on this host." };
+    return { ...ran, ok: false as const, tool: "re_triage", note: "Static triage only. Sample stays in E2B — never on this host." };
   }
   let analysis: unknown = ran.stdout;
   try { analysis = JSON.parse(String(ran.stdout || "").trim()); } catch { /* keep text */ }
