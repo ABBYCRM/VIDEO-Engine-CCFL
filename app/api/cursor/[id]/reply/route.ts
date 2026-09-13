@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { aionCursorReply } from "@/lib/claw/aion";
-import { denyUnlessAdmin } from "@/lib/claw/brain-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain POST /api/cursor/:id/reply */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await denyUnlessAdmin();
-  if (denied) return denied;
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));

@@ -1,5 +1,6 @@
-// Server-side Aion-Brain bridge. Credentials and destination never come from tool arguments.
-// Endpoint shapes match docs/claw-contract.md on Aion-Brain main (cd55451 / 0.1.24). Do not invent fields.
+// Server-side bridge to the in-app Aion-Brain (services/aion-brain @ cd55451 / 0.1.24).
+// Credentials never come from tool arguments. Do not invent fields. Do not call the
+// retired standalone DigitalOcean hostname.
 import { PRIMARY_CLAW_NVIDIA_MODEL } from "../nvidia/models.ts";
 import { filterAionSseDelta, isInternalAionSseType, preferAionExecute, routeAionMode, sanitizeUserVisibleMessage } from "./user-visible";
 export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string; agentic?: boolean };
@@ -39,15 +40,28 @@ export async function aionN8n(action: unknown, args: unknown, context: AionConte
   return response.json();
 }
 
+export const IN_APP_AION_BASE_URL = "http://aion-brain:10000";
+const RETIRED_AION_HOSTS = new Set(["aion-brain-6iptg.ondigitalocean.app"]);
+
+function isInternalHttpHost(hostname: string) {
+  return ["localhost", "127.0.0.1", "[::1]", "aion-brain"].includes(hostname)
+    || !hostname.includes(".")
+    || hostname.endsWith(".internal")
+    || hostname.endsWith(".svc.cluster.local");
+}
+
 function config() {
-  const base = process.env.AION_BASE_URL?.trim();
+  const raw = process.env.AION_BASE_URL?.trim() || IN_APP_AION_BASE_URL;
   const key = process.env.AION_API_KEY?.trim();
-  if (!base || !key) throw new Error("Aion-Brain is not configured. Run bash scripts/setup-aion-local.sh or set AION_BASE_URL and AION_API_KEY on the server.");
-  const url = new URL(base);
-  const local = ["localhost", "127.0.0.1", "[::1]", "aion-brain"].includes(url.hostname);
+  if (!key) throw new Error("Aion-Brain is not configured. Set AION_API_KEY. AION_BASE_URL defaults to the in-app brain at http://aion-brain:10000.");
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+  const url = new URL(normalized);
+  if (RETIRED_AION_HOSTS.has(url.hostname)) {
+    throw new Error("The standalone aion-brain DigitalOcean app is retired. AION_BASE_URL must be the in-app brain (http://aion-brain:10000).");
+  }
   if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
-      (url.protocol !== "https:" && !(url.protocol === "http:" && local))) {
-    throw new Error("AION_BASE_URL must be an HTTPS origin (HTTP is allowed for the local Aion service).");
+      (url.protocol !== "https:" && !(url.protocol === "http:" && isInternalHttpHost(url.hostname)))) {
+    throw new Error("AION_BASE_URL must be an HTTPS origin or the in-app HTTP brain (localhost / aion-brain).");
   }
   return { origin: url.origin, key };
 }
@@ -383,7 +397,7 @@ function aionMissingCursor(): AionCursorResult {
     trinity: "HOLD",
     error: "Aion-Brain is not configured.",
     code: "AION_UNCONFIGURED",
-    hint: "Set AION_BASE_URL and AION_API_KEY. Brain owns Cursor (CURSOR_API_KEY on the Brain host, or on this box only if Brain is co-hosted). Do not invent a local Cursor client.",
+    hint: "Set AION_API_KEY. AION_BASE_URL defaults to the in-app brain. CURSOR_API_KEY lives on the brain service. Do not invent a local Cursor client.",
   };
 }
 
@@ -447,7 +461,7 @@ async function aionCursorHttp(
       trinity: "HOLD",
       error: /abort|timeout/i.test(message) ? "Aion-Brain cursor proxy timed out" : "Aion-Brain cursor proxy failed",
       code: /abort|timeout/i.test(message) ? "TIMEOUT" : "TRANSPORT",
-      hint: "Check AION_BASE_URL reachability. Do not fall back to a local Cursor stub.",
+      hint: "Check the in-app aion-brain service. Do not fall back to a local Cursor stub.",
     };
   }
 }
@@ -543,7 +557,7 @@ async function aionBrainHttp(
   context: AionContext = {},
 ): Promise<AionBrainProxy> {
   if (!isAionConfigured()) {
-    return aionMissing("Set AION_BASE_URL and AION_API_KEY. Brain owns BOS / routines / Trinity.");
+    return aionMissing("Set AION_API_KEY. AION_BASE_URL defaults to the in-app brain. Brain owns BOS / routines / Trinity.");
   }
   const { origin, key } = config();
   const timeout = AbortSignal.timeout(30_000);
@@ -581,7 +595,7 @@ async function aionBrainHttp(
       trinity: "HOLD",
       error: /abort|timeout/i.test(message) ? "Aion-Brain proxy timed out" : "Aion-Brain proxy failed",
       code: /abort|timeout/i.test(message) ? "TIMEOUT" : "TRANSPORT",
-      hint: "Check AION_BASE_URL reachability. Do not invent a local BOS/routines/Trinity store.",
+      hint: "Check the in-app aion-brain service. Do not invent a local BOS/routines/Trinity store.",
     };
   }
 }

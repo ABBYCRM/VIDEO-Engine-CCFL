@@ -1,6 +1,13 @@
-# DigitalOcean App Platform spec for VIDEO-Engine (Claw console).
+# DigitalOcean App Platform spec for VIDEO-Engine (Claw console + in-app Brain).
 # Secrets are configured as DigitalOcean SECRET environment variables and
 # are never committed to this repository.
+#
+# One app. Two components from THIS repo:
+#   web         — Next.js Claw console (public)
+#   aion-brain  — absorbed Aion-Brain runtime (internal only)
+#
+# AION_BASE_URL on web is the in-app PRIVATE_URL. Do not point it at the
+# retired standalone app https://aion-brain-6iptg.ondigitalocean.app.
 #
 # The dev-skills RAG vector store lives in the bound Managed Postgres `db`.
 # After the first deploy, or after embedding-model/corpus changes, rebuild:
@@ -48,15 +55,12 @@ services:
       - key: SESSION_SECRET
         scope: RUN_TIME
         type: SECRET
-      - key: ADMIN_PASSWORD
-        scope: RUN_TIME
-        type: SECRET
       - key: APP_ENCRYPTION_KEY
         scope: RUN_TIME
         type: SECRET
       - key: AION_BASE_URL
         scope: RUN_TIME
-        type: SECRET
+        value: ${aion-brain.PRIVATE_URL}
       - key: AION_API_KEY
         scope: RUN_TIME
         type: SECRET
@@ -82,6 +86,72 @@ services:
       - key: CLAW_RERANK_MODEL
         scope: RUN_TIME
         value: BAAI/bge-reranker-v2-m3
+
+  - name: aion-brain
+    dockerfile_path: Dockerfile
+    source_dir: services/aion-brain
+    github:
+      repo: ABBYCRM/VIDEO-Engine-CCFL
+      branch: main
+      deploy_on_push: true
+    http_port: 10000
+    internal_ports:
+      - 10000
+    routes: []
+    instance_count: 1
+    instance_size_slug: basic-s
+    health_check:
+      http_path: /healthz
+      initial_delay_seconds: 20
+      period_seconds: 15
+      timeout_seconds: 5
+      failure_threshold: 5
+    envs:
+      - key: NODE_ENV
+        scope: RUN_AND_BUILD_TIME
+        value: production
+      - key: ENVIRONMENT
+        scope: RUN_TIME
+        value: production
+      - key: PORT
+        scope: RUN_TIME
+        value: "10000"
+      - key: AION_API_KEYS
+        scope: RUN_TIME
+        type: SECRET
+      - key: AION_ADMIN_KEYS
+        scope: RUN_TIME
+        type: SECRET
+      - key: BITDEER_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: NVIDIA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: CURSOR_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: COMPOSIO_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: STEEL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: BITDEER_BASE_URL
+        scope: RUN_TIME
+        value: https://api-inference.bitdeer.ai/v1
+      - key: NVIDIA_BASE_URL
+        scope: RUN_TIME
+        value: https://api-inference.bitdeer.ai/v1
+      - key: PRIMARY_MODEL
+        scope: RUN_TIME
+        value: mistralai/Mistral-Large-3-675B-Instruct-2512
+      - key: AGENT_MODEL
+        scope: RUN_TIME
+        value: mistralai/Mistral-Large-3-675B-Instruct-2512
+      - key: FALLBACK_MODELS
+        scope: RUN_TIME
+        value: mistralai/Mistral-Large-3-675B-Instruct-2512
 
 databases:
   - name: db

@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { stubAuthenticatedSession } from "./helpers";
 
+test("Claw opens without a login redirect", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).not.toHaveURL(/\/login/);
+  await expect(page).toHaveURL(/\/claw/);
+  await page.goto("/login");
+  await expect(page).not.toHaveURL(/\/login/);
+  await expect(page).toHaveURL(/\/claw/);
+});
+
 test("Claw is the operator chat with thread/file controls, model picker, and tool execution", async ({ page }) => {
   await stubAuthenticatedSession(page);
   await page.route("**/api/claw/model", route => route.fulfill({

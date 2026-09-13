@@ -64,7 +64,7 @@ if [ "$ready" != true ]; then
   echo 'Connection check failed. Run: sudo docker compose --env-file .aion.env -f docker-compose.aion.yml logs --tail=60'
   exit 1
 fi
-echo 'Claw and Aion-Brain are running and the authenticated API connection works.'
+echo 'Claw and the in-app Aion-Brain are running (no login wall).'
 echo 'Open http://localhost:3000/claw and refresh with Ctrl+F5.'
 echo 'Ask: Check Aion status, then ask Aion-Brain to introduce itself.'
 echo 'The first consultation verifies that the NVIDIA key and model work.'

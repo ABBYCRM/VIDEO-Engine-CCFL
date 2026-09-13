@@ -1,0 +1,164 @@
+# llm-gateway changelog
+
+All notable changes to this project will be documented in this file.
+
+## 0.1.24 — fix: assistant text is natural language, not INTERNAL STATE
+- `/api/chat` and `/api/claw/execute` never put control-loop internals into assistant-visible `delta` / `answer`. `self_state`, `phase`, `tool_start`, and `tool_end` stay separate SSE event types.
+- Actionable goals on `/api/chat` prefer the Aion execute path (unless `consult: true` / `agentic: false`). Consult-only questions stay single-shot.
+- System prompts and BOS operating rules forbid narrating INTERNAL STATE / phases / Trinity gates unless the user asks.
+- Planner dumps of SELF_STATE are treated as non-action and forced into a real tool.
+- Tests: `test/assistant_text.test.mjs` plus contract HTTP for clean execute/chat SSE.
+
+## 0.1.23 — feat: teach all loaded provider keys end-to-end
+- Secrets resolve vault → boot snapshot → env (`lib/secrets.js`). `nvidia_only_guard` still strips OpenAI/Anthropic/xAI/A2E from `process.env` so `/v1` stays Bitdeer; tools use the snapshot. Vault hydrates at boot (`bootVault()`).
+- Tools + catalog + `connectorsSnapshot` (with when-to-use): `youtube_search` / `youtube_video`, `gemini_chat`, `xai_chat`, `kimi_chat`, `openai_chat` / `openai_embed` / `embeddings_embed`, `pinecone_query` / `pinecone_upsert`, `hedra_generate` / `hedra_job`, `composio_list_tools` / `composio_tool_schema` (ak_ live). `cursor_*` unchanged.
+- Pinecone merges into `bos_omega_retrieve`, `GET/POST /api/memory/bos`, and `memory_write_fact` / `memory_search` when `PINECONE_API_KEY` + host are loaded.
+- Fail-soft when unconfigured. Unit tests mock `fetch`. Same tool names as VIDEO-Engine-CCFL where the proxy already uses them.
+- BITDEER-PRIMARY (Luis PS): `/v1` uses `lib/nvidia_only_providers.js` only. Extra GEMINI/XAI/KIMI/OPENAI tools stay optional fail-soft side tools. `primaryModel` / `agentModel` remain Bitdeer catalog (`zai-org/GLM-5`, `mistralai/Mistral-Large-3-675B-Instruct-2512`). CORS no longer advertises `x-openai-key` / `x-a2e-key` / `x-anthropic-key`. Planner never prefers `openai_chat` for generic chat.
+
+## 0.1.22 — feat: Trinity decision + BOS/routines/MCP HTTP
+- `POST /api/decision` returns Canon Trinity `GO`/`HOLD`/`ABORT` from `resolveBosGate` with structured Alpha/Praxis/Omega reasons, plus the existing 7-law `decision` (`COMMIT`/`DEFER`/`REJECT`). BOS topics retrieve via `bos_omega_rag` before judgment; empty store auto-ingests.
+- `GET`/`POST /api/memory/bos` — retrieve + ingest/upsert. `BosOmegaRag.upsertDocument` / `upsertIfMissing` / `retrieveOrIngest`. GET without `q` returns status and ingests if missing.
+- First-class routines HTTP over `RoutineStore`: `GET/POST /api/routines`, `GET/PUT/DELETE /api/routines/:name`, `POST .../pause|resume|run`. Pause/resume/delete plus tools `routine_upsert` / `routine_pause` / `routine_resume` / `routine_delete`.
+- `GET /api/connectors` and `GET /api/mcp/status` list configured integrations from env (names + booleans only; no secret values).
+- VIDEO-Engine-CCFL proxies these Brain paths (`docs/claw-contract.md`). Do not add a second RAG/routines/MCP stub on CCFL.
+- Tests: `test/trinity_bos_routines_mcp.test.mjs` plus contract HTTP for decision / memory POST / routines / connectors.
+
+## 0.1.21 — feat: BOS-OMEGA RAG implant + Grok-Bot dynamic spawn
+- Cursor Cloud Agents client on Brain (`lib/cursor_cloud.js`): `cursor_launch` / `cursor_status` / `cursor_reply` / `cursor_cancel` plus `/api/cursor/*`. Reads `CURSOR_API_KEY` (name only; same DigitalOcean secret CCFL already holds). CCFL calls Brain — no second stub. Planner prefers `cursor_launch` for non-trivial repo/PR work. Launch prompt injects Trinity/evidence/methodical-notes/self-fix.
+- `knowledge/bos-omega/` Canon / Patch / Continuity corpus. Implanted into Node SQLite vectors (`lib/bos_omega_rag.js`), TeacherRAG (`teacher_rag/src/teacher_rag/bos_omega.py`), and AgentMemory facts (`bos-omega` / `weldon-angelos`).
+- Retrieval-before-answer on `/api/chat` for BOS topics; `GET /api/memory/bos?q=`; tool `bos_omega_retrieve`. Hash embeddings work offline (no paid API).
+- Trinity GO/HOLD/ABORT + Grok-Bot operating rules in `buildSystemPrompt` (AION COMMIT/DEFER/REJECT unchanged).
+- Dynamic on-the-spot agent spawn (`lib/agent_jobs.js`): SQLite job queue survives restart; parallel workers; steer; stop; parent callback; optional Inngest event fan-out when `INNGEST_EVENT_KEY` is set. Not prefabricated roles.
+- HTTP: `POST /api/agents/spawn`, `GET /api/agents/:id`, `GET /api/agents/:id/result`, `POST /api/agents/:id/steer`, `POST /api/agents/:id/stop`, `POST /api/agents/:id/cleanup`.
+- Constrained `workspace_exec` (node/python3, no shell, scrubbed env). `steel_actions` for computer/browser. Optional `routine_*` templates (spawn does not require them).
+- Tests: `test/bos_omega_rag.test.mjs`, `test/agent_jobs.test.mjs`, TeacherRAG `test_bos_omega.py`, contract HTTP spawn + Trinity retrieve.
+
+## 0.1.18 — fix: Ultra 401 must not BLOCK execute with 0 tools
+- `AionChain.chat` / `stream` no longer abort the NVIDIA chain on 400/401/403. Ultra is often unauthorized on this key; Super 120B and Lightning 30B still work. Walk the rest of the catalog instead of returning BLOCKED in ~50ms with zero tools.
+- Model-catalog misses (400/401/403/404/409/422/429) do not trip the provider circuit breaker.
+- Planner `llm_error` forces a real tool (web_search for rag/public-records goals) instead of a BLOCKED halt.
+- `heliconeHeaders()` only attaches Helicone-Auth when `HELICONE_ENABLED` is 1/true/yes.
+- Guaranteed Super + Lightning fallbacks even if `FALLBACK_MODELS` is overridden.
+- Tests: `test/aion-chain-fallback.test.mjs` plus planner llm_error coverage in `test/agent_tool_extensions.test.mjs`.
+
+## 0.1.17 — feat: GDY OSINT directory + public arXiv tools
+- `lib/external_tools.js` adapters: `gdySearch` / `gdyRagContext` / `gdyCategories` / `gdyTools` (Bearer `GDY_API_KEY`, one 401 retry on `GDY_API_KEY_ALT`) and `arxivSearch` (official Atom API, no GDY key).
+- `gdyApiBase()` prefers `GDY_API_BASE`, else `GDY_BASE_URL` + `/v1`. Timeout + fail-soft when unconfigured. Secrets never logged.
+- Registered on `lib/brain_tools.js` ToolRegistry so `/api/tools`, `/api/claw/tools`, `/api/claw/tools/:name`, and the SELF_STATE ACTION phase (`/api/claw/execute`) can call them.
+- `configuredSecrets()` / `/healthz` / `/api/state` expose `GDY` as a boolean only (`secrets.gdy`).
+- Unit tests in `test/external_tools.test.mjs` mock `fetch`; no real keys.
+
+## 0.1.16 — feat: agentic SELF_STATE control loop + real tool execution
+- `lib/self_state.js` / `lib/control_loop.js` / `lib/agent_runtime.js` enforce the required cycle in code: SELF-OBSERVATION → SELF-MONITORING → INTROSPECTION → METACOGNITION → SELF-REFLECTION → METACONTROL → ACTION → TERMINATION CHECK.
+- LOOP_DETECTED after the same strategy fails ≥2 times with no new evidence; identical retries are rejected.
+- Completion gate refuses `COMPLETE` unless acceptance criteria are verified by tool evidence. Assumptions stay ASSUMED; intended tool calls are not treated as done; confidence is not proof.
+- Native NIM `tool_calls` + `reasoning_content` are parsed and preserved. Claw `<tool_call>` XML is also accepted. Thinking-only turns are forced into ACTION.
+- Env-backed tools (fail-soft, no fabricated success): Tavily, Exa, Firecrawl, ScrapingBee, Scrapfly, ScreenshotOne (HMAC-SHA256 canonical query), Composio (`ak_` only; `oak_`/`ck_` typed error), E2B, Hedra status, Resend, GitHub (`GITHUB_PERSONAL_ACCESS_TOKEN`).
+- VIDEO-Engine-CCFL contract: `POST /api/claw/execute` (alias `/api/agent/run`), `GET /api/claw/contract`, `/api/claw/tools`. `/api/chat` with `agentic: true` runs the same loop. See `docs/claw-contract.md`.
+- Default models: `PRIMARY_MODEL=nvidia/nemotron-3-super-120b-a12b`, `AGENT_MODEL=nvidia/nemotron-3-ultra-550b-a55b`, fallbacks include `moonshotai/kimi-k2.6`.
+
+## 0.1.14 — fix: retire dead primary LLM
+- Promoted `nvidia/nemotron-3-nano-30b-a3b` to primary (was the first fallback). `meta/llama-3.1-8b-instruct` and `meta/llama-3.3-70b-instruct` both return HTTP 410 (retired) from `integrate.api.nvidia.com`. Verified 30B Nano live at the same endpoint, model now primary. Fallback chain re-ordered around a model the upstream actually serves.
+- Caught by the 2026-08-27 deployment-validator run (OPEN-1 in `/workspace/deployment-validation-report.json`).
+
+## 0.1.13 — feat: NVIDIA-first LLM, ECC skill auto-router, DuckDuckGo + Reddit + Steel.dev tools
+- Primary model now `meta/llama-3.1-8b-instruct` (NVIDIA NIM). Fallbacks: `nvidia/nemotron-3-nano-30b-a3b`, `grok-4-fast-reasoning`, `gpt-4.1-mini`, `claude-3-5-haiku-latest`.
+- New `lib/skill_catalog.js` — parses the ECC Complete AI Skill Pack (286 skills) into an in-memory index. Lazy-loads full bodies on demand.
+- New `lib/skill_router.js` — uses NVIDIA `nvidia/nemotron-mini-4b-instruct` as a fast JSON reranker to pick the top-K most relevant skills for a user message. Falls back to lexical search if the reranker fails.
+- New `lib/duckduckgo.js` — DuckDuckGo HTML searcher (no API key). Wires into the kernel-level `web_search` tool so direct callers (curl, scripts) get a working search out of the box.
+- New `lib/steel_browser.js` — Steel.dev thin client. `createSession`, `getContent`, `runActions`, `fetchUrl(url)` convenience.
+- New `lib/brain_tools.js` tools: `reddit_search` (public Reddit JSON), `steel_browser`, `pick_skill`, `load_skill`. Existing `web_search` now backed by DDG.
+- New HTTP routes:
+  - `GET  /api/skills`              — full catalog (name, title, description, path)
+  - `GET  /api/skills/:name`        — full skill body
+  - `POST /api/skills/pick`         — reranker (or lexical) for a query
+  - `POST /api/skills/context`      — load N skill bodies for prompt injection
+- `/api/chat` now auto-picks skills per message and prepends their bodies to the system prompt. A new `type: "skills"` SSE event reports the source (reranker / lexical / empty), the included skill names, and the raw model output.
+- `/api/chat` also exposes `X-AION-Skills-Source` and `X-AION-Skills-Count` response headers for non-streaming clients.
+
+## 0.1.0 — 2026-08-04
+- Initial release.
+
+## 0.1.1 — fix: server.js
+- `gracefulShutdown` handler added (SIGTERM/SIGINT).
+
+## 0.1.2 — fix: server.js
+- `requestId` propagation; x-request-id header on every response.
+
+## 0.1.3 — fix: server.js
+- `express.json` explicit body limit (`1mb`).
+
+## 0.1.4 — fix: lib/router.js
+- `fetchWithTimeout` helper; all provider `fetch` calls use `AbortSignal.timeout(30000)`.
+
+## 0.1.5 — fix: hardened parse + rule noise
+- All provider `JSON.parse` now try/catch → typed `invalid_json` error (OpenAI, A2E, Anthropic).
+- `Store.lastAudit` guards corrupt report_json.
+- `P1-process-exit` rule ignores `bin/`, `test/`, and graceful-shutdown contexts.
+
+## 0.1.6 — feat: BOS-OMEGA Brain layer
+- `lib/brain.js` — closed-loop audit → research → propose cycle.
+- `POST /brain/audit-and-fix` — run full cycle (propose_only by default).
+- `GET /brain/status` — brain capability + policy.
+- Policy: never write unverified / hallucinated patches. Only re-apply already-verified local fixes.
+
+## 0.1.7 — feat: AION API integration (port of AION v2.4.0 contract)
+- `lib/aion_kernel.js` — 7-law kernel (REALITY / CONTINUITY / FIDELITY / LATTICE / EPISTEMIC / PERPETUITY / DECISION), MissionContext, resolveDecision, buildSystemPrompt, AION_CONTINUITY_PACK.
+- `lib/aion_settings.js` — frozen Settings loaded from env. Mirrors AION v2 backend's `app/settings.py`. Validates startup (fail-closed: requires AION_API_KEYS + AION_ADMIN_KEYS in production).
+- `lib/aion_chain.js` — AionChain async generator emitting the exact SSE event names AION v2 emits: decision, attempt, open, delta, done, error, [DONE]. Provider chain: OpenAI → NVIDIA NIM → Anthropic → Echo. AION_ECHO_ONLY=1 forces hermetic echo for tests.
+- server.js: new AION API routes on top of the existing OpenAI-compatible /v1/* surface:
+  - GET  /api/continuity-pack — 7 laws + 3 decision states (public)
+  - GET  /api/models — chain + providers (requires AION key)
+  - GET  /api/audit/recent — last audit (admin only)
+  - POST /api/decision — 7-law kernel decision for a single user_input
+  - POST /api/chat — full SSE chat with decision metadata + streaming deltas (max_tokens, role restriction, CORS-allowed)
+- All AION API routes accept `X-AION-Key` header or `Authorization: Bearer ...`. Constant-time key compare via `safeEq` in `aion_settings.js`.
+- 8 new contract tests (`test/contract-aion-modules.mjs`) + 10 new AION smoke tests (`test/smoke-aion.mjs`).
+- The existing 14 smoke tests still pass (the new module is additive; the OpenAI-compatible /v1/* surface is unchanged).
+
+## 0.1.8 — fix: production defects from 0.1.7 audit
+- CORS: added `x-aion-key` to `access-control-allow-headers` so browser preflight succeeds when the AION auth header is sent.
+- Startup: fail-closed on missing `AION_API_KEYS` / `AION_ADMIN_KEYS` in production (was a soft warning, now `process.exit(1)`). Dev escape hatch `ALLOW_UNAUTHENTICATED_DEV=true` in non-production preserved.
+- AionChain: documented simulated streaming in a top-of-method NOTE; added `"streaming": "simulated"` to the `done` SSE event payload.
+- AionChain: provider selection is now name-based. `stream({ chain })` walks the requested `order` and resolves each entry via a `byName` Map; unknown providers emit `error` and continue. The previous index-based selection silently ignored requested provider names.
+- README: file map includes the AION modules; AION section notes the simulated-streaming limitation and the CORS header.
+
+
+## 0.1.9 — feat: true token streaming
+- `OpenAIProvider.streamChat()` — real SSE token stream from OpenAI-compatible endpoints (OpenAI, NVIDIA NIM, etc.).
+- `AionChain.stream()` prefers true streaming when `provider.streamChat` exists; falls back to simulated chunking for providers that lack it (Echo, Anthropic until added).
+- `done` and `open` SSE events now carry `"streaming": "true"` or `"streaming": "simulated"`.
+- SSE event contract unchanged: attempt → open → delta* → done → [DONE].
+
+## 0.1.10 — fix: provider name collision + research + safeEq
+- `OpenAIProvider` accepts optional `name` (default `openai`) so NVIDIA NIM registers as `nvidia` and does not overwrite the openai entry in AionChain's byName Map.
+- `AionChain.fromEnv` sets `name: 'nvidia'` for the NVIDIA provider.
+- `safeEq` is null-safe (non-string tokens never match; no throw).
+- `brain.js` default research is now a real keyless DuckDuckGo HTML search (no stub). Callers may supply a richer researchFn when available.
+
+## 0.1.11 — feat: full runtime layers + AION-facing contract surface
+- `lib/vault.js` — AES-256-GCM encrypted secret store in Node; hydrate env at boot; admin rotate/reveal/delete.
+  **Implemented but not yet wired to any route** — `server.js` does not import
+  `lib/vault.js`, so there is no `/api/vault*` surface yet. Wiring it up is
+  real new admin-auth-gated secret-reveal/rotate attack surface and is
+  planned as its own reviewed change, not bundled into this entry.
+- `lib/memory.js` — durable SQLite episodic memory, facts, goals; contextPack for prompt injection. Exposed read-only via `GET /api/memory/episodes` (admin only).
+- `lib/state.js` — active free-energy state (energy/uncertainty/stress); decisionBias prefers DEFER when F high.
+- `lib/tools.js` — brain-owned tools: web_search (DDG), github_repo/file/search (token from vault/env). Not currently imported by `server.js` (see `lib/brain_tools.js` below for the tool registry that actually backs `/api/tools*`).
+- `lib/lattice.js` — multi-agent lattice (researcher/critic/executor) with majority consensus + critic veto.
+- `lib/brain.js` — closed research→evidence-backed proposals with citations; memory episode logging.
+- `lib/brain_tools.js` — `ToolRegistry` with deterministic + side-effect-free tools (echo, datetime, free_energy, web_search) for lattice demos and AION tool-injection; backs the `/api/tools*` routes below.
+- `/api/chat` integrates tools, memory, lattice, active state into decision + SSE.
+- New routes, all requiring `AION_API_KEYS` (auth same shape as `/api/decision`):
+  - `GET  /api/state` — primary_model, fallback_models, providers, laws, states, uptime. Used by the AION Python backend on boot to verify the Brain it will talk to is the right version with the right providers.
+  - `GET  /api/tools` — catalog of kernel-level tools (echo, datetime, free_energy, web_search)
+  - `POST /api/tools/:name` — run a tool, return `{ok, evidence}`
+  - `GET  /api/memory/episodes` — admin only
+- 5 new contract tests (`test/contract-aion-modules.mjs`); 37/37 tests green on this version.
+
+
+
+## 2026-08-27 — deployment-validator forced roll-forward
+- After rollback test, app was pinned to the pre-reddit-fix deploy. This commit
+  un-pins and re-deploys the latest (reddit-fix) main with no code changes.

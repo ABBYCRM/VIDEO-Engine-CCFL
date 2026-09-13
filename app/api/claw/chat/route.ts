@@ -1,4 +1,3 @@
-import { requireAdmin } from "@/lib/auth";
 import { createConversation, getConversation } from "@/lib/claw/store";
 import { runClawTurn, type ClawEvent } from "@/lib/claw/runtime";
 import { isClawEnabled } from "@/lib/feature-flags";
@@ -16,9 +15,6 @@ function sse(event: ClawEvent) {
 const SSE_PREAMBLE = `: connected ${" ".repeat(2048)}\n\n`;
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
-  }
   // Operator directive 2026-08-30: kill every Claw external connection.
   // CLAW_ENABLED=false short-circuits here so the request never opens
   // the SSE stream, never calls NVIDIA, never invokes a tool.

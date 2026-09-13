@@ -12,10 +12,8 @@
 //
 // Also wired as the PRE_DEPLOY entry point on DigitalOcean via the
 // migrate job + a one-shot curl in .do/app.yaml notes; safe to call any
-// time (idempotent). requireAdmin() gates it like every other Claw route
-// (this deployment is network-access-controlled).
+// time (idempotent). Open console — no login gate.
 
-import { requireAdmin } from "@/lib/auth";
 import { isEmbedConfigured } from "@/lib/nvidia/embed";
 import {
   isVectorStoreConfigured,
@@ -33,7 +31,6 @@ function json(body: unknown, status = 200) {
 }
 
 export async function GET() {
-  if (!(await requireAdmin())) return json({ error: "Unauthorized" }, 401);
 
   const vectorConfigured = isVectorStoreConfigured();
   const embedConfigured = isEmbedConfigured();
@@ -59,7 +56,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return json({ error: "Unauthorized" }, 401);
 
   if (!isVectorStoreConfigured()) {
     return json({ error: "No vector DB configured. Set VECTOR_DATABASE_URL or DATABASE_URL." }, 503);

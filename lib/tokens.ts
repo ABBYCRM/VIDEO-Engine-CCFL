@@ -1,10 +1,5 @@
-// lib/tokens.ts — Claw-only API token verify.
-//
-// 2026-08-30 "Claw only" repo strip. The previous version was a full
-// CRUD admin for video-engine API tokens. This is the minimum surface
-// required by lib/auth.ts's `requireAdmin()` Bearer-token fallback:
-// hash a presented token, look it up in the `api_tokens` table, and
-// return whether it's valid + not revoked.
+// lib/tokens.ts — optional ve_live_* token verify for automation callers.
+// The console itself has no login wall.
 import crypto from "node:crypto";
 import { db } from "@/lib/db";
 

@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'docker-compose.aion.yml'
-      - 'docker/aion.Dockerfile'
+      - 'services/aion-brain/**'
       - 'lib/claw/aion.ts'
       - 'scripts/setup-aion-local.sh'
       - '.github/workflows/aion-local.yml'
@@ -19,7 +19,7 @@ jobs:
           python3 - <<'PY'
           import base64, os, pathlib, secrets
           os.umask(0o077)
-          pathlib.Path('.env').write_text('ADMIN_PASSWORD=test-only-password\nSESSION_SECRET='+secrets.token_hex(32)+'\nAPP_ENCRYPTION_KEY='+base64.b64encode(secrets.token_bytes(32)).decode()+'\n')
+          pathlib.Path('.env').write_text('SESSION_SECRET='+secrets.token_hex(32)+'\nAPP_ENCRYPTION_KEY='+base64.b64encode(secrets.token_bytes(32)).decode()+'\n')
           pathlib.Path('.aion.env').write_text('AION_API_KEY='+secrets.token_hex(32)+'\nAION_ADMIN_KEY='+secrets.token_hex(32)+'\nAION_NVIDIA_API_KEY=nvapi-test-only-never-used\n')
           PY
       - name: Build both images and start private stack

@@ -7,7 +7,6 @@ import {
   Pencil, Plug, Plus, Search, ArrowUp, Settings, Sparkles, Square,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
-import { AuthGuard } from "@/components/auth-guard";
 import { ClawLogo } from "@/components/claw-logo";
 import { ComputerDock } from "@/components/computer-dock";
 import { ForgeConsole } from "@/components/forge-console";
@@ -704,7 +703,6 @@ export function ClawConsole() {
   const activeTitle = convs.find(c => c.id === active)?.title;
 
   return (
-    <AuthGuard>
       <div className="claw-shell relative flex h-[100dvh] overflow-hidden overflow-x-hidden" style={{ background: "transparent" }}>
         {/* ── Ambient background orbs ── */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
@@ -1149,6 +1147,5 @@ export function ClawConsole() {
           </div>
         </div>
       )}
-    </AuthGuard>
   );
 }

@@ -1,0 +1,314 @@
+# llm-gateway
+
+> Plug-and-play LLM gateway with a self-auditor built in. Drop it in front of any
+> LLM call in any app. Every call is logged, every call is measured, and the
+> gateway audits its own code on demand.
+
+OpenAI-compatible at the edge. If your code already calls OpenAI's REST API,
+you point it at the gateway and you're done.
+
+---
+
+## What it does
+
+- **Routes** every production LLM call through a Bitdeer-only chain
+  (`BITDEER_*` / `NVIDIA_*` aliases, nvidia catalog models) with circuit
+  breaking, per-call cost/latency tracking, and a SQLite call log. Extra
+  GEMINI/XAI/KIMI/OPENAI keys are optional fail-soft **side tools**, not chat defaults.
+- **Self-audits** with a 5-phase algorithm:
+  1. **Inventory** — sha256 every `.ts/.js/.mjs/.json` file in the repo
+  2. **Baseline** — measure health latency, memory, and self-availability
+  3. **Static** — run 22 rules over the source (P0 crash/security, P1 perf, P2 hygiene)
+  4. **Verify** — for every claimed fix in `CHANGELOG.md`, confirm the symbol still exists
+  5. **Report** — return `VERIFIED_COMPLETE` / `PARTIAL` / `BLOCKED` / `FAILED`
+- **Exposes** the audit on HTTP so any app (or cron) can hit it.
+
+---
+
+## Plug it into any app (3 lines)
+
+```js
+import { GatewayClient } from 'llm-gateway/client';
+const gw = new GatewayClient({ baseUrl: 'https://your-gateway', apiKey: process.env.OPENAI_API_KEY });
+const r = await gw.chat({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] });
+```
+
+Or, with the **raw OpenAI SDK** (no import needed — just change baseURL):
+```js
+import OpenAI from 'openai';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, baseURL: 'https://your-gateway/v1' });
+```
+
+For **Express apps**:
+```js
+import { gateway } from 'llm-gateway/middleware';
+app.use('/llm', gateway({ baseUrl: 'https://your-gateway' }));
+```
+
+For **anything else** (Python, Go, Zapier, cURL): hit the HTTP endpoint directly.
+It's OpenAI-compatible.
+
+---
+
+## Endpoints
+
+| Method | Path                          | Purpose                                            |
+|--------|-------------------------------|----------------------------------------------------|
+| GET    | `/healthz`                    | Liveness                                           |
+| POST   | `/v1/chat/completions`        | OpenAI-compatible chat                             |
+| POST   | `/v1/images/generations`      | OpenAI-compatible image gen                        |
+| POST   | `/v1/images/edits`            | OpenAI-compatible image edit                       |
+| POST   | `/v1/videos`                  | OpenAI-compatible video create                     |
+| POST   | `/v1/messages`                | Anthropic Messages API passthrough                  |
+| GET    | `/audit`                      | Last audit report (JSON)                           |
+| POST   | `/audit/run`                  | Run a fresh 5-phase audit (slow, ~1s)              |
+| GET    | `/audit/quick`                | Quick health + drift (fast, ~50ms)                 |
+| GET    | `/calls/recent?n=50`          | Recent call log                                    |
+| GET    | `/stats`                      | Aggregated provider/operation stats                |
+
+### AION API (kernel + 7-law decision + SSE chat)
+
+Same contract as the AION v2.x FastAPI backend. Drop-in compatible.
+
+| Method | Path                          | Auth         | Purpose                                |
+|--------|-------------------------------|--------------|----------------------------------------|
+| GET    | `/api/continuity-pack`        | public       | 7 laws + 3 decision states + identity  |
+| GET    | `/api/models`                 | AION key     | Provider chain + probes                |
+| GET    | `/api/audit/recent`           | AION admin   | Last audit report                      |
+| POST   | `/api/decision`                | AION key     | Trinity GO/HOLD/ABORT + 7-law decision |
+| POST   | `/api/chat`                   | AION key     | SSE chat; actionable goals use execute loop; delta is natural language only |
+| GET    | `/api/state`                  | AION key     | primary/fallback models, providers, laws, states, uptime, active-state snapshot |
+| GET    | `/api/tools`                  | AION key     | Catalog of kernel-level tools (echo, datetime, free_energy, web_search) |
+| POST   | `/api/tools/:name`            | AION key     | Run a tool, return `{ok, evidence}`    |
+| GET    | `/api/claw/contract`          | AION key     | VIDEO-Engine claw execution contract   |
+| POST   | `/api/claw/execute`           | AION key     | SELF_STATE control loop + real tools   |
+| POST   | `/api/agent/run`              | AION key     | Alias of `/api/claw/execute`           |
+| GET    | `/api/claw/tools`             | AION key     | Same catalog as `/api/tools`           |
+| POST   | `/api/claw/tools/:name`       | AION key     | Same runner as `/api/tools/:name`      |
+| GET    | `/api/memory/episodes`        | AION admin   | Durable episodic memory read-back (SQLite) |
+| GET    | `/api/memory/bos?q=`          | AION key     | BOS-OMEGA retrieve (auto-ingest if empty) |
+| POST   | `/api/memory/bos`             | AION key     | Ingest corpus / upsert documents / retrieve |
+| GET    | `/api/routines`               | AION key     | List named operator routines |
+| POST   | `/api/routines`               | AION key     | Create or upsert a routine |
+| GET    | `/api/routines/:name`         | AION key     | Read one routine |
+| PUT    | `/api/routines/:name`         | AION key     | Update a routine |
+| POST   | `/api/routines/:name/pause`   | AION key     | Pause a routine |
+| POST   | `/api/routines/:name/resume`  | AION key     | Resume a routine |
+| POST   | `/api/routines/:name/run`     | AION key     | Run a routine against real tools |
+| DELETE | `/api/routines/:name`         | AION key     | Delete a routine |
+| GET    | `/api/connectors`             | AION key     | Configured integrations (names only) |
+| GET    | `/api/mcp/status`             | AION key     | MCP servers configured (names only) |
+| POST   | `/api/agents/spawn`           | AION key     | Dynamic ephemeral subagent (goal + allowlist) |
+| GET    | `/api/agents/:id`             | AION key     | Spawned agent status |
+| GET    | `/api/agents/:id/result`      | AION key     | Spawned agent result |
+| POST   | `/api/agents/:id/steer`       | AION key     | Steer a spawned agent |
+| POST   | `/api/agents/:id/stop`        | AION key     | Stop a spawned agent |
+| POST   | `/api/cursor/launch`          | AION key     | Dynamic Cursor cloud agent (CURSOR_API_KEY) |
+| GET    | `/api/cursor/:id`             | AION key     | Cursor agent + latest run status |
+| POST   | `/api/cursor/:id/reply`       | AION key     | Steer a Cursor cloud agent |
+| POST   | `/api/cursor/:id/cancel`      | AION key     | Cancel the active Cursor run |
+
+Auth header: `X-AION-Key: <key>` or `Authorization: Bearer <key>`. The CORS
+preflight response advertises `x-aion-key` in `access-control-allow-headers`
+so browser clients sending the header don't get rejected.
+
+### BOS-OMEGA Brain (self-audit → research → propose)
+
+| Method | Path                          | Auth   | Purpose                                          |
+|--------|-------------------------------|--------|---------------------------------------------------|
+| POST   | `/brain/audit-and-fix`        | none   | Run audit → research → propose cycle (`{apply?, severities?}`); `apply:true` only re-applies already-verified local patches, never writes new/hallucinated code |
+| GET    | `/brain/status`                | none   | Brain capability + policy description             |
+
+SSE event names (exact match with AION v2 backend):
+```
+data: {"type":"decision","decision":{"state":"COMMIT","score":0.75,"checks":[...]}}
+data: {"type":"attempt","provider":"openai","model":"gpt-4o-mini","index":1}
+data: {"type":"open","provider":"openai","model":"gpt-4o-mini"}
+data: {"type":"delta","text":"..."}
+data: {"type":"done","streaming":"simulated","provider":"openai","model":"gpt-4o-mini","latency_ms":1203,"finish_reason":"stop"}
+data: [DONE]
+```
+
+On the execute path (`/api/claw/execute` or actionable `/api/chat`), additional
+**separate** event types may appear: `self_state`, `phase`, `tool_start`,
+`tool_end`. They are not assistant text. Clients must render only `delta`
+(and the JSON `answer` field) as the user-visible reply.
+
+> **Note on streaming:** as of v0.1.9 OpenAI-compatible providers (OpenAI, NVIDIA NIM, etc.)
+> use **true token streaming** via `streamChat()`. The `done` / `open` events carry
+> `"streaming": "true"`. Providers without a stream implementation (Echo, Anthropic
+> until added) still fall back to simulated chunking and report `"streaming": "simulated"`.
+
+### Per-request credentials
+
+The gateway accepts credentials via headers on every request, so a single
+deployment can serve multiple apps without leaking keys:
+
+```
+x-bitdeer-key:   ...                  (or x-nvidia-key)
+x-aion-key:      ...                  (AION /api/* auth)
+x-app-id:        my-app-name          (for call-log attribution)
+x-request-id:    uuid-v4              (echoed back, logged on errors)
+```
+
+If no header is provided, the gateway falls back to its own env-var config.
+
+---
+
+## Self-auditor
+
+```bash
+# From the CLI
+node bin/audit.mjs                 # full 5-phase audit
+node bin/audit.mjs --quick         # health + drift only
+node bin/audit.mjs --json          # raw JSON to stdout
+
+# From HTTP
+curl https://your-gateway/audit           # last report
+curl -X POST https://your-gateway/audit/run   # run fresh
+curl https://your-gateway/audit/quick
+```
+
+Example output:
+```
+=== llm-gateway self-audit (full) ===
+status:           VERIFIED_COMPLETE
+duration:         72ms
+files inventoried:10
+findings:         P0=0  P1=16  P2=26
+verified fixes:   4   unverified: 0
+```
+
+The auditor catches its own bugs. If you write a "fix" in the changelog and
+the symbol isn't in the source, the audit will report it as `unverified`.
+
+---
+
+## Provider chain (env-driven)
+
+Production inference is **BITDEER-PRIMARY** (fail-closed):
+
+1. `BITDEER_API_KEY` / `BITDEER_API_KEYS` (or `NVIDIA_*` aliases) → Bitdeer
+2. `AION_ECHO_ONLY=1` → EchoProvider (hermetic tests / offline)
+3. (no Bitdeer key and not echo-only) → EchoProvider so local tests still boot
+
+`PRIMARY_MODEL` defaults to `zai-org/GLM-5`. `AGENT_MODEL` defaults to
+`mistralai/Mistral-Large-3-675B-Instruct-2512`. Production startup rejects
+non-catalog models. GEMINI/XAI/KIMI/OPENAI keys never join this chain;
+they back optional tools (`gemini_chat`, `xai_chat`, `kimi_chat`, `openai_chat`).
+
+Each provider auto-fails over to the next on retriable errors (5xx, 429, network).
+Non-retriable errors (401, 403, 400) stop the chain. Circuit breaker opens
+after 3 consecutive failures and recovers after 30s.
+
+---
+
+## Run locally
+
+`ENVIRONMENT` defaults to `production`, and in production the server **fail-closes
+at startup** (`process.exit(1)`) unless `AION_API_KEYS` and `AION_ADMIN_KEYS`
+(comma-separated key lists) are set — see `lib/aion_settings.js`. Running
+`node server.js` with no env vars will crash immediately with
+`aion.startup.fatal: AION_API_KEYS must be configured in production`.
+
+Pick one:
+
+**Option A — real keys** (also required for `/api/*` AION routes):
+```bash
+npm install
+AION_API_KEYS=dev-user-key AION_ADMIN_KEYS=dev-admin-key node server.js
+# → llm-gateway listening on :10000
+```
+
+**Option B — no keys, unauthenticated dev mode** (`/api/*` AION routes accept
+any/no request as an admin principal; fine for local hacking, never for a
+shared or public deployment):
+```bash
+npm install
+ENVIRONMENT=development ALLOW_UNAUTHENTICATED_DEV=true node server.js
+# → llm-gateway listening on :10000
+```
+
+The OpenAI-compatible `/v1/*` surface works either way with no LLM provider
+keys set — it falls back to the offline `EchoProvider`.
+
+```bash
+npm test
+# → runs the self-contained smoke + streaming + contract suites
+```
+
+---
+
+## Deploy
+
+```bash
+# Render: link the repo, set start command to `node server.js`
+# Or run anywhere Node 18+ is available.
+```
+
+The gateway is stateless except for the SQLite file in `LLM_GATEWAY_DATA_DIR`.
+Mount a persistent disk if you want to survive restarts.
+
+---
+
+## File map
+
+```
+llm-gateway/
+├── server.js              Express app, LLM + AION + audit + brain routes
+├── lib/
+│   ├── aion_kernel.js     7-law kernel (REALITY / CONTINUITY / FIDELITY / LATTICE / EPISTEMIC / PERPETUITY / DECISION)
+│   ├── aion_settings.js   Frozen Settings; fail-closed startup validation
+│   ├── aion_chain.js      Provider chain with name-based selection + SSE stream
+│   ├── brain.js           BOS-OMEGA Brain (audit → research → propose, propose-only)
+│   ├── self_state.js      Canonical SELF_STATE + epistemic tags
+│   ├── control_loop.js    Enforced 8-phase agentic cycle + anti-loop + completion gate
+│   ├── agent_runtime.js   LLM planner + tool execution for /api/claw/execute
+│   ├── external_tools.js  Env-backed Tavily/Exa/Firecrawl/GDY/arXiv/ScreenshotOne/Composio/…
+│   ├── tool_calls.js      Native NIM tool_calls + Claw XML parser
+│   ├── brain_tools.js     ToolRegistry backing /api/tools* and the control loop
+│   ├── lattice.js         Multi-agent lattice (researcher/critic/executor), majority + critic veto
+│   ├── memory.js          Durable SQLite episodic memory, facts, goals; contextPack for prompt injection
+│   ├── bos_omega_rag.js   BOS-OMEGA ingest/retrieve/upsert (hash embeddings + optional Pinecone)
+│   ├── routines.js        Named operator routines (list/create/pause/resume/delete/run)
+│   ├── connectors.js      Env integration inventory (names only; no secret values)
+│   ├── cursor_cloud.js    Cursor Cloud Agents v1 client (launch/status/reply/cancel)
+│   ├── agent_jobs.js      Dynamic spawn queue (SQLite + optional Inngest)
+│   ├── state.js           Active free-energy state (energy/uncertainty/stress); decision bias
+│   ├── router.js          LLM provider chain + circuit breaker
+│   ├── rules.js           22 static analysis rules
+│   ├── auditor.js         5-phase self-auditor
+│   ├── store.js           SQLite persistence (calls + audits)
+│   ├── tools.js           Brain-owned tools (web_search, github_*) — not currently imported by server.js
+│   ├── vault.js           AES-256-GCM encrypted secret store — implemented, not yet wired to any route
+│   └── client.js          Drop-in GatewayClient
+├── bin/
+│   └── audit.mjs          CLI: node bin/audit.mjs
+├── test/
+│   ├── smoke.mjs                    14-check base smoke (self-contained: spawns its own server)
+│   ├── smoke-aion.mjs               10-check AION API smoke (self-contained)
+│   ├── smoke-brain.mjs              6-check Brain layer + real OpenAI (self-contained; skips without OPENAI_API_KEY)
+│   ├── smoke-real.mjs               Real OpenAI smoke (self-contained; skips without OPENAI_API_KEY)
+│   ├── test-pipeline.mjs            /api/chat pipeline integration (self-contained; skips without OPENAI_API_KEY)
+│   ├── test-streaming.mjs           streamChat() unit tests (self-contained, no server needed)
+│   ├── control-loop.test.mjs        SELF_STATE loop, anti-loop, tool results, completion gate
+│   ├── external_tools.test.mjs      GDY + arXiv adapters (mocked fetch, no secrets)
+│   └── contract-aion-modules.mjs    AION + claw contract tests (self-contained: spawns its own server)
+├── docs/
+│   └── claw-contract.md   VIDEO-Engine-CCFL execution contract
+├── CHANGELOG.md           Claimed fixes the auditor verifies
+└── reports/               Audit reports (one JSON per run)
+```
+
+`npm test` runs all seven files above in sequence.
+
+---
+
+## Why "gateway + auditor in one"?
+
+Because that's the only way the auditor is honest. If the audit code lives
+in a separate repo, the gateway can lie about its own health. If it lives
+inside the same process and runs against the same `node_modules`, then a
+green `/audit` is real proof the build is sound.
+
+This is the principle: **the system performs its own duties within itself.**

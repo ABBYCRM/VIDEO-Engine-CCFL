@@ -8,6 +8,7 @@ import { isHeliconeEnabled } from "@/lib/nvidia/helicone";
 import { isGdyConfigured } from "@/lib/claw/gdy";
 import { classifyComposioKey, composioKeyHint } from "@/lib/composio/consumer";
 import { isComposioConfigured, getComposioApiKey } from "@/lib/composio/client";
+import { isAionConfigured } from "@/lib/claw/aion";
 
 const TIMEOUT = 25_000;
 
@@ -89,8 +90,8 @@ export function connectorInventory() {
     github: { configured: Boolean(secret("github_personal_access_token", "GITHUB_PERSONAL_ACCESS_TOKEN")), when: "Direct GitHub REST (github_request). Prefer composio_action toolkit=github when Composio GitHub is connected." },
     bitdeer: { configured: Boolean(process.env.BITDEER_API_KEY || process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), role: "primary", when: "PRIMARY Claw brain: chat, vision (analyze_image), embed, rerank on api-inference.bitdeer.ai. Default runtime. Do not switch Claw chat to Gemini/xAI/Kimi/OpenAI." },
     nvidia: { configured: Boolean(process.env.BITDEER_API_KEY || process.env.BITDEER_API_KEYS || process.env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEYS || getRaw("nvidia_api_key") || getRaw("nvidia_api_keys")), role: "primary", when: "Bitdeer catalog alias. PRIMARY Claw chat/vision/embed/rerank. Optional gemini_generate / xai_chat / kimi_chat / openai_chat never replace this." },
-    aion: { configured: Boolean(process.env.AION_BASE_URL && process.env.AION_API_KEY), when: "Connected brain — prefer aion_execute for toolful work; aion_status / aion_consult stay advice-only." },
-    cursor: { configured: Boolean(process.env.AION_BASE_URL && process.env.AION_API_KEY), owner: "aion-brain", when: "Ask Brain cursor_launch via AION handshake. CURSOR_API_KEY lives on Brain (name listed here only for co-host)." },
+    aion: { configured: isAionConfigured(), when: "Connected brain — prefer aion_execute for toolful work; aion_status / aion_consult stay advice-only." },
+    cursor: { configured: isAionConfigured(), owner: "aion-brain", when: "Ask Brain cursor_launch via AION handshake. CURSOR_API_KEY lives on the in-app brain service." },
     gdy: { configured: isGdyConfigured(), when: "OSINT RAG (gdy_search, gdy_rag_context, gdy_categories, gdy_tools). Fail-soft if GDY_API_KEY is missing." },
     arxiv: { configured: true, when: "Public preprint search (arxiv_search). No key." }
   };
