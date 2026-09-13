@@ -36,6 +36,17 @@ describe("Aion-Brain absorbed into VIDEO", () => {
     assert.doesNotMatch(spec, /ADMIN_PASSWORD/);
   });
 
+  it("does not tell operators to destroy or archive the other system's brain", () => {
+    const env = readFileSync(join(root, "docs/DIGITALOCEAN_ENV.md"), "utf8");
+    const docs = readFileSync(join(root, "docs/aion-brain.md"), "utf8");
+    const source = readFileSync(join(brain, "SOURCE.md"), "utf8");
+    for (const text of [env, docs, source]) {
+      assert.doesNotMatch(text, /Destroy standalone DigitalOcean app/);
+      assert.doesNotMatch(text, /Archive later/);
+      assert.match(text, /another system/i);
+    }
+  });
+
   it("BOS write still uses Brain content + source_id fields", () => {
     const client = readFileSync(join(root, "lib/claw/aion.ts"), "utf8");
     assert.match(client, /content: text/);

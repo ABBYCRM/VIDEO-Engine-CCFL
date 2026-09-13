@@ -1,6 +1,6 @@
-// Server-side bridge to the in-app Aion-Brain (services/aion-brain @ cd55451 / 0.1.24).
-// Credentials never come from tool arguments. Do not invent fields. Do not call the
-// retired standalone DigitalOcean hostname.
+// Server-side bridge to VIDEO's vendored Aion-Brain (services/aion-brain @ cd55451 / 0.1.24).
+// Credentials never come from tool arguments. Do not invent fields.
+// Do not call the shared DigitalOcean hostname — that app is another system's brain.
 import { PRIMARY_CLAW_NVIDIA_MODEL } from "../nvidia/models.ts";
 import { filterAionSseDelta, isInternalAionSseType, preferAionExecute, routeAionMode, sanitizeUserVisibleMessage } from "./user-visible";
 export type AionContext = { conversationId?: string; signal?: AbortSignal; selfState?: string; agentic?: boolean };
@@ -57,7 +57,7 @@ function config() {
   const normalized = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
   const url = new URL(normalized);
   if (RETIRED_AION_HOSTS.has(url.hostname)) {
-    throw new Error("The standalone aion-brain DigitalOcean app is retired. AION_BASE_URL must be the in-app brain (http://aion-brain:10000).");
+    throw new Error("VIDEO must use its in-app brain (http://aion-brain:10000). The shared aion-brain DigitalOcean app belongs to another system.");
   }
   if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && isInternalHttpHost(url.hostname)))) {

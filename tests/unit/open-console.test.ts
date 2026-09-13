@@ -63,7 +63,7 @@ describe("open console — no login wall", () => {
     assert.notEqual(spawn.status, 401);
   });
 
-  it("defaults Brain to the in-app service, not the retired DigitalOcean hostname", () => {
+  it("defaults Brain to the in-app service, not the shared DigitalOcean hostname", () => {
     assert.equal(IN_APP_AION_BASE_URL, "http://aion-brain:10000");
     assert.match(IN_APP_AION_BASE_URL, /^http:\/\/aion-brain/);
     assert.doesNotMatch(IN_APP_AION_BASE_URL, /ondigitalocean\.app/);

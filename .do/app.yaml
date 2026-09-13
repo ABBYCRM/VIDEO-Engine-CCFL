@@ -1,18 +1,24 @@
-# DigitalOcean App Platform spec for VIDEO-Engine.
+# DigitalOcean App Platform — the ONLY production frontend.
 # App: video-engine-ccfl
 # id: b5f68e19-fbfa-469d-acea-1d4278e8b475
 # public: https://video-engine-ccfl-jpd37.ondigitalocean.app
+# Source: ABBYCRM/VIDEO-Engine-CCFL @ main
+#
+# NOT Vercel. Vercel preview/check failures are not a ship gate.
+# Coordinator force-deploys this spec after merge to main.
 #
 # Secrets are DigitalOcean SECRET env vars — never committed.
 # Names below match keys already on this app (and the retired aion-brain
 # app). Coordinator copies values; this spec only binds the names.
 #
 # One app. Two components from THIS repo after merge to main:
-#   web         — Next.js Claw console (public :3000)
-#   aion-brain  — absorbed Brain runtime (internal :10000)
+#   web         — Next.js standalone image (public :3000, /api/ready)
+#   aion-brain  — absorbed Brain runtime (internal :10000, no public routes)
 #
 # AION_BASE_URL on web is ${aion-brain.PRIVATE_URL}.
-# Do not point it at https://aion-brain-6iptg.ondigitalocean.app.
+# Do not point AION_BASE_URL at https://aion-brain-6iptg.ondigitalocean.app.
+# That shared DigitalOcean app and GitHub ABBYCRM/Aion-Brain stay intact
+# for another system. VIDEO only disconnects from them.
 
 name: video-engine-ccfl
 region: nyc
@@ -37,6 +43,12 @@ services:
       - key: NODE_ENV
         scope: RUN_AND_BUILD_TIME
         value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        scope: RUN_AND_BUILD_TIME
+        value: "1"
+      - key: HOSTNAME
+        scope: RUN_TIME
+        value: "0.0.0.0"
       - key: PORT
         scope: RUN_TIME
         value: "3000"

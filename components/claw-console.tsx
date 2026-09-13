@@ -1,10 +1,10 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import {
-  Bot, ChevronRight, Copy, FilePlus2, Film, FolderOpen,
-  Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose, Paperclip,
-  Pencil, Plug, Plus, Search, ArrowUp, Settings, Sparkles, Square,
+  ChevronRight, FilePlus2, Film, FolderOpen,
+  Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose,
+  Pencil, Plug, Plus, Search, Settings, Sparkles,
   Sun, Trash2, Wand2, X, Zap
 } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
@@ -13,8 +13,11 @@ import { ForgeConsole } from "@/components/forge-console";
 import { SwarmConsole } from "@/components/swarm-console";
 import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode, type SelfStateView } from "@/components/ui/claw-thinking-panel";
+import { InputBar } from "@/components/ui/input-bar";
+import { AiMessageBubble } from "@/components/ui/message-bubble";
+import { Suggestions } from "@/components/ui/suggestions";
+import { MessageList, type AgentMessage } from "@/components/ui/agent-chat";
 import { humanToolProgress, isTranscriptAssistantContent, looksLikeInternalState, sanitizeUserVisibleMessage } from "@/lib/claw/user-visible";
-
 
 /* ─────────────────────────────────────────────────────────
  * TYPES
@@ -60,18 +63,12 @@ function greeting() {
   return "Good evening";
 }
 
-/* Speed badge for model cards */
 function SpeedBadge({ ms }: { ms: string }) {
   const num = parseInt(ms);
-  const color = num < 500 ? "text-emerald-400" : num < 1000 ? "text-amber-400" : "text-rose-400";
+  const color = num < 500 ? "text-emerald-500" : num < 1000 ? "text-amber-500" : "text-rose-500";
   return <span className={`font-mono text-[10px] ${color}`}>{ms}</span>;
 }
 
-/* ─────────────────────────────────────────────────────────
- * MODEL COMMAND PALETTE
- * A sleek glass picker showing only working models with
- * speed badges. Wraps ModelSelectorKit with a custom trigger.
- * ───────────────────────────────────────────────────────── */
 function ModelCommandPalette({
   models, model, modelEnvOverridden, modelSaving,
   onChange, disabled
@@ -87,7 +84,6 @@ function ModelCommandPalette({
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  /* Only show models we know work from speed tests */
   const filtered = useMemo(() => {
     if (!search.trim()) return models;
     const q = search.toLowerCase();
@@ -108,7 +104,6 @@ function ModelCommandPalette({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  /* Extract speed from notes */
   const speedFromNotes = (notes: string) => {
     const m = notes.match(/(\d+)[–-](\d+)ms/);
     return m ? `${m[1]}ms` : null;
@@ -118,44 +113,39 @@ function ModelCommandPalette({
 
   return (
     <div ref={ref} className="relative">
-      {/* Trigger */}
       <button
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen(o => !o)}
-        className="flex items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-3 py-1.5 text-[12px] text-[rgba(220,220,255,0.80)] backdrop-blur-md transition-all duration-200 hover:border-[rgba(180,180,255,0.30)] hover:bg-[rgba(255,255,255,0.10)] disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-800"
         aria-label="Choose model"
       >
-        <Zap size={11} className="text-[var(--claw-accent)]" />
-        <span className="max-w-[160px] truncate font-medium">
+        <Zap size={11} className="text-neutral-400" />
+        <span className="max-w-[140px] truncate">
           {modelSaving ? "Saving…" : currentModel ? currentModel.label.split("(")[0].trim() : "Pick model"}
         </span>
         {modelSaving ? (
           <Loader2 size={10} className="animate-spin opacity-60" />
         ) : (
-          <ChevronRight size={10} className={`transition-transform ${open ? "rotate-90" : ""} opacity-50`} />
+          <ChevronRight size={10} className={`opacity-50 transition-transform ${open ? "rotate-90" : ""}`} />
         )}
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-2xl border border-[rgba(180,180,255,0.20)] bg-[rgba(8,8,20,0.92)] backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.6),0_0_0_1px_rgba(180,180,255,0.08)]">
-          {/* Search */}
-          <div className="flex items-center gap-2 border-b border-[rgba(180,180,255,0.10)] px-3 py-2.5">
-            <Search size={13} className="shrink-0 text-[rgba(220,220,255,0.40)]" />
+        <div className="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
+            <Search size={13} className="shrink-0 text-neutral-400" />
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search models…"
-              className="flex-1 bg-transparent text-[13px] text-[rgba(220,220,255,0.90)] outline-none placeholder:text-[rgba(220,220,255,0.35)]"
+              className="flex-1 bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
             />
           </div>
-
-          {/* Model list */}
           <div className="max-h-64 overflow-y-auto py-1.5">
             {filtered.length === 0 && (
-              <div className="px-4 py-6 text-center text-[12px] text-[rgba(220,220,255,0.35)]">No models match</div>
+              <div className="px-4 py-6 text-center text-[12px] text-neutral-400">No models match</div>
             )}
             {filtered.map(m => {
               const isActive = m.id === model;
@@ -167,30 +157,22 @@ function ModelCommandPalette({
                   onClick={() => { onChange(m.id); setOpen(false); }}
                   className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
                     isActive
-                      ? "bg-[rgba(199,100,67%,0.15)] border-l-2 border-l-[var(--claw-accent)]"
-                      : "hover:bg-[rgba(255,255,255,0.05)]"
+                      ? "bg-neutral-100 dark:bg-neutral-800"
+                      : "hover:bg-neutral-50 dark:hover:bg-neutral-800/70"
                   }`}
                 >
-                  {/* Status dot */}
-                  <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
-                    m.id.includes("llama-3.2-11b") ? "bg-emerald-400" :
-                    m.id.includes("nemotron") ? "bg-cyan-400" :
-                    m.id.includes("deepseek-v4-pro") ? "bg-amber-400" :
-                    "bg-[rgba(220,220,255,0.30)]"
-                  }`} />
-
+                  <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${isActive ? "bg-neutral-900 dark:bg-white" : "bg-neutral-300 dark:bg-neutral-600"}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-medium text-[rgba(220,220,255,0.90)] truncate">
+                      <span className="truncate text-[12px] font-medium text-neutral-900 dark:text-neutral-100">
                         {m.label.includes("(") ? m.label.slice(0, m.label.indexOf("(")).trim() : m.label}
                       </span>
-                      {isActive && <span className="shrink-0 text-[10px] text-[var(--claw-accent)]">active</span>}
+                      {isActive && <span className="shrink-0 text-[10px] text-neutral-400">active</span>}
                     </div>
                     {speed && (
                       <div className="mt-0.5 flex items-center gap-1.5">
                         <SpeedBadge ms={speed} />
-                        <span className="text-[10px] text-[rgba(220,220,255,0.30)]">·</span>
-                        <span className="text-[10px] text-[rgba(220,220,255,0.30)]">
+                        <span className="text-[10px] text-neutral-400">
                           {m.id.includes("vision") ? "vision" : "text"}
                         </span>
                       </div>
@@ -200,11 +182,9 @@ function ModelCommandPalette({
               );
             })}
           </div>
-
-          {/* Footer */}
-          <div className="border-t border-[rgba(180,180,255,0.08)] px-3 py-2 flex items-center gap-1.5">
-            <Hash size={10} className="text-[rgba(220,220,255,0.25)]" />
-            <span className="text-[10px] text-[rgba(220,220,255,0.25)]">
+          <div className="flex items-center gap-1.5 border-t border-neutral-200 px-3 py-2 dark:border-neutral-800">
+            <Hash size={10} className="text-neutral-400" />
+            <span className="text-[10px] text-neutral-400">
               {models.length} models · Powered by NVIDIA NIM
             </span>
           </div>
@@ -214,191 +194,46 @@ function ModelCommandPalette({
   );
 }
 
-/* ─────────────────────────────────────────────────────────
- * COMPOSER INPUT
- * ───────────────────────────────────────────────────────── */
 function Composer({
   text, setText, pendingFiles, setPendingFiles,
   busy, onSend, onStop, model, models, modelEnvOverridden, modelSaving, onChangeModel,
   onAttach,
 }: {
   text: string; setText: (t: string) => void;
-  pendingFiles: ClawFile[]; setPendingFiles: React.Dispatch<React.SetStateAction<ClawFile[]>>;
-  busy: boolean; onSend: () => void; onStop: () => void;
+  pendingFiles: ClawFile[]; setPendingFiles: Dispatch<SetStateAction<ClawFile[]>>;
+  busy: boolean; onSend: (content?: string) => void; onStop: () => void;
   model: string | null; models: { id: string; label: string; notes: string; contextWindow: number }[];
   modelEnvOverridden: boolean; modelSaving: boolean; onChangeModel: (id: string) => void;
-  onAttach: (files: FileList | null) => void;
-  theme?: Theme;
+  onAttach: () => void;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "0px";
-    el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [text]);
-
   return (
     <div className="w-full">
-      {/* File attachments */}
-      {pendingFiles.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {pendingFiles.map(f => (
-            <span key={f.id} className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-2.5 py-1 text-[11px] text-[rgba(220,220,255,0.70)] backdrop-blur-md">
-              <Paperclip size={10} className="opacity-60" />
-              <span className="max-w-[120px] truncate">{f.name}</span>
-              <button
-                type="button"
-                onClick={() => setPendingFiles(p => p.filter(x => x.id !== f.id))}
-                className="opacity-50 hover:opacity-100"
-                aria-label={`Remove ${f.name}`}
-              >
-                <X size={10} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Main composer card */}
-      {/* The upward-opening model menu must escape the composer bounds. */}
-      <div className="glass-card glow-border relative z-10 overflow-visible p-3">
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => {
-            // Enter inserts a newline. Only the Send button runs Claw.
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) {
-              e.preventDefault();
-              onSend();
-            }
-          }}
-          rows={2}
-          placeholder="What do you need?"
-          className="block max-h-[220px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-        />
-
-        {/* Bottom bar */}
-        <div className="flex items-center justify-between gap-3 border-t border-[rgba(180,180,255,0.08)] pt-2.5 mt-1">
-          <div className="flex items-center gap-2">
-            {/* Attach */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach files"
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-[rgba(180,180,255,0.12)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] transition-all hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.80)] hover:bg-[rgba(255,255,255,0.09)]"
-            >
-              <Paperclip size={14} />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              accept="*/*"
-              onChange={e => {
-                onAttach(e.target.files);
-                e.target.value = "";
-              }}
-            />
-
-            {/* Model picker */}
-            <ModelCommandPalette
-              models={models}
-              model={model}
-              modelEnvOverridden={modelEnvOverridden}
-              modelSaving={modelSaving}
-              onChange={onChangeModel}
-              disabled={!models.length || modelEnvOverridden || modelSaving}
-            />
-          </div>
-
-          {/* Send / Stop */}
-          {busy ? (
-            <button
-              type="button"
-              onClick={onStop}
-              aria-label="Stop generating"
-              className="claw-send claw-send-stop"
-            >
-              <Square size={14} fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onSend}
-              disabled={!text.trim() && !pendingFiles.length}
-              aria-label="Send message"
-              className="claw-send"
-            >
-              <ArrowUp size={18} strokeWidth={2.75} />
-            </button>
-          )}
-        </div>
-      </div>
-
+      <InputBar
+        value={text}
+        onChange={setText}
+        status={busy ? "streaming" : "ready"}
+        placeholder="What do you need?"
+        onSend={({ content }) => onSend(content)}
+        onStop={onStop}
+        onAttach={onAttach}
+        attachedFiles={pendingFiles.map(f => ({ id: f.id, filename: f.name, size: f.size }))}
+        onRemoveFile={(id) => setPendingFiles(p => p.filter(x => x.id !== id))}
+        leftActions={
+          <ModelCommandPalette
+            models={models}
+            model={model}
+            modelEnvOverridden={modelEnvOverridden}
+            modelSaving={modelSaving}
+            onChange={onChangeModel}
+            disabled={!models.length || modelEnvOverridden || modelSaving}
+          />
+        }
+        className="px-0 pb-0"
+      />
       {modelEnvOverridden && (
-        <div className="mt-1.5 text-center text-[11px] text-muted-foreground">Model locked by environment.</div>
+        <div className="mt-1.5 text-center text-[11px] text-neutral-500">Model locked by environment.</div>
       )}
-      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Enter for a new line · Send runs Claw</p>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────
- * MESSAGE BUBBLE
- * ───────────────────────────────────────────────────────── */
-function UserBubble({ content }: { content: string }) {
-  return (
-    <div className="group flex flex-col items-end animate-fade-up">
-      <div className="glass-bubble-user max-w-[80%] px-4 py-3">
-        <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-foreground">
-          {content}
-        </p>
-      </div>
-      <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          type="button"
-          onClick={() => navigator.clipboard.writeText(content)}
-          className="flex h-6 w-6 items-center justify-center rounded-lg text-[rgba(220,220,255,0.30)] hover:text-[rgba(220,220,255,0.70)] hover:bg-[rgba(255,255,255,0.08)]"
-          aria-label="Copy message"
-        >
-          <Copy size={11} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AssistantBubble({ content }: { content: string }) {
-  return (
-    <div className="group flex flex-col gap-1 animate-fade-up">
-      <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.20)] border border-[rgba(199,100,67%,0.30)]">
-          <Bot size={14} className="text-[var(--claw-accent)]" />
-        </div>
-        <span className="text-[11px] font-medium text-[rgba(220,220,255,0.40)]">Claw</span>
-      </div>
-      <div className="pl-9">
-        <div className="glass-bubble-assistant px-4 py-3">
-          <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-foreground">
-            {sanitizeUserVisibleMessage(content)}
-          </p>
-        </div>
-        <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(content)}
-            className="flex h-6 w-6 items-center justify-center rounded-lg text-[rgba(220,220,255,0.30)] hover:text-[rgba(220,220,255,0.70)] hover:bg-[rgba(255,255,255,0.08)]"
-            aria-label="Copy message"
-          >
-            <Copy size={11} />
-          </button>
-        </div>
-      </div>
+      <p className="mt-1.5 text-center text-[11px] text-neutral-400">Enter for a new line · Send runs Claw</p>
     </div>
   );
 }
@@ -437,7 +272,6 @@ export function ClawConsole() {
   const abortRef = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  /* Theme setup */
   useEffect(() => {
     const saved = (typeof localStorage !== "undefined" && localStorage.getItem("claw-theme")) as Theme | null;
     const initial: Theme = saved === "light" || saved === "dark"
@@ -448,11 +282,11 @@ export function ClawConsole() {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.clawTheme = theme;
+    root.classList.toggle("dark", theme === "dark");
     try { localStorage.setItem("claw-theme", theme); } catch { /* ignore */ }
     return () => { delete root.dataset.clawTheme; };
   }, [theme]);
 
-  /* Load conversations */
   const loadConvs = useCallback(async () => {
     const r = await fetch("/api/claw/conversations");
     if (!r.ok) return;
@@ -479,7 +313,6 @@ export function ClawConsole() {
   useEffect(() => { if (active) void loadThread(active); }, [active, loadThread]);
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); }, [messages, streaming, tools]);
 
-  /* Suggestions */
   useEffect(() => {
     let cancelled = false;
     fetch("/api/claw/suggestions", { cache: "no-store" })
@@ -492,13 +325,11 @@ export function ClawConsole() {
     return () => { cancelled = true; };
   }, []);
 
-  /* Model loading */
   const loadModel = useCallback(async () => {
     try {
       const r = await fetch("/api/claw/model", { cache: "no-store" });
       if (!r.ok) return;
       const d = await r.json();
-      /* Only show working models in the picker */
       const working = (d.models || []).filter((m: any) =>
         WORKING_MODEL_PREFIXES.some(p => m.id.startsWith(p))
       );
@@ -525,7 +356,6 @@ export function ClawConsole() {
     }
   }
 
-  /* File upload */
   async function upload(list: FileList | null) {
     if (!list?.length) return;
     setError(null);
@@ -544,7 +374,6 @@ export function ClawConsole() {
     else setFiles(p => [...uploaded, ...p]);
   }
 
-  /* Send message */
   async function send(overrideText?: string) {
     if (busy) return;
     const body = (overrideText ?? text).trim();
@@ -659,12 +488,6 @@ export function ClawConsole() {
     await loadConvs();
   }
 
-  async function removeMessage(id: string) {
-    if (!active) return;
-    await fetch(`/api/claw/conversations/${active}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ deleteMessageId: id }) });
-    await loadThread(active);
-  }
-
   async function removeFile(id: string) {
     await fetch(`/api/claw/files/${id}`, { method: "DELETE" });
     setPendingFiles(p => p.filter(f => f.id !== id));
@@ -701,47 +524,35 @@ export function ClawConsole() {
   );
   const empty = !visible.length && !streaming && !busy;
   const activeTitle = convs.find(c => c.id === active)?.title;
+  const threadMessages: AgentMessage[] = visible
+    .filter((m): m is Msg & { role: "user" | "assistant" } => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      id: m.id,
+      role: m.role,
+      parts: [{ type: "text", text: m.content }],
+    }));
+
+  const composer = (
+    <Composer
+      text={text} setText={setText}
+      pendingFiles={pendingFiles} setPendingFiles={setPendingFiles}
+      busy={busy} onSend={(content) => void send(content)} onStop={stop}
+      model={model} models={models} modelEnvOverridden={modelEnvOverridden}
+      modelSaving={modelSaving} onChangeModel={changeModel}
+      onAttach={() => fileInput.current?.click()}
+    />
+  );
+
+  const trayBtn = (activeTray: boolean) =>
+    `inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+      activeTray
+        ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+        : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+    }`;
 
   return (
     <>
-      <div className="claw-shell relative flex h-[100dvh] overflow-hidden overflow-x-hidden" style={{ background: "transparent" }}>
-        {/* ── Ambient background orbs ── */}
-        <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-          <div
-            className="orb animate-orb-1"
-            style={{
-              width: 600, height: 600,
-              background: "radial-gradient(circle, rgba(130,40,255,0.18) 0%, transparent 70%)",
-              top: "-10%", left: "-5%",
-            }}
-          />
-          <div
-            className="orb animate-orb-2"
-            style={{
-              width: 500, height: 500,
-              background: "radial-gradient(circle, rgba(0,210,255,0.12) 0%, transparent 70%)",
-              bottom: "5%", right: "-5%",
-            }}
-          />
-          <div
-            className="orb animate-orb-3"
-            style={{
-              width: 400, height: 400,
-              background: "radial-gradient(circle, rgba(100,60,255,0.14) 0%, transparent 70%)",
-              top: "40%", left: "40%",
-            }}
-          />
-          {/* Subtle grid overlay */}
-          <div
-            style={{
-              position: "absolute", inset: 0, opacity: 0.03,
-              backgroundImage: "linear-gradient(rgba(220,220,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(220,220,255,0.5) 1px, transparent 1px)",
-              backgroundSize: "60px 60px",
-            }}
-          />
-        </div>
-
-        {/* Hidden file input */}
+      <div className="claw-shell relative flex h-[100dvh] overflow-hidden overflow-x-hidden bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <input
           ref={fileInput}
           type="file"
@@ -751,51 +562,47 @@ export function ClawConsole() {
           onChange={e => { void upload(e.target.files); e.target.value = ""; }}
         />
 
-        {/* ── Sidebar ── */}
         {sidebarOpen && (
-          <button type="button" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden" />
+          <button type="button" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
         )}
         <aside
-          className={`glass-sidebar fixed inset-y-0 left-0 z-40 flex w-64 flex-col transition-transform duration-300 md:static md:z-auto md:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-neutral-200 bg-neutral-50 transition-transform duration-300 dark:border-neutral-800 dark:bg-neutral-950 md:static md:z-auto md:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          {/* Logo */}
           <div className="flex items-center justify-between px-4 py-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.25)] shadow-[0_0_16px_rgba(199,100,67%,0.20)]">
-                <ClawLogo size={20} className="text-[var(--claw-accent)]" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
+                <ClawLogo size={18} />
               </div>
               <div>
-                <span className="text-[15px] font-bold tracking-tight text-neon">Claw</span>
-                <div className="text-[10px] text-muted-foreground">Talk. Claw runs it.</div>
+                <span className="text-[15px] font-semibold tracking-tight">Claw</span>
+                <div className="text-[11px] text-neutral-500">Talk. Claw runs it.</div>
               </div>
             </div>
-            <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:hidden" aria-label="Close sidebar">
+            <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800 md:hidden" aria-label="Close sidebar">
               <PanelLeftClose size={15} />
             </button>
           </div>
 
-          {/* New chat */}
           <div className="px-3 pb-3">
             <button
               type="button"
               onClick={newThread}
-              className="flex w-full items-center gap-2 rounded-xl border border-[rgba(199,100,67%,0.30)] bg-[rgba(199,100,67%,0.10)] px-3 py-2.5 text-[13px] font-semibold text-[var(--claw-accent)] backdrop-blur-md transition-all hover:border-[rgba(199,100,67%,0.50)] hover:bg-[rgba(199,100,67%,0.18)]"
+              className="flex w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-[13px] font-medium text-neutral-900 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
             >
               <Plus size={15} />
               New chat
             </button>
           </div>
 
-          {/* Conversations */}
           <div className="min-h-0 flex-1 overflow-y-auto px-2">
-            <div className="mb-1 px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Recent</div>
+            <div className="mb-1 px-2 py-2 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Recent</div>
             {convs.map(c => (
-              <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-xl px-2.5 py-2.5 text-[13px] transition-all ${
+              <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
                 active === c.id
-                  ? "sidebar-item-active"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-neutral-200/80 text-neutral-900 dark:bg-neutral-800 dark:text-white"
+                  : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
               }`}>
                 <button
                   type="button"
@@ -806,7 +613,7 @@ export function ClawConsole() {
                 </button>
                 <button
                   type="button"
-                  className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[rgba(220,220,255,0.25)] hover:border hover:border-[rgba(255,100,100,0.30)] hover:text-rose-400 hover:bg-[rgba(255,60,60,0.10)] group-hover:flex"
+                  className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-400 hover:bg-rose-50 hover:text-rose-500 group-hover:flex dark:hover:bg-rose-950/40"
                   onClick={() => removeThread(c.id)}
                   aria-label="Delete thread"
                 >
@@ -815,12 +622,11 @@ export function ClawConsole() {
               </div>
             ))}
             {!convs.length && (
-              <div className="px-2 py-8 text-center text-[12px] text-[rgba(220,220,255,0.20)]">No conversations yet.</div>
+              <div className="px-2 py-8 text-center text-[12px] text-neutral-400">No conversations yet.</div>
             )}
           </div>
 
-          {/* Footer nav */}
-          <div className="border-t border-border p-2">
+          <div className="border-t border-neutral-200 p-2 dark:border-neutral-800">
             <button
               type="button"
               onClick={() => {
@@ -831,30 +637,30 @@ export function ClawConsole() {
                 setSidebarOpen(false);
               }}
               aria-label="Files"
-              className="mb-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+              className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
             >
               <FolderOpen size={14} />
               Files
             </button>
-            <Link href="/computer" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
+            <Link href="/computer" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
               <Monitor size={14} />
               Computer
             </Link>
-            <Link href="/routines" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
+            <Link href="/routines" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
               Routines
             </Link>
-            <Link href="/integrations" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
+            <Link href="/integrations" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
               <Plug size={14} />
               Integrations
             </Link>
-            <Link href="/settings" className="mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground">
+            <Link href="/settings" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
               <Settings size={14} />
               Settings
             </Link>
             <button
               type="button"
               onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
               aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
             >
               {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
@@ -863,29 +669,22 @@ export function ClawConsole() {
           </div>
         </aside>
 
-        {/* ── Main column ── */}
-        <main className="relative flex min-w-0 flex-1 flex-col">
-          {/* Header */}
-          <header className="glass-sidebar sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-[rgba(180,180,255,0.08)] px-4 backdrop-blur-md">
-            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground md:hidden" aria-label="Open sidebar">
+        <main className="relative flex min-w-0 flex-1 flex-col bg-white dark:bg-neutral-950">
+          <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 bg-white/90 px-3 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-950/90">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 md:hidden" aria-label="Open sidebar">
               <Menu size={17} />
             </button>
-
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(199,100,67%,0.15)] border border-[rgba(199,100,67%,0.20)]">
-                <Bot size={15} className="text-[var(--claw-accent)]" />
-              </div>
-              <span className="truncate text-[14px] font-medium text-foreground">
+              <span className="truncate text-[14px] font-medium">
                 {activeTitle || "New conversation"}
               </span>
               {busy && (
-                <div className="flex items-center gap-1.5 rounded-full border border-[rgba(199,100,67%,0.25)] bg-[rgba(199,100,67%,0.10)] px-2 py-0.5 text-[10px] text-[var(--claw-accent)]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--claw-accent)] animate-pulse" />
+                <div className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-900 dark:bg-white" />
                   working
                 </div>
               )}
             </div>
-
             <button
               type="button"
               onClick={() => {
@@ -895,11 +694,7 @@ export function ClawConsole() {
                 setSwarmOpen(false);
               }}
               aria-label="Files"
-              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
-                filesOpen
-                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
-                  : "border-border bg-muted/40 text-muted-foreground hover:text-foreground"
-              }`}
+              className={trayBtn(filesOpen)}
             >
               <FolderOpen size={13} />
               Files
@@ -912,11 +707,7 @@ export function ClawConsole() {
                 setSwarmOpen(false);
                 setFilesOpen(false);
               }}
-              className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium ${
-                computerOpen
-                  ? "border-[rgba(199,100,67%,0.35)] bg-[rgba(199,100,67%,0.12)] text-[var(--claw-accent)]"
-                  : "border-border bg-muted/40 text-muted-foreground hover:text-foreground"
-              }`}
+              className={trayBtn(computerOpen)}
             >
               <Monitor size={13} />
               Computer
@@ -926,105 +717,81 @@ export function ClawConsole() {
           <div className="flex min-h-0 flex-1">
             <section className="flex min-w-0 flex-1 flex-col">
               {empty ? (
-                /* ── EMPTY STATE ── */
                 <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-10">
-                  <div className="w-full max-w-2xl">
-                    {/* Hero */}
-                    <div className="mb-10 flex flex-col items-center gap-4 text-center animate-fade-up">
-                      <div className="relative">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-[rgba(199,100,67%,0.12)] border border-[rgba(199,100,67%,0.25)] shadow-[0_0_40px_rgba(199,100,67%,0.20)]">
-                          <ClawLogo size={40} className="text-[var(--claw-accent)]" />
-                        </div>
-                        {/* Glow ring behind logo */}
-                        <div className="absolute inset-0 -z-10 rounded-full animate-glow-pulse" style={{ background: "transparent" }} />
+                  <div className="w-full max-w-[720px]">
+                    <div className="mb-10 flex flex-col items-center gap-3 text-center">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
+                        <ClawLogo size={28} />
                       </div>
                       <div>
-                        <h1 className="mb-1 text-xl font-bold tracking-tight sm:text-2xl">
+                        <h1 className="mb-1 text-2xl font-semibold tracking-tight">
                           <span suppressHydrationWarning>{greeting()}</span>, operator
                         </h1>
-                        <p className="text-[14px] text-muted-foreground">
+                        <p className="text-[14px] text-neutral-500">
                           Talk to me. I choose the agent, build it, and task it.
                         </p>
                       </div>
                     </div>
 
-                    {/* Composer */}
-                    <div className="mb-8 animate-fade-up" style={{ animationDelay: "100ms" }}>
-                      <Composer
-                        text={text} setText={setText}
-                        pendingFiles={pendingFiles} setPendingFiles={setPendingFiles}
-                        busy={busy} onSend={() => void send()} onStop={stop}
-                        model={model} models={models} modelEnvOverridden={modelEnvOverridden}
-                        modelSaving={modelSaving} onChangeModel={changeModel}
-                        onAttach={(files) => void upload(files)}
-                      />
-                    </div>
+                    <div className="mb-8">{composer}</div>
 
-                    {/* Suggestion chips */}
-                    <div className="animate-fade-up" style={{ animationDelay: "200ms" }}>
-                      <div className="mb-3 flex items-center gap-2">
-                        <Wand2 size={13} className="text-muted-foreground" />
-                        <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Quick actions</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {suggestions.slice(0, 6).map((s, i) => (
-                          <button
-                            key={`${s.source}-${s.skillIds?.[0] || s.label}-${i}`}
-                            type="button"
-                            className={`chip-suggestion ${s.source === "creative" ? "creative" : ""}`}
-                            onClick={() => {
-                              if (s.source === "creative") {
-                                setCreativeModalOpen(true);
-                                setCreativeUrl("");
-                                return;
-                              }
-                              setText(s.prompt);
-                              void send(s.prompt);
-                            }}
-                          >
-                            {s.source === "rag" && <Sparkles size={10} className="mr-1 shrink-0 text-[var(--claw-accent)]" />}
-                            {s.source === "creative" && <Film size={10} className="mr-1 shrink-0" />}
-                            <span className="max-w-[220px] truncate">{s.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <Suggestions
+                      className="justify-center"
+                      items={suggestions.slice(0, 6).map((s, i) => ({
+                        id: `${s.source}-${s.skillIds?.[0] || s.label}-${i}`,
+                        label: s.label,
+                        value: s.prompt,
+                        icon: s.source === "rag"
+                          ? <Sparkles size={10} />
+                          : s.source === "creative"
+                            ? <Film size={10} />
+                            : undefined,
+                      }))}
+                      onSelect={(item) => {
+                        const s = suggestions.find(x => x.label === item.label);
+                        if (s?.source === "creative") {
+                          setCreativeModalOpen(true);
+                          setCreativeUrl("");
+                          return;
+                        }
+                        const prompt = item.value || s?.prompt || item.label;
+                        setText(prompt);
+                        void send(prompt);
+                      }}
+                    />
                   </div>
                 </div>
               ) : (
-                /* ── CHAT VIEW ── */
                 <>
-                  <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
-                    <div className="mx-auto max-w-2xl flex flex-col gap-5">
-                      {visible.map(m =>
-                        m.role === "user"
-                          ? <UserBubble key={m.id} content={m.content} />
-                          : <AssistantBubble key={m.id} content={m.content} />
-                      )}
-
-                      {/* Thinking panel */}
-                      {(tools.length > 0 || busy || selfState || streaming) && (
-                        <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} selfState={selfState} />
-                      )}
-                    </div>
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <MessageList
+                      messages={threadMessages}
+                      scrollRef={scroller}
+                      className="h-full"
+                      footer={
+                        <>
+                          {(tools.length > 0 || busy || selfState || streaming) && (
+                            <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} selfState={selfState} />
+                          )}
+                          {error && (
+                            <AiMessageBubble role="assistant" content="" className="!max-w-full">
+                              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-rose-600 dark:text-rose-400">
+                                {error}
+                              </div>
+                            </AiMessageBubble>
+                          )}
+                        </>
+                      }
+                    />
                   </div>
-
-                  {/* Composer (docked) */}
-                  <div className="shrink-0 border-t border-[rgba(180,180,255,0.06)] bg-[rgba(5,5,15,0.60)] backdrop-blur-xl p-4">
-                    <div className="mx-auto max-w-2xl">
-                      {error && (
-                        <div className="mb-2 rounded-xl border border-[rgba(255,80,80,0.30)] bg-[rgba(255,60,60,0.10)] px-3 py-2 text-[12px] text-rose-400 backdrop-blur-md">
+                  <div className="shrink-0 px-4 pb-4 pt-2">
+                    <div className="mx-auto max-w-[720px]">
+                      {error && empty === false && !streaming && (
+                        <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[12px] text-rose-600 dark:text-rose-400">
                           {error}
                         </div>
                       )}
-                      <Composer
-                        text={text} setText={setText}
-                        pendingFiles={pendingFiles} setPendingFiles={setPendingFiles}
-                        busy={busy} onSend={() => void send()} onStop={stop}
-                        model={model} models={models} modelEnvOverridden={modelEnvOverridden}
-                        modelSaving={modelSaving} onChangeModel={changeModel}
-                        onAttach={(files) => void upload(files)}
-                      />
+                      {composer}
                     </div>
                   </div>
                 </>
@@ -1032,67 +799,66 @@ export function ClawConsole() {
             </section>
 
             {computerOpen && (
-              <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
+              <aside className="fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:static lg:z-auto lg:w-[min(46vw,560px)]">
                 <ComputerDock variant="pane" onClose={() => setComputerOpen(false)} />
               </aside>
             )}
             {forgeOpen && (
-              <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col overflow-y-auto border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
+              <aside className="fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col overflow-y-auto border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:static lg:z-auto lg:w-[min(46vw,560px)]">
                 <ForgeConsole variant="pane" drivenByClaw onClose={() => setForgeOpen(false)} />
               </aside>
             )}
             {swarmOpen && (
-              <aside className="glass-sidebar fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col overflow-y-auto border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-[min(46vw,560px)]">
+              <aside className="fixed inset-y-0 right-0 z-40 flex w-[min(100vw,520px)] max-w-[100vw] flex-col overflow-y-auto border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:static lg:z-auto lg:w-[min(46vw,560px)]">
                 <SwarmConsole variant="pane" drivenByClaw onClose={() => setSwarmOpen(false)} />
               </aside>
             )}
 
-            {/* ── Files drawer ── */}
             {filesOpen && (
-              <button type="button" aria-label="Close files" onClick={() => setFilesOpen(false)} className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden" />
+              <button type="button" aria-label="Close files" onClick={() => setFilesOpen(false)} className="fixed inset-0 z-30 bg-black/30 lg:hidden" />
             )}
-            <aside className={`glass-sidebar fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85vw] flex-col border-l border-[rgba(180,180,255,0.08)] lg:static lg:z-auto lg:w-80 ${filesOpen ? "flex" : "hidden"}`}>
-              <div className="flex items-center justify-between border-b border-[rgba(180,180,255,0.08)] px-4 py-3">
-                <div className="text-[11px] font-bold uppercase tracking-widest text-[rgba(220,220,255,0.40)]">Files</div>
+            <aside className={`fixed inset-y-0 right-0 z-40 w-80 max-w-[85vw] flex-col border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950 lg:static lg:z-auto lg:w-80 ${filesOpen ? "flex" : "hidden"}`}>
+              <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Files</div>
                 <div className="flex items-center gap-1">
-                  <button type="button" className="grid h-8 w-8 place-items-center rounded-xl border border-[rgba(180,180,255,0.12)] bg-[rgba(255,255,255,0.05)] text-[rgba(220,220,255,0.45)] hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.80)]" onClick={() => fileInput.current?.click()} aria-label="Add file">
+                  <button type="button" className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800" onClick={() => fileInput.current?.click()} aria-label="Add file">
                     <FilePlus2 size={13} />
                   </button>
-                  <button type="button" className="grid h-8 w-8 place-items-center rounded-xl text-[rgba(220,220,255,0.35)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.80)]" onClick={() => setFilesOpen(false)} aria-label="Close files">
+                  <button type="button" className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800" onClick={() => setFilesOpen(false)} aria-label="Close files">
                     <X size={14} />
                   </button>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 {files.map(f => (
-                  <div key={f.id} className="mb-2 rounded-xl border border-[rgba(180,180,255,0.10)] bg-[rgba(255,255,255,0.04)] p-3 backdrop-blur-md">
+                  <div key={f.id} className="mb-2 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
                     {renameId === f.id ? (
                       <div className="flex gap-1.5">
-                        <input className="h-8 flex-1 rounded-lg border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.08)] px-2.5 text-[12px] text-[rgba(220,220,255,0.90)] outline-none focus:border-[var(--claw-accent)]" value={renameVal} onChange={e => setRenameVal(e.target.value)} />
-                        <button type="button" className="rounded-lg bg-[var(--claw-accent)] px-3 text-[11px] font-medium text-[rgba(5,5,15,0.95)]" onClick={() => void saveRename(f.id)}>Save</button>
+                        <input className="h-8 flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 text-[12px] outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" value={renameVal} onChange={e => setRenameVal(e.target.value)} />
+                        <button type="button" className="rounded-lg bg-neutral-900 px-3 text-[11px] font-medium text-white dark:bg-white dark:text-neutral-900" onClick={() => void saveRename(f.id)}>Save</button>
                       </div>
                     ) : (
                       <>
-                        <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-[var(--claw-accent)] hover:underline">
+                        <a href={f.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-neutral-900 hover:underline dark:text-neutral-100">
                           <FolderOpen size={11} />{f.name}
                         </a>
-                        <div className="mt-1 text-[10px] text-[rgba(220,220,255,0.30)]">{f.mime} · {(f.size / 1024).toFixed(1)} KB</div>
+                        <div className="mt-1 text-[10px] text-neutral-400">{f.mime} · {(f.size / 1024).toFixed(1)} KB</div>
                         <div className="mt-2 flex flex-wrap gap-1">
-                          <button type="button" className="rounded-lg border border-[rgba(180,180,255,0.12)] px-2 py-0.5 text-[10px] text-[rgba(220,220,255,0.40)] hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.75)]" onClick={() => setPendingFiles(p => p.some(x => x.id === f.id) ? p : [...p, f])}>Attach</button>
-                          <button type="button" className="rounded-lg border border-[rgba(180,180,255,0.12)] px-2 py-0.5 text-[10px] text-[rgba(220,220,255,0.40)] hover:border-[rgba(180,180,255,0.25)] hover:text-[rgba(220,220,255,0.75)]" onClick={() => { setRenameId(f.id); setRenameVal(f.name); }}>
+                          <button type="button" className="rounded-md border border-neutral-200 px-2 py-0.5 text-[10px] text-neutral-500 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800" onClick={() => setPendingFiles(p => p.some(x => x.id === f.id) ? p : [...p, f])}>Attach</button>
+                          <button type="button" className="rounded-md border border-neutral-200 px-2 py-0.5 text-[10px] text-neutral-500 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800" onClick={() => { setRenameId(f.id); setRenameVal(f.name); }}>
                             <Pencil size={9} className="mr-0.5 inline" />Rename
                           </button>
-                          <button type="button" className="rounded-lg border border-[rgba(255,80,80,0.20)] px-2 py-0.5 text-[10px] text-rose-400/70 hover:border-rose-400/40 hover:text-rose-400" onClick={() => void removeFile(f.id)}>Delete</button>
+                          <button type="button" className="rounded-md border border-rose-200 px-2 py-0.5 text-[10px] text-rose-500 hover:bg-rose-50 dark:border-rose-900" onClick={() => void removeFile(f.id)}>Delete</button>
                         </div>
                       </>
                     )}
                   </div>
                 ))}
-                {!files.length && <div className="py-10 text-center text-[12px] text-[rgba(220,220,255,0.20)]">Upload files to attach them to a conversation.</div>}
+                {!files.length && <div className="py-10 text-center text-[12px] text-neutral-400">Upload files to attach them to a conversation.</div>}
               </div>
               {busy && (
-                <div className="border-t border-[rgba(180,180,255,0.08)] px-4 py-2.5">
-                  <AILoader label="Working" variant="bar" className="text-[11px] text-[rgba(220,220,255,0.35)]" />
+                <div className="border-t border-neutral-200 px-4 py-2.5 dark:border-neutral-800">
+                  <AILoader label="Working" variant="bar" className="text-[11px] text-neutral-400" />
                 </div>
               )}
             </aside>
@@ -1100,26 +866,25 @@ export function ClawConsole() {
         </main>
       </div>
 
-      {/* ── Creative ads modal ── */}
       {creativeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button type="button" aria-label="Close" className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setCreativeModalOpen(false)} />
-          <div className="glass-card relative z-10 w-full max-w-md p-6 shadow-[0_16px_64px_rgba(0,0,0,0.8)]">
+          <button type="button" aria-label="Close" className="absolute inset-0 bg-black/50" onClick={() => setCreativeModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(262,100%,72%,0.15)] border border-[rgba(262,100%,72%,0.25)] shadow-[0_0_20px_rgba(262,100%,72%,0.15)]">
-                  <Film size={18} className="text-[var(--claw-violet)]" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 dark:bg-neutral-800">
+                  <Film size={18} />
                 </div>
                 <div>
-                  <h2 className="text-[15px] font-bold text-neon">Create Ad Scripts</h2>
-                  <p className="text-[11px] text-[rgba(220,220,255,0.35)]">Powered by Claw + Steel</p>
+                  <h2 className="text-[15px] font-semibold">Create Ad Scripts</h2>
+                  <p className="text-[11px] text-neutral-400">Powered by Claw + Steel</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setCreativeModalOpen(false)} className="grid h-8 w-8 place-items-center rounded-xl text-[rgba(220,220,255,0.35)] hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(220,220,255,0.80)]">
+              <button type="button" onClick={() => setCreativeModalOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800">
                 <X size={14} />
               </button>
             </div>
-            <p className="mb-4 text-[12px] leading-relaxed text-[rgba(220,220,255,0.50)]">
+            <p className="mb-4 text-[12px] leading-relaxed text-neutral-500">
               Claw will scrape your site and generate a complete short-form video ad script using a 13-step direct-response framework.
             </p>
             <input
@@ -1128,18 +893,18 @@ export function ClawConsole() {
               value={creativeUrl}
               onChange={e => setCreativeUrl(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && creativeUrl.trim()) void launchCreativeAds(); }}
-              className="mb-4 w-full rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.06)] px-4 py-3 text-[14px] text-[rgba(220,220,255,0.90)] placeholder:text-[rgba(220,220,255,0.25)] backdrop-blur-md outline-none transition-all focus:border-[var(--claw-accent)] focus:shadow-[0_0_0_3px_rgba(199,100,67%,0.15)]"
+              className="mb-4 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-[14px] outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-950"
               autoFocus
             />
             <div className="flex gap-2">
-              <button type="button" onClick={() => setCreativeModalOpen(false)} className="flex-1 rounded-xl border border-[rgba(180,180,255,0.15)] bg-[rgba(255,255,255,0.05)] px-4 py-2.5 text-[13px] font-medium text-[rgba(220,220,255,0.60)] backdrop-blur-md transition-all hover:border-[rgba(180,180,255,0.28)] hover:bg-[rgba(255,255,255,0.09)]">
+              <button type="button" onClick={() => setCreativeModalOpen(false)} className="flex-1 rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void launchCreativeAds()}
                 disabled={!creativeUrl.trim()}
-                className="btn-send flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-white disabled:cursor-not-allowed"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900"
               >
                 <Wand2 size={14} />
                 Generate

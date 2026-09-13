@@ -4,7 +4,8 @@ Brain runtime lives in `services/aion-brain` (pin `cd55451`, gateway
 `0.1.24`). Production uses the `aion-brain` component of the
 `video-engine-ccfl` DigitalOcean app. The separate GitHub repo
 `ABBYCRM/Aion-Brain` and the standalone DigitalOcean app
-`https://aion-brain-6iptg.ondigitalocean.app` are not required at runtime.
+`https://aion-brain-6iptg.ondigitalocean.app` belong to another system.
+VIDEO must not call them. Leave both intact.
 
 Claw calls the in-app Brain with `AION_API_KEY` (`X-AION-Key`).
 `AION_BASE_URL` defaults to `http://aion-brain:10000` (compose / App
@@ -60,6 +61,7 @@ sudo docker compose --env-file .aion.env -f docker-compose.aion.yml stop
 
 ## Hosted (DigitalOcean)
 
-One app: `video-engine-ccfl`. `web` talks to `aion-brain` over
-`${aion-brain.PRIVATE_URL}`. After cutover, destroy the standalone
-`aion-brain` DigitalOcean app. See `docs/DIGITALOCEAN_ENV.md`.
+One VIDEO app: `video-engine-ccfl`. `web` talks to VIDEO's in-app
+`aion-brain` over `${aion-brain.PRIVATE_URL}`. Disconnect VIDEO from the
+shared DigitalOcean app `aion-brain`. Do not destroy that app and do not
+touch GitHub `ABBYCRM/Aion-Brain`. See `docs/DIGITALOCEAN_ENV.md`.

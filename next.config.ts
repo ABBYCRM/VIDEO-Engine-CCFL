@@ -9,7 +9,8 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: "/", destination: "/claw", permanent: false }
+      { source: "/", destination: "/claw", permanent: false },
+      { source: "/login", destination: "/claw", permanent: false }
     ];
   }
 };

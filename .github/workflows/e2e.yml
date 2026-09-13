@@ -45,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
+      # Production frontend is DigitalOcean App Platform only — not Vercel.
       PLAYWRIGHT_BASE_URL: https://video-engine-ccfl-jpd37.ondigitalocean.app
       CI: true
     steps:

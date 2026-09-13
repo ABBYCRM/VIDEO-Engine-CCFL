@@ -18,7 +18,9 @@ describe("real runtimes survive collapse + open console", () => {
       "computer_open", "computer_click", "computer_type", "computer_handoff",
       "composio_health", "composio_list_tools", "composio_action",
       "cursor_launch", "cursor_status", "cursor_reply", "cursor_cancel",
-      "aion_execute", "steel_scrape",
+      "aion_execute", "aion_agents", "bos_memory", "routines", "mcp_status",
+      "trinity_decide", "claw_dispatch", "steel_scrape",
+      "forge_session", "swarm_spawn", "swarm_wait",
     ]) {
       assert.equal(names.has(name), true, name);
     }
@@ -85,6 +87,42 @@ describe("real runtimes survive collapse + open console", () => {
     assert.match(text, /looksLikeInternalDump|INTERNAL/);
     const server = src("services/aion-brain/server.js");
     assert.match(server, /sanitizeAssistantText/);
+  });
+
+  it("HTTP routes for spawn / BOS / routines / MCP / Computer / Cursor / Composio remain", () => {
+    for (const rel of [
+      "app/api/agents/spawn/route.ts",
+      "app/api/agents/[id]/route.ts",
+      "app/api/memory/bos/route.ts",
+      "app/api/routines/route.ts",
+      "app/api/routines/[name]/run/route.ts",
+      "app/api/mcp/status/route.ts",
+      "app/api/decision/route.ts",
+      "app/api/computer/route.ts",
+      "app/api/cursor/launch/route.ts",
+      "app/api/integrations/composio/route.ts",
+      "app/api/forge/route.ts",
+      "app/api/swarm/route.ts",
+      "app/api/claw/suggestions/route.ts",
+      "lib/browser-computer/digitalocean.ts",
+      "lib/composio/client.ts",
+      "lib/cursor/control.ts",
+    ]) {
+      assert.equal(existsSync(join(root, rel)), true, rel);
+    }
+  });
+
+  it("21st Grok shell is the chat chrome, not a stub runtime", () => {
+    const consoleSrc = src("components/claw-console.tsx");
+    assert.match(consoleSrc, /from "@\/components\/ui\/input-bar"/);
+    assert.match(consoleSrc, /from "@\/components\/ui\/agent-chat"/);
+    assert.match(consoleSrc, /from "@\/components\/ui\/message-bubble"/);
+    assert.match(consoleSrc, /ComputerDock/);
+    assert.match(consoleSrc, /ForgeConsole/);
+    assert.match(consoleSrc, /SwarmConsole/);
+    assert.doesNotMatch(consoleSrc, /AuthGuard/);
+    assert.equal(existsSync(join(root, "components/ui/sidebar.tsx")), true);
+    assert.equal(existsSync(join(root, "app/login/page.tsx")), false);
   });
 
   it("DO spec binds existing secret names onto video-engine-ccfl", () => {
