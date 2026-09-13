@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { validateSteelUrl } from "@/lib/steel-url";
-import { e2bCommand, isE2bConfigured, missing } from "@/lib/claw/connectors";
+import { e2bCommand, e2bOut, isE2bConfigured, missing } from "@/lib/claw/connectors";
 import { isGdyConfigured, gdyCategories, gdySearch } from "@/lib/claw/gdy";
 import { getFile } from "@/lib/claw/store";
 import { retrieveReKnowledge, reKnowledgeStatus } from "@/lib/claw/re-knowledge";
@@ -163,9 +163,9 @@ export async function reTriage(input: { url?: string; fileId?: string; id?: stri
   const resolved = resolveSample(input);
   if (!resolved.ok) return resolved;
   const cmd = `${stageSampleCmd(resolved.source)} && python3 -c ${JSON.stringify(TRIAGE_PY)} ${JSON.stringify(SAMPLE_PATH)}`;
-  const ran = await e2bCommand({ cmd, timeoutMs: Math.min(45_000, Number(input.timeoutMs) || 25_000) });
-  if (!("ok" in ran) || !ran.ok) {
-    return { ...ran, tool: "re_triage", note: "Static triage only. Sample stays in E2B — never on this host." };
+  const ran = e2bOut(await e2bCommand({ cmd, timeoutMs: Math.min(45_000, Number(input.timeoutMs) || 25_000) }));
+  if (!ran.ok) {
+    return { ok: false as const, ...ran, tool: "re_triage", note: "Static triage only. Sample stays in E2B — never on this host." };
   }
   let analysis: unknown = ran.stdout;
   try { analysis = JSON.parse(String(ran.stdout || "").trim()); } catch { /* keep text */ }
@@ -214,22 +214,22 @@ echo "ENGINE=$BIN"
 "$BIN" -e scr.color=0 -e bin.relocs.apply=true -c ${JSON.stringify(allowed.script)} -q ${JSON.stringify(SAMPLE_PATH)} || true
 `.trim();
 
-  const ran = await e2bCommand({
+  const ran = e2bOut(await e2bCommand({
     cmd: `${stageSampleCmd(resolved.source)} && bash -lc ${JSON.stringify(installer)}`,
     timeoutMs: Math.min(55_000, Number(input.timeoutMs) || 40_000)
-  });
-  const out = clip(String(ran.stdout || ""));
+  }));
+  const out = clip(ran.stdout);
   const unavailable = /radare2_unavailable/.test(out.text);
   return {
-    ok: !unavailable && Boolean(ran.ok),
+    ok: !unavailable && ran.ok,
     via: "e2b",
     tool: "re_radare2",
     engine: unavailable ? "none" : "radare2-or-rizin",
     script: allowed.script,
     stdout: out.text,
     truncated: out.truncated,
-    stderr: String(ran.stderr || "").slice(0, 1500),
-    exitCode: "exitCode" in ran ? ran.exitCode : undefined,
+    stderr: ran.stderr.slice(0, 1500),
+    exitCode: ran.exitCode,
     note: unavailable
       ? "radare2/rizin best-effort install failed. Knowledge pack still applies; re_triage remains the static path."
       : "Bounded static r2/rizin only. Escalate packed/obfuscated samples to a human Ghidra/IDA/BN workstation."

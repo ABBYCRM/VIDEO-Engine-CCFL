@@ -146,6 +146,30 @@ export async function scrapeScrapfly(url: string) {
   return { ok: true, via: "scrapfly", url: target, markdown: clipped.text, truncated: clipped.truncated };
 }
 
+export type E2bIo = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode?: number;
+  error?: string;
+  hint?: string;
+  code?: string;
+};
+
+/** Narrow fail-soft / sandbox unions before reading stdout. */
+export function e2bOut(ran: unknown): E2bIo {
+  const row = ran && typeof ran === "object" ? ran as Record<string, unknown> : {};
+  return {
+    ok: row.ok === true,
+    stdout: "stdout" in row && row.stdout != null ? String(row.stdout) : "",
+    stderr: "stderr" in row && row.stderr != null ? String(row.stderr) : "",
+    exitCode: typeof row.exitCode === "number" ? row.exitCode : undefined,
+    error: typeof row.error === "string" ? row.error : undefined,
+    hint: typeof row.hint === "string" ? row.hint : undefined,
+    code: typeof row.code === "string" ? row.code : undefined
+  };
+}
+
 export async function e2bCommand(input: { cmd?: string; timeoutMs?: number }) {
   const key = secret("e2b_api_key", "E2B_API_KEY");
   if (!key) return missing("E2B", "E2B_API_KEY", "execute untrusted code in a hosted sandbox — never in this process");
