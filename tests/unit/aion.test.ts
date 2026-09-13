@@ -91,11 +91,21 @@ test("echo is explicitly identified", async () => {
   globalThis.fetch = async () => stream([{type:"delta",text:"echo"},{type:"done",provider:"echo"}]);
   assert.equal((await aionConsult("x",{conversationId:"t"})).echoOnly,true);
 });
+test("defaults AION_BASE_URL to the in-app brain when unset", async () => {
+  delete process.env.AION_BASE_URL;
+  process.env.AION_API_KEY = "test-only-key";
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), "http://aion-brain:10000/api/state");
+    return Response.json({ ok: true, app: "aion-brain", providers: ["nvidia"] });
+  };
+  const status = await aionStatus();
+  assert.equal(status.connected, true);
+});
 test("missing configuration, unsafe origins and upstream auth failures remain errors", async () => {
   delete process.env.AION_API_KEY;
   await assert.rejects(aionStatus(),/not configured/);
   process.env.AION_API_KEY="test-only-key";
-  for (const url of ["http://public.example","https://user:pass@example.com","https://example.com/path"]) {
+  for (const url of ["http://public.example","https://user:pass@example.com","https://example.com/path","https://aion-brain-6iptg.ondigitalocean.app"]) {
     process.env.AION_BASE_URL=url; await assert.rejects(aionStatus());
   }
   process.env.AION_BASE_URL="http://aion-brain:10000";

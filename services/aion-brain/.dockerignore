@@ -1,0 +1,9 @@
+node_modules
+data
+data-*
+reports
+.git
+.env
+.env.local
+*.md
+!SOURCE.md

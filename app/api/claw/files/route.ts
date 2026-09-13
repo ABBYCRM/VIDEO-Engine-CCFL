@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
 import { getConversation, listFiles, saveClawFile } from "@/lib/claw/store";
 import { mimeFromFilename } from "@/lib/claw/zip-index";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const url = new URL(req.url);
   const conversationId = url.searchParams.get("conversationId");
   return NextResponse.json({ files: listFiles(conversationId) });
 }
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "file is required" }, { status: 400 });

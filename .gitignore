@@ -1,4 +1,7 @@
 node_modules
+services/aion-brain/node_modules
+services/aion-brain/data
+services/aion-brain/reports
 .aion.env
 .next
 .env

@@ -1,64 +1,77 @@
 # DigitalOcean App Platform env names (VIDEO-Engine-CCFL)
 
+App: `video-engine-ccfl`  
+id: `b5f68e19-fbfa-469d-acea-1d4278e8b475`  
+public: https://video-engine-ccfl-jpd37.ondigitalocean.app  
+Source: `ABBYCRM/VIDEO-Engine-CCFL` @ `main`
+
+**This is the only production frontend.** Vercel is not the host. Vercel
+check failures are not a ship gate. Coordinator force-deploys this app
+from `.do/app.yaml` after merge.
+
 Names only. Values already live on DigitalOcean as SECRET / app env.
 Do **not** commit values. Do **not** paste keys into chat, logs, or PRs.
 
-This frontend (`video-engine-ccfl`) talks to a separately deployed
-Aion-Brain service. Brain keys stay on the Brain app unless a name is
-explicitly listed as CCFL-side.
+One VIDEO app hosts both components from **this** repo:
 
-## Required on this frontend (CCFL)
+- `web` — Claw console (public)
+- `aion-brain` — VIDEO's absorbed Brain runtime (internal)
 
-| Name | Why |
-|---|---|
-| `ADMIN_PASSWORD` | `POST /api/admin/login`. Min 8 chars. Rejects `1234` / `change-me` / `password` / `admin`. |
-| `SESSION_SECRET` | HMAC for `claw_session`. Min 32 chars. |
-| `APP_ENCRYPTION_KEY` | AES-256-GCM settings store. Base64 32-byte key. |
-| `DATABASE_URL` | Bound Managed Postgres (`${db.DATABASE_URL}` in `.do/app.yaml`). |
-| `BITDEER_API_KEY` | Primary Claw chat / vision / embed / rerank. |
-| `AION_BASE_URL` | HTTPS origin of the running Aion-Brain service (no path, no credentials). |
-| `AION_API_KEY` | Regular Brain key (`X-AION-Key`). Must match an entry in Brain `AION_API_KEYS`. Admin keys stay on Brain. |
+VIDEO must **not** call the shared DigitalOcean app `aion-brain`
+(`https://aion-brain-6iptg.ondigitalocean.app`). That app is another
+system's brain. Leave it running. Do **not** destroy it.
 
-Local HTTP is allowed only for `localhost` / `127.0.0.1` / `aion-brain`.
-Hosted CCFL cannot reach a private Docker hostname on a laptop.
+Do **not** delete, archive, or modify GitHub `ABBYCRM/Aion-Brain`.
+That repo is the brain for another system. VIDEO vendors a copy under
+`services/aion-brain` and never clones it at deploy time.
 
-## Required on Aion-Brain (not this app)
+No login wall. `ADMIN_PASSWORD` is unused. `SESSION_SECRET` remains only
+for Composio OAuth state HMAC.
 
-| Name | Why |
-|---|---|
-| `AION_API_KEYS` | Fail-closed production boot. |
-| `AION_ADMIN_KEYS` | Brain admin routes. |
-| `BITDEER_API_KEY` / `BITDEER_BASE_URL` | Brain `/v1` + `/api/chat` stay Bitdeer-primary. |
-| `CURSOR_API_KEY` | Brain-owned Cursor Cloud Agents. Same DigitalOcean secret **name** may exist on CCFL; CCFL does not call `api.cursor.com`. |
+## Exact names already on this DO app (bind, do not invent)
 
-## Optional on CCFL (already named on DO — inject, do not invent)
+These names are already configured on `video-engine-ccfl`. `.do/app.yaml`
+declares the same names so a force-deploy after merge attaches them.
+Secret *values* may be copied from the shared `aion-brain` app; VIDEO
+still talks only to its in-app component.
 
-`NVIDIA_API_KEY`, `NVIDIA_API_KEYS`, `BITDEER_API_KEYS`, `STEEL_API_KEY`,
-`STEEL_BASE_URL`, `COMPOSIO_API_KEY`, `E2B_API_KEY`, `FIRECRAWL_API_KEY`,
-`TAVILY_API_KEY`, `EXA_API_KEY`, `SCRAPINGBEE_API_KEY`, `SCRAPFLY_API_KEY`,
-`SCREENSHOTONE_ACCESS_KEY`, `SCREENSHOTONE_SECRET_KEY`, `HEDRA_API_KEY`,
-`RESEND_API_KEY`, `RESEND_FROM`, `GITHUB_PERSONAL_ACCESS_TOKEN`,
-`INSTAGRAM_MCP_ACCESS_TOKEN`, `INSTAGRAM_MCP_IG_USER_ID`,
-`INSTAGRAM_MCP_APP_SECRET`, `GDY_API_KEY`, `GDY_API_KEY_ALT`,
-`GDY_API_BASE` / `GDY_BASE_URL`, `PINECONE_API_KEY`, `EMBEDDINGS_API_KEY`,
-`DIGITALOCEAN_TOKEN` (Computer orchestrator only — `lib/browser-computer/digitalocean.ts`),
-`COOKIE_SECURE` (`0` for http localhost cookies, `1` to force Secure).
+| Name | Component | Runtime |
+|---|---|---|
+| `BITDEER_API_KEY` | web + aion-brain | Primary Claw / Brain chat, embed, rerank (Bitdeer). |
+| `NVIDIA_API_KEY` | web + aion-brain | Alias of the Bitdeer key. |
+| `BITDEER_BASE_URL` / `NVIDIA_BASE_URL` | both | `https://api-inference.bitdeer.ai/v1` |
+| `AION_API_KEY` | web | `X-AION-Key` to VIDEO's in-app brain. |
+| `AION_API_KEYS` | aion-brain | Fail-closed Brain boot. Must include the web `AION_API_KEY` value. |
+| `AION_ADMIN_KEYS` | aion-brain | Brain admin routes. |
+| `AION_BASE_URL` | web | `${aion-brain.PRIVATE_URL}` — not `aion-brain-6iptg.ondigitalocean.app`. |
+| `COMPOSIO_API_KEY` | web + aion-brain | Live Composio (`composio_health` / `composio_action`). |
+| `CURSOR_API_KEY` | aion-brain | Brain-owned Cursor Cloud Agents. Web only proxies. |
+| `STEEL_API_KEY` | web + aion-brain | `steel_scrape` / Brain steel_browser. |
+| `STEEL_BASE_URL` | both | `https://api.steel.dev` |
+| `DIGITALOCEAN_TOKEN` | web only | Computer droplet orchestrator (`lib/browser-computer/digitalocean.ts`). Never a Claw tool. |
+| `SESSION_SECRET` | web | Composio OAuth `state` HMAC (≥32). Not a password gate. |
+| `APP_ENCRYPTION_KEY` | web | AES-256-GCM settings store. |
+| `DATABASE_URL` | web | Bound Managed Postgres `${db.DATABASE_URL}`. |
+| `E2B_API_KEY` | web | `e2b_run` / `shell_run`. |
+| `FIRECRAWL_API_KEY` | web + aion-brain | Scrape fallback. |
+| `TAVILY_API_KEY` / `EXA_API_KEY` | web + aion-brain | Search tools. |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | web | Direct GitHub REST; prefer Composio GitHub when connected. |
+| `GDY_API_KEY` / `GDY_API_KEY_ALT` | web (+ brain) | OSINT tools. |
+| `N8N_MCP_TOKEN` / `N8N_API_KEY` | aion-brain | Brain n8n MCP. |
 
-## Brain-only names (document for co-host / ops — CCFL does not read them)
+Do **not** set `AION_BASE_URL` to `https://aion-brain-6iptg.ondigitalocean.app`.
 
-`N8N_MCP_URL`, `N8N_MCP_TOKEN`, `N8N_API_KEY`, `CURSOR_API_BASE_URL`,
-`PINECONE_INDEX_HOST`, `INNGEST_EVENT_KEY`, `YOUTUBE_API_KEY`,
-`GEMINI_API_KEY`, `XAI_API_KEY`, `KIMI_API_KEY`, `OPENAI_API_KEY`.
+## Cutover (coordinator)
 
-Optional LLM tools on CCFL may read Gemini/xAI/Kimi/OpenAI names when the
-operator names those providers. They never replace Bitdeer as the Claw brain.
+1. Merge this PR to `main`. Force-deploy `video-engine-ccfl` from `.do/app.yaml`.
+2. VIDEO's new in-app component `aion-brain` appears. Attach `AION_API_KEYS` /
+   `AION_ADMIN_KEYS` (copy *values* from the shared aion-brain app if needed,
+   or set `AION_API_KEYS` to the existing web `AION_API_KEY`).
+3. Confirm web `AION_BASE_URL` interpolated to `${aion-brain.PRIVATE_URL}` only.
+4. `GET https://video-engine-ccfl-jpd37.ondigitalocean.app/api/ready`.
+5. Open `/claw` — no `/login`. Ask `aion_status`, then a toolful execute.
+6. Disconnect VIDEO from the shared DigitalOcean app `aion-brain`. Leave that
+   app running — it is another system's brain.
+7. Leave GitHub `ABBYCRM/Aion-Brain` intact. Do not delete, archive, or edit it.
 
-## Deploy this frontend
-
-1. Confirm the names above exist on the CCFL App Platform app (values already encrypted).
-2. Deploy this branch / PR to the `web` service in `.do/app.yaml`.
-3. Health: `GET /api/ready` (constant-time; not Brain, not Bitdeer).
-4. After deploy: open `/login`, sign in with `ADMIN_PASSWORD`, then on Claw ask
-   `aion_status` then a toolful question that must hit `aion_execute`.
-5. `GET /api/health` is the operator-triggered deep diagnostic — not the
-   platform health check.
+`GET /api/health` is the operator deep diagnostic — not the platform probe.

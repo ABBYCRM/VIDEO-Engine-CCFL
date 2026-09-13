@@ -1,10 +1,7 @@
 import type { Page } from "@playwright/test";
 
-export async function stubAuthenticatedSession(page: Page) {
-  await page.route("**/api/admin/session", async route => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true }) });
-  });
-}
+/** No-op. The console has no login wall. Kept so existing e2e imports stay valid. */
+export async function stubAuthenticatedSession(_page: Page) {}
 
 export async function openNavigationIfNeeded(page: Page) {
   const toggle = page.getByRole("button", { name: "Toggle navigation" });

@@ -266,7 +266,7 @@ async function runAionWorker(runId: string, taskId: string, gateway: ModelGatewa
   appendEvent(runId, taskId, "task.started", { role: task.role, via: "aion" });
   try {
     const { aionExecute, aionAcceptanceForGoal, isAionConfigured } = await import("@/lib/claw/aion");
-    if (!isAionConfigured()) throw new Error("Aion-Brain is not configured (AION_BASE_URL + AION_API_KEY).");
+    if (!isAionConfigured()) throw new Error("Aion-Brain is not configured (set AION_API_KEY; AION_BASE_URL defaults to the in-app brain).");
     const acceptance = (task.brief?.successCriteria || []).map((description, i) => ({
       id: `c${i + 1}`,
       description,

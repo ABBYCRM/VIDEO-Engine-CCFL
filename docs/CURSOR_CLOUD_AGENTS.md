@@ -1,8 +1,8 @@
 # Cursor Cloud Agents — Brain-owned, CCFL proxy
 
-Aion-Brain **owns** Cursor control (`lib/cursor_cloud.js`, PR #11).
-VIDEO-Engine-CCFL does **not** call `api.cursor.com` and does not keep a
-second client stub.
+The in-app Brain (`services/aion-brain`) **owns** Cursor control
+(`lib/cursor_cloud.js`). VIDEO-Engine-CCFL does **not** call
+`api.cursor.com` and does not keep a second client stub.
 
 ## Ownership
 
@@ -10,7 +10,7 @@ second client stub.
 |---|---|
 | `CURSOR_API_KEY` → Cursor Cloud Agents v1 | **Aion-Brain** |
 | `POST /api/cursor/launch` · `GET /api/cursor/:id` · `POST .../reply` · `POST .../cancel` | **Aion-Brain** (authoritative) |
-| CCFL `cursor_launch` / `cursor_status` / `cursor_reply` / `cursor_cancel` | **proxy** via `AION_BASE_URL` + `AION_API_KEY` (`X-AION-Key`) |
+| CCFL `cursor_launch` / `cursor_status` / `cursor_reply` / `cursor_cancel` | **proxy** to the in-app brain via `AION_API_KEY` (`X-AION-Key`) |
 | `POST /api/claw/execute` (`/api/agent/run`) | **Aion-Brain** execute — not Cursor |
 
 If Brain and CCFL are co-hosted, one `CURSOR_API_KEY` is enough (name in

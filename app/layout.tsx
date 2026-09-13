@@ -26,13 +26,13 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#ffffff"
+  themeColor: "#0a0a0a"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="bg-background">
-      <body>{children}</body>
+    <html lang="en" className="dark bg-neutral-950" suppressHydrationWarning>
+      <body className="min-h-dvh bg-white text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100">{children}</body>
     </html>
   );
 }

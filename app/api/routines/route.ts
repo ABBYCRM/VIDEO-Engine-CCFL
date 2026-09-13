@@ -1,20 +1,16 @@
 import { aionRoutines } from "@/lib/claw/aion";
-import { brainResponse, denyUnlessAdmin } from "@/lib/claw/brain-route";
+import { brainResponse } from "@/lib/claw/brain-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain RoutineStore. Persist is Brain routines.sqlite. */
 export async function GET() {
-  const denied = await denyUnlessAdmin();
-  if (denied) return denied;
   const result = await aionRoutines({ op: "list" });
   return brainResponse(result);
 }
 
 export async function POST(req: Request) {
-  const denied = await denyUnlessAdmin();
-  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const result = await aionRoutines({
     op: "create",

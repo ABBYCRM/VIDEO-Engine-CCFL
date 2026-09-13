@@ -1,15 +1,13 @@
 "use client";
-// Minimal app shell for the secondary pages (Integrations). The Claw
-// console renders its own full-screen shell; this one just gives the
-// other pages a matching header + nav. Private deployment, so there is
-// no login/logout here.
+// Secondary-page chrome. Claw owns the full-screen Grok chat shell.
+// No login/logout. Matches the 21st / Grok zinc look.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { X, MessageSquare, Menu, Plug, Settings, Monitor, CalendarClock } from "lucide-react";
 import { ClawLogo } from "@/components/claw-logo";
 
-type NavItem = { href: string; label: string; icon: any };
+type NavItem = { href: string; label: string; icon: typeof MessageSquare };
 
 const NAV: NavItem[] = [
   { href: "/claw", label: "Claw", icon: MessageSquare },
@@ -23,37 +21,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Share the Claw console's theme so the warm --claw-* tokens resolve on the
-  // secondary pages too (Integrations). Mirrors the hydration in
-  // components/claw-console.tsx: read the saved / system preference and set
-  // html[data-claw-theme]. We don't own a toggle here — we just follow it.
   useEffect(() => {
     const root = document.documentElement;
-    if (root.dataset.clawTheme) return; // Claw console already set it
+    if (root.dataset.clawTheme) return;
     const saved = (typeof localStorage !== "undefined" && localStorage.getItem("claw-theme")) as "light" | "dark" | null;
     const initial = saved === "light" || saved === "dark"
       ? saved
       : (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     root.dataset.clawTheme = initial;
+    root.classList.toggle("dark", initial === "dark");
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Sticky header — glass in dark mode */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur
-        dark:bg-[rgba(5,5,15,0.85)] dark:border-[rgba(180,180,255,0.12)]">
+    <div className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-neutral-200 bg-white/90 px-4 py-2.5 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-950/90">
         <Link href="/claw" className="flex items-center gap-2">
-          <div className="relative block overflow-hidden rounded-lg" style={{ width: 28, height: 28 }}>
-            <ClawLogo size={28} className="shrink-0" alt="" />
+          <div className="grid h-7 w-7 place-items-center overflow-hidden rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
+            <ClawLogo size={18} className="shrink-0" alt="" />
           </div>
-          <span className="text-[15px] font-semibold tracking-tight text-foreground dark:text-[rgba(220,220,255,0.90)]">Claw</span>
+          <span className="text-[15px] font-semibold tracking-tight">Claw</span>
         </Link>
         <button
           type="button"
           onClick={() => setMobileOpen((v) => !v)}
-          className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-background text-foreground
-            dark:border-[rgba(180,180,255,0.15)] dark:bg-[rgba(255,255,255,0.06)] dark:text-[rgba(220,220,255,0.60)]
-            active:bg-muted dark:active:bg-[rgba(255,255,255,0.10)]"
+          className="grid h-10 w-10 place-items-center rounded-lg border border-neutral-200 text-neutral-700 dark:border-neutral-800 dark:text-neutral-200"
           aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
         >
           {mobileOpen ? <X size={16} /> : <Menu size={16} />}
@@ -61,26 +52,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="flex">
-        {/* Sidebar — glass in dark mode */}
         <aside
-          className={`fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] border-r border-border bg-background transition-transform
-            dark:bg-[rgba(5,5,15,0.88)] dark:border-[rgba(180,180,255,0.12)] dark:backdrop-blur-xl
-            ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+          className={`fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] border-r border-neutral-200 bg-neutral-50 transition-transform dark:border-neutral-800 dark:bg-neutral-950 ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
         >
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-border p-3
-              dark:border-[rgba(180,180,255,0.10)]">
+            <div className="flex items-center justify-between border-b border-neutral-200 p-3 dark:border-neutral-800">
               <Link href="/claw" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
-                <div className="relative block overflow-hidden rounded-lg" style={{ width: 28, height: 28 }}>
-                  <ClawLogo size={28} className="shrink-0" alt="" />
+                <div className="grid h-7 w-7 place-items-center overflow-hidden rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
+                  <ClawLogo size={18} className="shrink-0" alt="" />
                 </div>
-                <span className="text-base font-semibold tracking-tight text-foreground dark:text-[rgba(220,220,255,0.90)]">Claw</span>
+                <span className="text-base font-semibold tracking-tight">Claw</span>
               </Link>
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground hover:bg-muted
-                  dark:text-[rgba(220,220,255,0.40)] dark:hover:bg-[rgba(255,255,255,0.08)] dark:hover:text-[rgba(220,220,255,0.80)]"
+                className="grid h-9 w-9 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 aria-label="Close navigation"
               >
                 <X size={16} />
@@ -96,13 +84,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <Link
                         href={n.href}
                         onClick={() => setMobileOpen(false)}
-                        className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] transition ${
+                        className={`group flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] transition ${
                           active
-                            ? "sidebar-item-active"
-                            : "text-foreground hover:bg-muted dark:text-[rgba(220,220,255,0.50)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+                            ? "bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-white"
+                            : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
                         }`}
                       >
-                        <I size={16} className={active ? "text-[rgba(199,100,67%,1)] dark:text-[var(--claw-accent)]" : "text-muted-foreground dark:text-[rgba(220,220,255,0.35)]"} />
+                        <I size={16} className={active ? "text-neutral-900 dark:text-white" : "text-neutral-400"} />
                         <span className="flex-1 truncate">{n.label}</span>
                       </Link>
                     </li>
@@ -118,7 +106,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             aria-label="Close navigation"
             onClick={() => setMobileOpen(false)}
-            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm dark:bg-black/60"
+            className="fixed inset-0 z-30 bg-black/40"
           />
         )}
 

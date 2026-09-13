@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
-import { AuthGuard } from "@/components/auth-guard";
 import { PageHeader } from "@/components/ui/page-header";
 import { Plug } from "lucide-react";
 import { IntegrationsConsole } from "@/components/integrations-console";
@@ -14,24 +13,22 @@ import { ConnectorsPanel } from "@/components/connectors-panel";
 // (and the /integrations prerender) goes through.
 export default function IntegrationsPage() {
   return (
-    <AuthGuard>
-      <AppShell>
-        <div className="mx-auto w-full max-w-3xl px-3 sm:px-4">
-          <PageHeader
-            eyebrow="Connectors"
-            eyebrowIcon={<Plug size={16} />}
-            title="Integrations"
-            description="Connector / MCP registry plus Composio toolkits."
-          />
-          <div className="grid gap-4">
-            <ConnectorsPanel />
-            <Suspense fallback={<IntegrationsFallback />}>
-              <IntegrationsConsole />
-            </Suspense>
-          </div>
+    <AppShell>
+      <div className="mx-auto w-full max-w-3xl px-3 sm:px-4">
+        <PageHeader
+          eyebrow="Connectors"
+          eyebrowIcon={<Plug size={16} />}
+          title="Integrations"
+          description="Connector / MCP registry plus Composio toolkits."
+        />
+        <div className="grid gap-4">
+          <ConnectorsPanel />
+          <Suspense fallback={<IntegrationsFallback />}>
+            <IntegrationsConsole />
+          </Suspense>
         </div>
-      </AppShell>
-    </AuthGuard>
+      </div>
+    </AppShell>
   );
 }
 

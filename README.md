@@ -17,7 +17,7 @@ Each mode carries its own prompt policy. The prompt compiler adds shared photore
 ```text
 Browser / external software
         |
-        +--> Admin session or ve_live_* API token
+        +--> Claw console (no login wall)
         |
         +--> VIDEO-Engine prompt compiler
         |      - category template
@@ -35,7 +35,7 @@ Browser / external software
 
 ## Security model
 
-- Never commit `GEMINI_API_KEY`, GitHub tokens, admin passwords, or session secrets.
+- Never commit provider keys, GitHub tokens, or session secrets.
 - Gemini API keys saved in the Settings page are encrypted at rest with AES-256-GCM using `APP_ENCRYPTION_KEY`.
 - The Gemini key is never returned back to the browser after storage.
 - VIDEO-Engine API tokens use the format `ve_live_*`; the raw token is displayed once and only a SHA-256 hash is stored.
@@ -70,7 +70,7 @@ Open `/swarm`. Claw tools: `swarm_spawn`, `swarm_wait`, `swarm_message`, `swarm_
 Aion-Brain **owns** Cursor (`lib/cursor_cloud.js`). CCFL only proxies:
 
 - Non-trivial repo work → Claw `cursor_launch` → Brain `POST /api/cursor/launch`. Dynamic, not a prefab menu. Not inline heavy coding.
-- Handshake: `AION_BASE_URL` + `AION_API_KEY` (`X-AION-Key`). `CURSOR_API_KEY` stays on Brain (name in `.env.example` for co-host only).
+- Handshake: in-app Brain at `AION_BASE_URL` (default `http://aion-brain:10000`) + `AION_API_KEY` (`X-AION-Key`). `CURSOR_API_KEY` stays on the brain service.
 - Missing Brain or Brain missing the key → Trinity **HOLD**.
 - `cursor_status` / `cursor_reply` / `cursor_cancel` map to Brain `/api/cursor/:id`, `.../reply`, `.../cancel`.
 - `POST /api/agent/run` stays `aion_execute`. See `docs/CURSOR_CLOUD_AGENTS.md`.
@@ -84,12 +84,12 @@ cp .env.example .env
 npm install
 npm run token:key
 # paste the generated base64 value into APP_ENCRYPTION_KEY
-# set ADMIN_PASSWORD (≥8, not 1234/change-me) and SESSION_SECRET (≥32)
-# set AION_BASE_URL + AION_API_KEY to reach Brain (see docs/DIGITALOCEAN_ENV.md)
+# set SESSION_SECRET (≥32, Composio OAuth state only) 
+# set AION_API_KEY; AION_BASE_URL defaults to the in-app brain
 npm run dev
 ```
 
-Open `http://localhost:3000/login`, sign in, then open **Claw**.
+Open `http://localhost:3000/claw` — no login step.
 
 ## External API
 
@@ -173,10 +173,10 @@ The repo includes a Dockerfile and persistent `/app/data` directory. For Digital
 
 1. Create an App or Droplet from this GitHub repository.
 2. Build from the Dockerfile and expose port `3000`.
-3. Configure secrets: `ADMIN_PASSWORD`, `SESSION_SECRET`, `APP_ENCRYPTION_KEY`.
+3. Configure secrets: `SESSION_SECRET`, `APP_ENCRYPTION_KEY`, `AION_API_KEY`, plus Brain `AION_API_KEYS` on the in-app component.
 4. Attach persistent storage mounted at `/app/data` if using SQLite and local MP4 storage.
 5. Set `PUBLIC_BASE_URL` to the final HTTPS hostname.
-6. After first login, add the Gemini API key through Settings, or configure `GEMINI_API_KEY` as a DigitalOcean secret.
+6. Open `/claw` (no login). Provider keys stay in Settings / DigitalOcean secrets.
 7. For horizontal scaling, replace SQLite/local MP4 storage with managed PostgreSQL + Spaces object storage before adding multiple replicas.
 
 ## AI maintainer instructions

@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { aionCursorLaunch } from "@/lib/claw/aion";
-import { denyUnlessAdmin } from "@/lib/claw/brain-route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Proxy → Aion-Brain POST /api/cursor/launch. Brain owns the Cursor client. */
 export async function POST(req: Request) {
-  const denied = await denyUnlessAdmin();
-  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const result = await aionCursorLaunch({

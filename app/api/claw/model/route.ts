@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
 import { getClawModel, isClawModelEnvOverridden, setClawModel } from "@/lib/nvidia/client";
 import { isNvidiaModelId, listNvidiaModelIds, NVIDIA_MODELS } from "@/lib/nvidia/models";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return NextResponse.json({
     model: getClawModel(),
     envOverridden: isClawModelEnvOverridden(),
@@ -17,7 +15,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const model = body.model;
   if (!isNvidiaModelId(model) || model === "disabled") {

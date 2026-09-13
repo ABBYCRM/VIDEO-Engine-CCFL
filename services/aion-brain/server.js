@@ -1,0 +1,1408 @@
+// server.js
+// llm-gateway — drop-in LLM gateway with self-auditor.
+// intentionally-sync: reports-dir creation is a one-time startup concern.
+// OpenAI-compatible at the edge so any SDK works by changing baseURL.
+//
+// Routes:
+//   GET  /healthz
+//   GET  /                       gateway info + audit summary
+//   POST /v1/chat/completions    OpenAI-compatible chat
+//   POST /v1/images/generations  OpenAI-compatible image gen
+//   POST /v1/images/edits        OpenAI-compatible image edit
+//   POST /v1/videos              OpenAI-compatible video create
+//   POST /v1/messages            Anthropic passthrough
+//   GET  /audit                  last audit report
+//   POST /audit/run              run a fresh audit (async)
+//   GET  /audit/quick            quick health + drift check
+//   GET  /calls/recent           recent call log
+//   GET  /stats                  aggregated call stats
+
+import express from 'express';
+import { randomUUID } from 'node:crypto';
+import { Store, defaultStorePath } from './lib/store.js';
+import { Router, CircuitBreaker } from './lib/router.js';
+import { buildDefaultChain, resolveProviders as resolveBitdeerProviders, NVIDIA_CORS_HEADERS } from './lib/nvidia_only_providers.js';
+import { Auditor } from './lib/auditor.js';
+import { Brain } from './lib/brain.js';
+import { AION_CONTINUITY_PACK, MissionContext, buildSystemPrompt, resolveDecision, resolveBosGate, TrinityState } from './lib/aion_kernel.js';
+import { AionChain } from './lib/aion_chain.js';
+import { aionSettings } from './lib/aion_settings.js';
+import { ToolRegistry, TOOL_CATALOG } from './lib/brain_tools.js';
+import { runLattice } from './lib/lattice.js';
+import { ActiveState } from './lib/state.js';
+import { AgentMemory } from './lib/memory.js';
+import { mkdirSync, existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { buildSearcher as buildDdgSearcher } from './lib/duckduckgo.js';
+import * as skillCatalog from './lib/skill_catalog.js';
+import { registerSQMRoutes } from './lib/sqm.js';
+import { pickSkills, buildSkillContext } from './lib/skill_router.js';
+import { AgentRuntime } from './lib/agent_runtime.js';
+import { configuredSecrets, classifyComposioKey, envSecret, gdyConfigured } from './lib/external_tools.js';
+import {
+  cursorConfigured, cursorPublicStatus, cursorLaunch, cursorStatus, cursorReply, cursorCancel, cursorList,
+} from './lib/cursor_cloud.js';
+import { PHASE_ORDER } from './lib/self_state.js';
+import {
+  looksLikeInternalDump,
+  naturalLanguageAnswer,
+  preferExecutePath,
+  sanitizeAssistantText,
+} from './lib/assistant_text.js';
+import { getBosRag, seedBosFacts, isBosTopic, formatBosContext } from './lib/bos_omega_rag.js';
+import { AgentOrchestrator, defaultAgentJobsPath } from './lib/agent_jobs.js';
+import { RoutineStore, runRoutine } from './lib/routines.js';
+import { connectorsSnapshot, mcpStatus } from './lib/connectors.js';
+import { bootVault } from './lib/secrets.js';
+
+bootVault();
+
+const PORT = parseInt(process.env.PORT || '10000', 10);
+const ROOT = process.cwd();
+const REPORTS_DIR = process.env.LLM_GATEWAY_REPORTS_DIR || join(ROOT, 'reports');
+if (!existsSync(REPORTS_DIR)) mkdirSync(REPORTS_DIR, { recursive: true });
+
+const store = new Store(defaultStorePath());
+const breaker = new CircuitBreaker({ threshold: 3, cooldownMs: 30_000 });
+
+// Production inference is BITDEER-PRIMARY (fail-closed). /v1 and /api/chat
+// stay on the Bitdeer catalog. GEMINI/XAI/KIMI/OPENAI keys are optional
+// side tools via lib/provider_tools.js — they must never join this chain.
+let router = new Router({ providers: buildDefaultChain(), breaker, store });
+const brainStartedAt = Date.now();
+const aionChain = AionChain.fromEnv({ breaker, store, appId: 'aion-brain' });
+// Long-lived per-process state (free-energy + decision bias) and durable memory
+// (episodes, facts, goals). Both feed the /api/chat pipeline.
+const activeState = new ActiveState();
+const memory = new AgentMemory(join(process.env.LLM_GATEWAY_DATA_DIR || './data', 'memory.db'));
+// Wire the kernel-level searcher (DuckDuckGo HTML) and the AionChain
+// (for the skill reranker). AION owns its own web_search; the brain
+// also exposes web_search so direct callers (curl, scripts) can use it.
+const ddgSearcher = buildDdgSearcher();
+const routines = new RoutineStore(join(process.env.LLM_GATEWAY_DATA_DIR || './data', 'routines.sqlite'));
+const bosRag = getBosRag({
+  dbPath: join(process.env.LLM_GATEWAY_DATA_DIR || './data', 'bos-omega.sqlite'),
+  corpusDir: join(ROOT, 'knowledge', 'bos-omega'),
+});
+seedBosFacts(memory);
+const brainTools = new ToolRegistry({
+  searcher: ddgSearcher,
+  chain: aionChain,
+  memory,
+  routines,
+});
+const agentRuntime = new AgentRuntime({ chain: aionChain, tools: brainTools });
+const agentOrchestrator = new AgentOrchestrator({
+  dbPath: defaultAgentJobsPath(),
+  tools: brainTools,
+  chain: aionChain,
+});
+brainTools.setOrchestrator(agentOrchestrator);
+agentOrchestrator.start();
+
+// Validate AION settings on boot (fail-closed in production)
+try {
+  aionSettings.validateStartup();
+} catch (e) {
+  console.error(JSON.stringify({
+    t: new Date().toISOString(),
+    msg: 'aion.startup.fatal',
+    error: e.message
+  }));
+  process.exit(1);
+}
+
+// ---- AION auth (X-AION-Key / Authorization: Bearer) ----
+function _aionAuthenticate(req) {
+  const token = req.header('x-aion-key') || (req.header('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!aionSettings.authRequired()) {
+    return { subject: 'development', is_admin: true };
+  }
+  if (!token) return null;
+  if (aionSettings.isAdminKey(token)) return { subject: aionSettings.subjectFor(token), is_admin: true };
+  if (aionSettings.isUserKey(token)) return { subject: aionSettings.subjectFor(token), is_admin: false };
+  return null;
+}
+function aionRequire(req) {
+  const p = _aionAuthenticate(req);
+  if (!p) {
+    const err = new Error('authentication_failed');
+    err.statusCode = 401;
+    err.public = { detail: 'invalid_credentials' };
+    throw err;
+  }
+  return p;
+}
+function aionAdmin(req) {
+  const p = aionRequire(req);
+  if (!p.is_admin) {
+    const err = new Error('admin_required');
+    err.statusCode = 403;
+    err.public = { detail: 'admin_required' };
+    throw err;
+  }
+  return p;
+}
+
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
+
+// Request ID + lightweight logger
+app.use((req, res, next) => {
+  req.id = req.header('x-request-id') || randomUUID();
+  res.setHeader('x-request-id', req.id);
+  const t = Date.now();
+  res.on('finish', () => {
+    // Log only errors and slow requests
+    const dt = Date.now() - t;
+    if (res.statusCode >= 400 || dt > 1000) {
+      console.log(JSON.stringify({ t: new Date().toISOString(), req_id: req.id, m: req.method, p: req.path, s: res.statusCode, ms: dt }));
+    }
+  });
+  next();
+});
+
+// CORS — explicit, no credentials
+app.use((req, res, next) => {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  res.setHeader('access-control-allow-headers', NVIDIA_CORS_HEADERS);
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+// Per-request Bitdeer/NVIDIA key only. Non-Bitdeer provider headers are ignored.
+function resolveProviders(req) {
+  return resolveBitdeerProviders(req, { breaker, store, router });
+}
+
+// ---- Health & info ----
+
+app.get('/healthz', (req, res) => {
+  res.json({
+    ok: true,
+    ts: Date.now(),
+    uptime_s: Math.round(process.uptime()),
+    version: '0.1.24',
+    secrets: { gdy: gdyConfigured(), cursor: cursorConfigured() },
+  });
+});
+
+app.get('/', (req, res) => {
+  const last = store.lastAudit();
+  res.json({
+    name: 'llm-gateway',
+    version: '0.1.24',
+    description: 'Plug-and-play LLM gateway with AION 7-law kernel, Bitdeer-first provider chain, ECC skill-pack auto-router, DuckDuckGo + Reddit + Steel.dev tools, and self-auditor',
+    providers: router.providers.map(p => p.name),
+    audit: last ? { ts: last.ts, mode: last.mode, status: last.status, p0: last.p0_count, p1: last.p1_count } : null,
+    endpoints: [
+      'GET  /healthz',
+      'POST /v1/chat/completions',
+      'POST /v1/images/generations',
+      'POST /v1/images/edits',
+      'POST /v1/videos',
+      'POST /v1/messages',
+      'GET  /audit',
+      'POST /audit/run',
+      'GET  /audit/quick',
+      'GET  /calls/recent',
+      'GET  /stats',
+      'GET  /api/skills',
+      'GET  /api/skills/:name',
+      'POST /api/skills/pick',
+      'POST /api/skills/context',
+      'GET  /api/tools',
+      'POST /api/tools/:name',
+      'POST /api/agent/run',
+      'POST /api/claw/execute',
+      'GET  /api/claw/contract',
+      'GET  /api/claw/tools',
+      'POST /api/claw/tools/:name',
+      'POST /api/agents/spawn',
+      'GET  /api/agents/:id',
+      'GET  /api/agents/:id/result',
+      'POST /api/cursor/launch',
+      'GET  /api/cursor/:id',
+      'GET  /api/memory/bos',
+      'POST /api/memory/bos',
+      'POST /api/decision',
+      'GET  /api/routines',
+      'POST /api/routines',
+      'GET  /api/connectors',
+      'GET  /api/mcp/status',
+    ],
+  });
+});
+
+// ---- LLM routes ----
+
+app.post('/v1/chat/completions', async (req, res) => {
+  const r = resolveProviders(req);
+  const result = await r.call({
+    operation: 'chat',
+    payload: req.body,
+    appId: req.header('x-app-id'),
+    requestId: req.id,
+  });
+  if (!result.ok) return res.status(502).json({ error: { code: 'all_providers_failed', errors: result.errors, request_id: req.id } });
+  res.json({
+    id: `chatcmpl-${req.id}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: result.model,
+    choices: [{
+      index: 0,
+      message: { role: 'assistant', content: result.content },
+      finish_reason: result.finish_reason || 'stop',
+    }],
+    usage: result.usage || {},
+    _meta: { provider: result.provider, latency_ms: result.latency_ms, request_id: req.id },
+  });
+});
+
+app.post('/v1/images/generations', async (req, res) => {
+  const r = resolveProviders(req);
+  const payload = { ...(req.body || {}) };
+  if (!payload.model) payload.model = process.env.BITDEER_IMAGE_MODEL || 'black-forest-labs/FLUX-2-pro';
+  const result = await r.call({
+    operation: 'image.generate',
+    payload,
+    appId: req.header('x-app-id'),
+    requestId: req.id,
+  });
+  if (!result.ok) return res.status(502).json({ error: { code: 'all_providers_failed', errors: result.errors, request_id: req.id } });
+  res.json({
+    created: Math.floor(Date.now() / 1000),
+    model: result.model,
+    data: (result.images || []).map(im => ({ url: im.url, b64_json: im.b64 })),
+    _meta: { provider: result.provider, latency_ms: result.latency_ms, request_id: req.id },
+  });
+});
+
+app.post('/v1/images/edits', express.raw({ type: '*/*', limit: '20mb' }), async (req, res) => {
+  // Accept multipart via fetch upstream; for simplicity, require JSON { image_b64, prompt, ... }
+  // (Real multipart passthrough is provider-specific; clients can use the JSON variant.)
+  let body = req.body;
+  if (Buffer.isBuffer(body)) {
+    try { body = JSON.parse(body.toString('utf8')); } catch { body = {}; }
+  }
+  const r = resolveProviders(req);
+  const result = await r.call({
+    operation: 'image.edit',
+    payload: body,
+    appId: req.header('x-app-id'),
+    requestId: req.id,
+  });
+  if (!result.ok) return res.status(502).json({ error: { code: 'all_providers_failed', errors: result.errors, request_id: req.id } });
+  res.json({
+    created: Math.floor(Date.now() / 1000),
+    model: result.model,
+    data: (result.images || []).map(im => ({ url: im.url, b64_json: im.b64 })),
+    _meta: { provider: result.provider, latency_ms: result.latency_ms, request_id: req.id },
+  });
+});
+
+app.post('/v1/videos', async (req, res) => {
+  const r = resolveProviders(req);
+  const result = await r.call({
+    operation: 'video.create',
+    payload: req.body,
+    appId: req.header('x-app-id'),
+    requestId: req.id,
+  });
+  if (!result.ok) return res.status(502).json({ error: { code: 'all_providers_failed', errors: result.errors, request_id: req.id } });
+  res.status(202).json({ id: result.id, status: result.status || 'queued', model: result.model, _meta: { provider: result.provider, request_id: req.id } });
+});
+
+app.post('/v1/messages', async (req, res) => {
+  const r = resolveProviders(req);
+  const result = await r.call({
+    operation: 'chat',
+    payload: { ...req.body, model: req.body?.model || 'claude-3-5-sonnet-latest' },
+    appId: req.header('x-app-id'),
+    requestId: req.id,
+  });
+  if (!result.ok) return res.status(502).json({ error: { code: 'all_providers_failed', errors: result.errors, request_id: req.id } });
+  res.json({
+    id: `msg-${req.id}`,
+    type: 'message',
+    role: 'assistant',
+    model: result.model,
+    content: [{ type: 'text', text: result.content || '' }],
+    stop_reason: result.finish_reason || 'end_turn',
+    usage: { input_tokens: result.usage?.input_tokens || 0, output_tokens: result.usage?.output_tokens || 0 },
+    _meta: { provider: result.provider, latency_ms: result.latency_ms, request_id: req.id },
+  });
+});
+
+// ---- AION API routes (v2 contract) ----
+// Ported from AION v2 FastAPI app. Same request/response shapes, same SSE
+// event names, same fail-closed auth, same 200+ok=false discipline.
+
+app.get('/api/continuity-pack', (req, res) => {
+  res.json(AION_CONTINUITY_PACK);
+});
+
+app.get('/api/models', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json({
+    chain: aionSettings.fallbackModels[0] ? [aionSettings.primaryModel, ...aionSettings.fallbackModels] : [aionSettings.primaryModel],
+    primary: aionSettings.primaryModel,
+    providers: aionChain.providers.map(p => ({ name: p.name, base: p.baseUrl || null, configured: Boolean(p.apiKey || true) })),
+  });
+});
+
+// ---- Skills catalog (ECC bundle) ----
+//
+// GET /api/skills          -> { count, skills: [{name,title,description,path}] }
+// GET /api/skills/:name    -> { name, title, description, path, body, length }
+// POST /api/skills/pick    -> { skills: [...] }  (reranker or lexical fallback)
+// POST /api/skills/context -> { included, context }  (load N skill bodies)
+registerSQMRoutes(app, aionRequire);
+
+app.get('/api/skills', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const skills = await skillCatalog.list();
+    res.json({ count: skills.length, skills });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/skills/:name(*)', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const entry = await skillCatalog.get(req.params.name);
+    if (!entry) return res.status(404).json({ ok: false, error: 'not_found', name: req.params.name });
+    res.json({ ...entry, length: (entry.body || '').length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/skills/pick', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const query = String(req.body?.query || '').trim();
+  if (!query) return res.status(400).json({ ok: false, error: 'query_required' });
+  const k = Math.max(1, Math.min(10, Number(req.body?.k) || 3));
+  try {
+    const out = await pickSkills(query, { chain: aionChain, k });
+    res.json({
+      query,
+      k,
+      source: out.source,
+      used_reranker: out.used_reranker,
+      indices: out.indices || null,
+      raw_model_output: out.raw || null,
+      skills: out.skills.map((s) => ({ name: s.name, title: s.title, description: s.description, path: s.path })),
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/skills/context', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const names = Array.isArray(req.body?.names) ? req.body.names : [];
+  if (names.length === 0) return res.status(400).json({ ok: false, error: 'names_required' });
+  try {
+    const out = await buildSkillContext(names);
+    res.json({ requested: names, included: out.included, length: out.context.length, context: out.context });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/audit/recent', (req, res) => {
+  try { aionAdmin(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const last = store.lastAudit();
+  const events = last ? [last] : [];
+  res.json({ events });
+});
+
+function retrieveBosForDecision(query, { topK = 6, forceRetrieve = false } = {}) {
+  const q = String(query || '').trim();
+  if (!q) return { retrieved: false, retrieveCount: 0, chunks: [], ingest: null, error: null };
+  if (!forceRetrieve && !isBosTopic(q)) {
+    return { retrieved: false, retrieveCount: 0, chunks: [], ingest: null, error: null };
+  }
+  try {
+    const result = bosRag.retrieveOrIngest(q, { topK });
+    const chunks = result.chunks || [];
+    return {
+      retrieved: chunks.length > 0,
+      retrieveCount: chunks.length,
+      chunks,
+      ingest: result.ingest || null,
+      error: result.ok === false ? (result.error || 'retrieve_failed') : null,
+      embedder: result.embedder || null,
+    };
+  } catch (e) {
+    return { retrieved: false, retrieveCount: 0, chunks: [], ingest: null, error: e.message };
+  }
+}
+
+app.post('/api/decision', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const userInput = String(req.body?.user_input || req.body?.goal || req.body?.prompt || '').trim();
+  if (!userInput) return res.status(400).json({ detail: 'user_input_required' });
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(0, 100) : [];
+  const ctx = new MissionContext({ userInput, history });
+  const decision = resolveDecision(ctx);
+  const pack = retrieveBosForDecision(userInput, {
+    topK: Math.min(20, Number(req.body?.topK) || 6),
+    forceRetrieve: req.body?.retrieve === true,
+  });
+  const trinity = resolveBosGate(userInput, {
+    retrieved: pack.retrieved,
+    retrieveCount: pack.retrieveCount,
+    retrieveError: pack.error,
+  });
+  store.recordCall({ ts: Date.now(), app_id: ctx.fingerprint(), provider: 'kernel', model: 'trinity-7-law', operation: 'aion.decision', status: 200, latency_ms: 0, request_id: ctx.requestId });
+  res.json({
+    request_id: ctx.requestId,
+    ok: true,
+    state: trinity.state,
+    trinity,
+    decision,
+    mapped_decision: trinity.mapped_decision,
+    retrieved: {
+      count: pack.retrieveCount,
+      embedder: pack.embedder || null,
+      sources: pack.chunks.map((c) => ({
+        source_id: c.source_id,
+        authority: c.authority,
+        score: c.score,
+        title: c.title,
+      })),
+    },
+    ingest: pack.ingest,
+    gate: TrinityState,
+  });
+});
+
+app.post('/api/chat', async (req, res) => {
+  let principal;
+  try { principal = aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+  if (messages.length === 0) return res.status(400).json({ ok: false, error: 'messages_required', kind: 'invalid_request' });
+  // Enforce client role restriction (no system role)
+  for (const m of messages) {
+    if (m && m.role && !['user', 'assistant'].includes(m.role)) {
+      return res.status(422).json({ detail: `role '${m.role}' not allowed` });
+    }
+  }
+  const lastUser = [...messages].reverse().find(m => m && m.role === 'user');
+  if (!lastUser) return res.status(400).json({ ok: false, error: 'user_message_required', kind: 'invalid_request' });
+  const userText = typeof lastUser.content === 'string' ? lastUser.content
+    : (Array.isArray(lastUser.content) ? lastUser.content.map(p => p.text || '').join('\n') : '');
+  const temperature = Number.isFinite(req.body?.temperature) ? req.body.temperature : 0.7;
+  const maxTokens = Number.isFinite(req.body?.max_tokens) ? req.body.max_tokens : 1024;
+  if (maxTokens < aionSettings.minCompletionTokens || maxTokens > aionSettings.maxCompletionTokens) {
+    return res.status(422).json({ detail: `max_tokens must be ${aionSettings.minCompletionTokens}..${aionSettings.maxCompletionTokens}` });
+  }
+  if (userText.length > aionSettings.maxMessageChars) {
+    return res.status(400).json({ ok: false, error: 'message_text_too_large', kind: 'invalid_request' });
+  }
+
+  // Execute path for actionable goals (or explicit agentic:true). Consult
+  // stays single-shot unless the caller forces it with consult:true /
+  // agentic:false. Control-loop internals stay on their own SSE types.
+  if (preferExecutePath({ text: userText, body: req.body || {} })) {
+    const sessionId = String(req.body?.session_id || req.header('x-aion-session-id') || principal.subject || req.id);
+    const ctx = new MissionContext({ userInput: userText, history: messages.slice(0, -1) });
+    const decision = resolveDecision(ctx);
+    let ran;
+    try {
+      ran = await agentRuntime.run({
+        goal: userText,
+        acceptance: Array.isArray(req.body?.acceptance) ? req.body.acceptance : [],
+        sessionId,
+        maxCycles: Number.isFinite(req.body?.max_cycles) ? req.body.max_cycles : undefined,
+        model: req.body?.model || aionSettings.primaryModel,
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+    const answer = answerFromAgent(ran, userText);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('X-AION-Decision', decision.state);
+    res.setHeader('X-AION-Session-Id', sessionId);
+    res.setHeader('X-AION-Path', 'execute');
+    res.flushHeaders && res.flushHeaders();
+    res.write(`data: ${JSON.stringify({ type: 'decision', request_id: ctx.requestId, decision })}\n\n`);
+    writeAgentControlEvents(res, ran);
+    res.write(`data: ${JSON.stringify({ type: 'attempt', provider: 'aion-agent', model: aionSettings.agentModel, index: 1 })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'open', provider: 'aion-agent', model: aionSettings.agentModel, streaming: 'simulated' })}\n\n`);
+    writeAssistantDelta(res, answer);
+    res.write(`data: ${JSON.stringify({ type: 'done', streaming: 'simulated', provider: 'aion-agent', model: aionSettings.agentModel, finish_reason: ran.complete ? 'stop' : 'incomplete', verified: ran.verified })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+    return;
+  }
+
+  // Build AION decision
+  const history = messages.slice(0, -1).map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' }));
+  const ctx = new MissionContext({ userInput: userText, history });
+  const decision = resolveDecision(ctx);
+
+  // Stable per-conversation session ID. req.id is a fresh random UUID on
+  // every single request, so using it here (the old behavior) meant the
+  // durable-memory lookup below always missed — every request looked like
+  // the first message of a session that never existed before. Callers
+  // that want real cross-turn recall pass session_id (or x-aion-session-id);
+  // it survives page reloads because the frontend persists the
+  // conversation's own ID. Falls back to the per-subject key so at least
+  // same-key callers share memory instead of nothing recalling at all.
+  const sessionId = String(req.body?.session_id || req.header('x-aion-session-id') || principal.subject || req.id);
+  res.setHeader('X-AION-Session-Id', sessionId);
+  res.setHeader('X-AION-Path', 'consult');
+
+  // Memory pack: durable context from previous episodes + facts + goals
+  let memoryPack = null;
+  try {
+    memoryPack = memory.contextPack({ sessionId, subject: principal.subject, limit: 8 });
+  } catch { memoryPack = null; }
+
+  // Optional tool: AION owns the real web search; default no-op here.
+  const toolEvidence = null;
+
+  // Lattice: 3 roles in parallel; majority + critic veto
+  let lattice = null;
+  try {
+    lattice = await runLattice({ ctx, decision, toolEvidence, activeState, memoryPack, tools: brainTools });
+  } catch (e) {
+    lattice = { consensus: decision.state, votes: {}, rationale: `lattice_error: ${e.message}`, error: true };
+  }
+
+  // Decision bias from active state
+  const bias = activeState.decisionBias();
+  if (bias?.preferDefer && lattice.consensus === 'COMMIT') {
+    lattice = { ...lattice, consensus: 'DEFER', rationale: (lattice.rationale || '') + ' | active_state_prefer_defer' };
+  }
+
+  // Auto-pick skills from the ECC pack and inject their bodies as
+  // system context. Skipped if the user passes { skills: false }.
+  // Capped at top-K (env RERANKER_TOP_K, default 3) to keep the prompt small.
+  let skillInject = null;
+  if (req.body?.skills !== false) {
+    try {
+      const picked = await pickSkills(userText, { chain: aionChain });
+      if (picked.skills.length > 0) {
+        const ctx = await buildSkillContext(picked.skills.map((s) => s.name));
+        if (ctx.context) skillInject = { ...picked, context: ctx.context, included: ctx.included };
+      } else {
+        skillInject = { ...picked, context: '', included: [] };
+      }
+    } catch { skillInject = null; }
+  }
+
+  // Build AION system prompt (with tool + lattice + memory pack context).
+  // memoryPack.contextPack() returns { episodes, facts, goals } — episodes
+  // are this session's own prior turns (durable across requests now that
+  // sessionId is stable); facts/goals are cross-session long-term memory.
+  const toolContext = toolEvidence ? JSON.stringify(toolEvidence).slice(0, 1000) : '';
+  let bosFacts = [];
+  try { bosFacts = memory.factsFor('bos-omega', 12); } catch { bosFacts = []; }
+  const notesLines = [
+    ...(memoryPack?.episodes || []).slice().reverse().map(e => `- [prior ${e.role}] ${e.content}`),
+    ...(memoryPack?.facts || []).map(f => `- known fact: ${f}`),
+    ...bosFacts.map(f => `- bos fact: ${f.subject} ${f.predicate} ${f.object}`),
+    ...(memoryPack?.goals || []).map(g => `- active goal: ${g.title} (${Math.round((g.progress || 0) * 100)}%)`),
+  ];
+  const notesContext = notesLines.join('\n');
+  let bosPack = null;
+  if (isBosTopic(userText) || req.body?.retrieve === true) {
+    try { bosPack = bosRag.retrieve(userText, { topK: 6 }); } catch { bosPack = null; }
+  }
+  const bosGate = resolveBosGate(userText, { retrieved: Boolean(bosPack?.chunks?.length) });
+  const bosContext = bosPack?.ok ? formatBosContext(bosPack) : '';
+  const systemPrompt = buildSystemPrompt(decision, {
+    toolContext,
+    notesContext,
+    bosContext,
+    bosGate,
+    lattice: { consensus: lattice.consensus, rationale: lattice.rationale, votes: lattice.votes },
+  });
+  // Prepend the auto-picked skills (if any) to the system prompt as
+  // additional context. Skills are guidance, not commands — the model
+  // is told to use them as context, not blindly follow.
+  const systemContent = skillInject && skillInject.context
+    ? `${systemPrompt}\n\n${skillInject.context}`
+    : systemPrompt;
+  const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-AION-Decision', decision.state);
+  if (skillInject) {
+    res.setHeader('X-AION-Skills-Source', String(skillInject.source || 'none'));
+    res.setHeader('X-AION-Skills-Count', String(skillInject.included?.length || 0));
+  }
+  res.setHeader('X-AION-Bos-Gate', bosGate.state);
+  if (bosPack?.ok) res.setHeader('X-AION-Bos-Chunks', String(bosPack.chunks.length));
+  res.flushHeaders && res.flushHeaders();
+
+  // 1) decision event
+  res.write(`data: ${JSON.stringify({ type: 'decision', request_id: ctx.requestId, decision })}\n\n`);
+
+  // 2) lattice consensus event (proves runLattice fired end-to-end)
+  res.write(`data: ${JSON.stringify({
+    type: 'lattice',
+    consensus: lattice.consensus,
+    votes: lattice.votes,
+    rationale: lattice.rationale,
+    free_energy: activeState.freeEnergy(),
+  })}\n\n`);
+
+  if (bosPack?.ok) {
+    res.write(`data: ${JSON.stringify({
+      type: 'bos_omega',
+      query: userText.slice(0, 200),
+      gate: bosGate,
+      count: bosPack.chunks.length,
+      sources: bosPack.chunks.map((c) => ({ source_id: c.source_id, authority: c.authority, score: c.score })),
+    })}\n\n`);
+  }
+
+  // 2.5) skill injection event (proves the reranker fired and what it picked)
+  if (skillInject) {
+    res.write(`data: ${JSON.stringify({
+      type: 'skills',
+      source: skillInject.source,
+      used_reranker: skillInject.used_reranker,
+      included: skillInject.included || [],
+      candidate_count: skillInject.skills?.length || 0,
+      raw_model_output: skillInject.raw || null,
+    })}\n\n`);
+  }
+
+  // 3) stream
+  let streamOk = true;
+  let streamError = null;
+  let assistantText = '';
+  try {
+    for await (const evt of aionChain.stream({ messages: fullMessages, temperature, maxTokens })) {
+      // Accumulate the real reply text so the post-stream episode below
+      // remembers what was actually said, not a placeholder string.
+      const m = evt.match(/^data: (.+)$/m);
+      let skipWrite = false;
+      if (m) {
+        try {
+          const parsed = JSON.parse(m[1]);
+          if (parsed.type === 'delta' && typeof parsed.text === 'string') {
+            assistantText += parsed.text;
+            // Never forward a control-loop dump as user-visible delta text.
+            if (looksLikeInternalDump(parsed.text)) skipWrite = true;
+          }
+        } catch { /* non-JSON or [DONE] line */ }
+      }
+      if (!skipWrite) res.write(evt);
+    }
+  } catch (e) {
+    streamOk = false;
+    streamError = e.message;
+    res.write(`data: ${JSON.stringify({ type: 'error', kind: 'stream_failed', message: e.message })}\n\n`);
+  }
+  res.write('data: [DONE]\n\n');
+  res.end();
+
+  // 4) post-stream: observe + remember episode + log
+  activeState.observe({
+    state: decision.state,
+    score: decision.score,
+    error: !streamOk,
+    latencyMs: Date.now() - ctx.startedAt,
+  });
+  try {
+    // Remember both sides of the turn under the stable sessionId so the
+    // next request with the same session_id actually recalls this
+    // exchange via the memoryPack build above.
+    memory.rememberEpisode({
+      sessionId,
+      role: 'user',
+      content: userText,
+      meta: { request_id: ctx.requestId, principal: principal.subject },
+    });
+    memory.rememberEpisode({
+      sessionId,
+      role: 'assistant',
+      content: sanitizeAssistantText(assistantText) || (streamOk ? '' : `[stream_error: ${streamError}]`),
+      decisionState: lattice.consensus,
+      decisionScore: decision.score,
+      meta: { request_id: ctx.requestId, principal: principal.subject, lattice: lattice.consensus, stream_error: streamError },
+    });
+  } catch { /* non-fatal */ }
+  // record
+  store.recordCall({
+    ts: ctx.startedAt,
+    app_id: principal.subject,
+    provider: 'aion',
+    model: aionSettings.primaryModel,
+    operation: 'aion.chat',
+    status: streamOk ? 200 : 500,
+    latency_ms: Date.now() - ctx.startedAt,
+    request_id: ctx.requestId,
+  });
+});
+
+// ---- AION API: state, tools catalog, tool runner ----
+
+app.get('/api/state', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json({
+    ok: true,
+    app: 'aion-brain',
+    version: '0.1.24',
+    environment: process.env.ENVIRONMENT || 'development',
+    primary_model: aionSettings.primaryModel,
+    agent_model: aionSettings.agentModel,
+    fallback_models: aionSettings.fallbackModels,
+    providers: aionChain.providers.map(p => p.name),
+    continuity_pack: { laws: AION_CONTINUITY_PACK.core_laws, states: AION_CONTINUITY_PACK.decision_states },
+    uptime_ms: Date.now() - (brainStartedAt || Date.now()),
+    active_state: activeState.snapshot(),
+    control_loop: {
+      phases: PHASE_ORDER,
+      tools_configured: configuredSecrets(),
+      composio_key_type: envSecret('COMPOSIO_API_KEY') ? classifyComposioKey(envSecret('COMPOSIO_API_KEY')).type : 'missing',
+    },
+    bos_omega: bosRag.status(),
+    agents: {
+      spawn: '/api/agents/spawn',
+      persistence: 'sqlite',
+      inngest: Boolean(String(process.env.INNGEST_EVENT_KEY || '').trim()),
+    },
+    cursor: cursorPublicStatus(),
+    connectors: connectorsSnapshot(),
+  });
+});
+
+function serializeBosRetrieve(result, query) {
+  return {
+    ok: Boolean(result?.ok),
+    query,
+    count: result?.chunks?.length || 0,
+    chunks: result?.chunks || [],
+    embedder: result?.embedder || null,
+    pinecone: result?.pinecone || 'local_only',
+    ingest: result?.ingest || null,
+  };
+}
+
+// BOS memory: retrieve (GET) + ingest/upsert (POST). Auto-ingests if the store is empty.
+app.get('/api/memory/bos', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const q = String(req.query.q || req.query.query || '').trim();
+  if (!q) {
+    try {
+      const ingest = bosRag.upsertIfMissing();
+      return res.json({ ok: true, status: bosRag.status(), ingest });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+  try {
+    const result = await bosRag.retrieveOrIngestRemote(q, { topK: Math.min(20, Number(req.query.topK) || 6) });
+    res.json(serializeBosRetrieve(result, q));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/memory/bos', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const body = (req.body && typeof req.body === 'object') ? req.body : {};
+  const upserts = [];
+  try {
+    const ingest = body.ingest === true ? bosRag.ingestLocal() : bosRag.upsertIfMissing();
+    const docs = Array.isArray(body.documents) ? [...body.documents] : [];
+    if (body.content || body.source_id || body.sourceId) {
+      docs.push({
+        source_id: body.source_id || body.sourceId,
+        title: body.title,
+        content: body.content,
+        authority: body.authority,
+      });
+    }
+    for (const doc of docs) {
+      const up = bosRag.upsertDocument({
+        sourceId: doc.source_id || doc.sourceId,
+        title: doc.title,
+        content: doc.content,
+        authority: doc.authority,
+      });
+      const { rows, ...publicUp } = up;
+      const pinecone = await bosRag.syncPineconeSource(up.source_id);
+      upserts.push({ ...publicUp, pinecone: pinecone?.ok ? pinecone.evidence : (pinecone?.skipped ? 'skipped' : (pinecone?.error || null)) });
+    }
+    const q = String(body.query || body.q || '').trim();
+    const retrieve = q
+      ? await bosRag.retrieveOrIngestRemote(q, { topK: Math.min(20, Number(body.topK) || 6) })
+      : null;
+    res.json({
+      ok: true,
+      ingest,
+      upserts,
+      status: bosRag.status(),
+      retrieve: retrieve ? serializeBosRetrieve(retrieve, q) : null,
+    });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/memory/episodes', (req, res) => {
+  try { aionAdmin(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const sessionId = (req.query.sessionId && String(req.query.sessionId)) || null;
+  const limit = Math.min(parseInt(req.query.limit || '50', 10), 500);
+  const eps = memory.recentEpisodes({ sessionId, limit });
+  res.json({ ok: true, episodes: eps, count: eps.length });
+});
+
+function routineFromBody(body, nameFallback) {
+  return {
+    name: body?.name || nameFallback,
+    trigger: body?.trigger,
+    steps: body?.steps,
+    success: body?.success,
+    status: body?.status,
+  };
+}
+
+app.get('/api/routines', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const items = routines.list();
+  res.json({ ok: true, count: items.length, routines: items });
+});
+
+app.post('/api/routines', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const routine = routines.upsert(routineFromBody(req.body));
+    res.status(201).json({ ok: true, routine });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/routines/:name', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const routine = routines.get(req.params.name);
+  if (!routine) return res.status(404).json({ ok: false, error: 'routine_not_found' });
+  res.json({ ok: true, routine });
+});
+
+app.put('/api/routines/:name', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const routine = routines.upsert(routineFromBody({ ...req.body, name: req.params.name }));
+    res.json({ ok: true, routine });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/routines/:name/pause', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const routine = routines.pause(req.params.name);
+  if (!routine) return res.status(404).json({ ok: false, error: 'routine_not_found' });
+  res.json({ ok: true, routine });
+});
+
+app.post('/api/routines/:name/resume', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const routine = routines.resume(req.params.name);
+  if (!routine) return res.status(404).json({ ok: false, error: 'routine_not_found' });
+  res.json({ ok: true, routine });
+});
+
+app.post('/api/routines/:name/run', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await runRoutine(routines, brainTools, req.params.name);
+  res.status(result.ok ? 200 : 400).json({ ok: result.ok, ...result });
+});
+
+app.delete('/api/routines/:name', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const routine = routines.delete(req.params.name);
+  if (!routine) return res.status(404).json({ ok: false, error: 'routine_not_found' });
+  res.json({ ok: true, deleted: routine.name });
+});
+
+app.get('/api/connectors', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json(connectorsSnapshot());
+});
+
+app.get('/api/mcp/status', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json(mcpStatus());
+});
+
+app.get('/api/tools', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json({ ok: true, tools: brainTools.catalog(), count: brainTools.catalog().length });
+});
+
+app.post('/api/tools/:name', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const name = String(req.params.name || '').trim();
+  if (!brainTools.has(name)) return res.status(404).json({ ok: false, error: `unknown_tool:${name}` });
+  const args = (req.body && typeof req.body === 'object') ? req.body : {};
+  const result = await brainTools.run(name, args);
+  store.recordCall({ ts: Date.now(), app_id: 'aion-brain', provider: 'tool', model: name, operation: `tool.${name}`, status: result.ok ? 200 : 400, latency_ms: 0, request_id: req.id });
+  res.status(result.ok ? 200 : 400).json({ ok: result.ok, tool: name, ...result });
+});
+
+// ---- Agentic control loop + VIDEO-Engine-CCFL claw contract ----
+// Claw (lib/claw/aion.ts) already calls /api/state, /api/chat, /api/tools/:name.
+// /api/claw/execute is the dead-loop-free path: SELF_STATE cycle + real tool
+// execution. /api/chat auto-runs that loop for actionable goals (or
+// agentic:true) and still emits decision/delta/done so aionConsult works.
+// Control events stay on their own types — never inside delta text.
+
+const CLAW_CONTRACT = Object.freeze({
+  version: '0.1.24',
+  phases: PHASE_ORDER,
+  endpoints: {
+    execute: { method: 'POST', path: '/api/claw/execute', alias: '/api/agent/run' },
+    tools_catalog: { method: 'GET', path: '/api/claw/tools', alias: '/api/tools' },
+    tool_run: { method: 'POST', path: '/api/claw/tools/:name', alias: '/api/tools/:name' },
+    consult: { method: 'POST', path: '/api/chat', notes: 'Consult-only by default. Actionable goals auto-run the execute loop unless consult:true or agentic:false. Assistant delta is natural language only; phase/tool_start/tool_end/self_state are separate events. CCFL must not concatenate those into the chat bubble.' },
+    state: { method: 'GET', path: '/api/state' },
+    spawn: { method: 'POST', path: '/api/agents/spawn', notes: 'Dynamic on-the-spot ephemeral subagent. Goal + optional tool allowlist + acceptance. Not a prefabricated role.' },
+    agent_status: { method: 'GET', path: '/api/agents/:id' },
+    agent_result: { method: 'GET', path: '/api/agents/:id/result' },
+    agent_steer: { method: 'POST', path: '/api/agents/:id/steer' },
+    agent_stop: { method: 'POST', path: '/api/agents/:id/stop' },
+    cursor_launch: { method: 'POST', path: '/api/cursor/launch', notes: 'Dynamic Cursor cloud agent. Brain owns the client; CCFL calls this or cursor_launch tool. Requires CURSOR_API_KEY.' },
+    cursor_status: { method: 'GET', path: '/api/cursor/:id' },
+    cursor_result: { method: 'GET', path: '/api/cursor/:id/result' },
+    cursor_reply: { method: 'POST', path: '/api/cursor/:id/reply' },
+    cursor_cancel: { method: 'POST', path: '/api/cursor/:id/cancel' },
+    memory_bos: { method: 'GET', path: '/api/memory/bos?q=', notes: 'Retrieve. Empty store auto-ingests Canon/Patch/Continuity. GET without q returns status.' },
+    memory_bos_ingest: { method: 'POST', path: '/api/memory/bos', notes: 'Ingest corpus if missing; upsert documents; optional query retrieve. CCFL proxy this — do not add a second RAG stub.' },
+    decision: { method: 'POST', path: '/api/decision', notes: 'Trinity GO/HOLD/ABORT via resolveBosGate + 7-law decision. Body: user_input|goal|prompt. Returns state + trinity.reasons + decision (COMMIT/DEFER/REJECT).' },
+    routines: { method: 'GET', path: '/api/routines', notes: 'List named operator routines' },
+    routines_create: { method: 'POST', path: '/api/routines' },
+    routine_get: { method: 'GET', path: '/api/routines/:name' },
+    routine_update: { method: 'PUT', path: '/api/routines/:name' },
+    routine_pause: { method: 'POST', path: '/api/routines/:name/pause' },
+    routine_resume: { method: 'POST', path: '/api/routines/:name/resume' },
+    routine_run: { method: 'POST', path: '/api/routines/:name/run' },
+    routine_delete: { method: 'DELETE', path: '/api/routines/:name' },
+    connectors: { method: 'GET', path: '/api/connectors', notes: 'Configured integrations from env. Names + booleans only; no secret values.' },
+    mcp_status: { method: 'GET', path: '/api/mcp/status', notes: 'MCP servers configured (n8n). Names only.' },
+  },
+  auth: 'X-AION-Key or Authorization: Bearer (must match AION_API_KEYS)',
+  execute_body: {
+    goal: 'string (or prompt, or messages[].content)',
+    acceptance: '[{ id, description, tool? }] — COMPLETE is refused until each check has evidence_id',
+    session_id: 'optional; Claw should pass claw:<conversationId>',
+    max_cycles: '1..24, default 8',
+    stream: 'if true, SSE events: self_state, phase, tool_start, tool_end as their own types; delta is natural-language answer only; then done',
+    assistant_visible: 'Only type=delta (and JSON answer) are operator-visible text. Never concatenate self_state/phase/tool events into the chat bubble.',
+  },
+  self_state_fields: [
+    'active_goal', 'current_plan', 'current_step', 'completed_steps', 'pending_steps',
+    'working_memory', 'relevant_long_term_memory', 'assumptions', 'known_facts',
+    'unknowns', 'uncertainties', 'current_strategy', 'alternative_strategies',
+    'available_tools', 'tool_status', 'previous_tool_results', 'errors', 'warnings',
+    'blockers', 'resource_usage', 'remaining_budget', 'progress', 'confidence',
+    'expected_outcome', 'observed_outcome',
+  ],
+  health: ['HEALTHY', 'DEGRADED', 'LOOP_DETECTED', 'BLOCKED', 'UNSTABLE'],
+  epistemic: ['KNOWN', 'INFERRED', 'ASSUMED', 'UNKNOWN', 'CONTRADICTED'],
+  completion: 'status=COMPLETE only when every acceptance check is verified by a successful tool result. Confidence is not proof.',
+  anti_loop: 'Same strategy failing ≥2 times with no new evidence → LOOP_DETECTED; identical retry is forbidden.',
+});
+
+function goalFromBody(body) {
+  if (typeof body?.goal === 'string' && body.goal.trim()) return body.goal.trim();
+  if (typeof body?.prompt === 'string' && body.prompt.trim()) return body.prompt.trim();
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const lastUser = [...messages].reverse().find((m) => m && m.role === 'user');
+  if (!lastUser) return '';
+  return typeof lastUser.content === 'string'
+    ? lastUser.content.trim()
+    : (Array.isArray(lastUser.content) ? lastUser.content.map((p) => p.text || '').join('\n').trim() : '');
+}
+
+function answerFromAgent(result, goal = '') {
+  return result?.answer || naturalLanguageAnswer(result, { goal });
+}
+
+function writeSse(res, event) {
+  res.write(`data: ${JSON.stringify(event)}\n\n`);
+}
+
+function writeAgentControlEvents(res, result) {
+  writeSse(res, {
+    type: 'self_state',
+    self_state: result.self_state,
+    status: result.status,
+    verified: result.verified,
+  });
+  for (const c of result.cycles || []) {
+    writeSse(res, {
+      type: 'phase',
+      health: c.health?.status,
+      issues: c.issues?.issues,
+      action: c.action?.kind,
+      tool: c.action?.tool,
+    });
+    if (c.action?.kind === 'tool') {
+      writeSse(res, { type: 'tool_start', name: c.action.tool });
+      writeSse(res, { type: 'tool_end', name: c.action.tool, ok: c.action.ok });
+    }
+  }
+}
+
+function writeAssistantDelta(res, text) {
+  writeSse(res, { type: 'delta', text: sanitizeAssistantText(text) });
+}
+
+async function runAgentFromRequest(req, principal) {
+  const goal = goalFromBody(req.body || {});
+  if (!goal) {
+    const err = new Error('goal_required');
+    err.statusCode = 400;
+    err.public = { ok: false, error: 'goal_required' };
+    throw err;
+  }
+  const sessionId = String(req.body?.session_id || req.header('x-aion-session-id') || `claw:${principal.subject}`);
+  const acceptance = Array.isArray(req.body?.acceptance)
+    ? req.body.acceptance
+    : (Array.isArray(req.body?.checks) ? req.body.checks : []);
+  const maxCycles = Number.isFinite(req.body?.max_cycles) ? req.body.max_cycles : undefined;
+  const longTermMemory = [];
+  if (isBosTopic(goal)) {
+    try {
+      const hit = bosRag.retrieve(goal);
+      if (hit.ok) longTermMemory.push(formatBosContext(hit));
+    } catch { /* non-fatal */ }
+  }
+  const result = await agentRuntime.run({
+    goal,
+    acceptance,
+    sessionId,
+    maxCycles,
+    longTermMemory,
+    model: req.body?.model || aionSettings.primaryModel,
+  });
+  return { goal, sessionId, result, answer: answerFromAgent(result, goal) };
+}
+
+app.get('/api/claw/contract', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json({ ok: true, contract: CLAW_CONTRACT });
+});
+
+app.get('/api/claw/tools', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json({ ok: true, tools: brainTools.catalog(), count: brainTools.catalog().length });
+});
+
+app.post('/api/claw/tools/:name', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const name = String(req.params.name || '').trim();
+  if (!brainTools.has(name)) return res.status(404).json({ ok: false, error: `unknown_tool:${name}` });
+  const args = (req.body && typeof req.body === 'object') ? req.body : {};
+  const result = await brainTools.run(name, args);
+  store.recordCall({ ts: Date.now(), app_id: 'aion-brain', provider: 'tool', model: name, operation: `claw.tool.${name}`, status: result.ok ? 200 : 400, latency_ms: 0, request_id: req.id });
+  res.status(result.ok ? 200 : 400).json({ ok: result.ok, tool: name, ...result });
+});
+
+async function handleAgentExecute(req, res) {
+  let principal;
+  try { principal = aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  let ran;
+  try {
+    ran = await runAgentFromRequest(req, principal);
+  } catch (e) {
+    return res.status(e.statusCode || 500).json(e.public || { ok: false, error: e.message });
+  }
+  const { result, answer, sessionId } = ran;
+  store.recordCall({
+    ts: Date.now(),
+    app_id: principal.subject,
+    provider: 'aion-agent',
+    model: aionSettings.agentModel,
+    operation: 'aion.agent',
+    status: result.complete ? 200 : 202,
+    latency_ms: result.duration_ms,
+    request_id: req.id,
+  });
+  const payload = {
+    ok: true,
+    source: 'aion-brain',
+    status: result.status,
+    reason: result.reason,
+    complete: result.complete,
+    verified: result.verified,
+    answer,
+    session_id: sessionId,
+    self_state: result.self_state,
+    cycles: (result.cycles || []).map((c) => ({
+      health: c.health?.status,
+      issues: c.issues?.issues,
+      action: c.action ? { kind: c.action.kind, tool: c.action.tool, ok: c.action.ok, rejected: c.action.rejected, reason: c.action.reason } : null,
+      termination: c.termination,
+    })),
+    previous_tool_results: result.self_state?.previous_tool_results || [],
+    duration_ms: result.duration_ms,
+  };
+  const wantStream = req.body?.stream === true || (req.header('accept') || '').includes('text/event-stream');
+  if (!wantStream) return res.status(result.complete ? 200 : 202).json(payload);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-AION-Session-Id', sessionId);
+  res.flushHeaders && res.flushHeaders();
+  writeAgentControlEvents(res, result);
+  writeAssistantDelta(res, answer);
+  res.write(`data: ${JSON.stringify({ type: 'done', status: result.status, verified: result.verified, provider: 'aion-agent', model: aionSettings.agentModel })}\n\n`);
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+app.post('/api/agent/run', handleAgentExecute);
+app.post('/api/claw/execute', handleAgentExecute);
+
+function agentHttpError(res, e) {
+  return res.status(e.statusCode || 500).json(e.public || { ok: false, error: e.message });
+}
+
+app.post('/api/agents/spawn', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const job = agentOrchestrator.spawn({
+      goal: req.body?.goal || goalFromBody(req.body || {}),
+      context: req.body?.context ?? null,
+      tools: req.body?.tools,
+      acceptance: req.body?.acceptance || req.body?.checks,
+      parent_id: req.body?.parent_id || null,
+      callback_url: req.body?.callback_url || null,
+      max_cycles: req.body?.max_cycles,
+      session_id: req.body?.session_id || req.header('x-aion-session-id') || null,
+      depth: req.body?.depth,
+      template: req.body?.template || null,
+    });
+    res.status(202).json({ ok: true, source: 'aion-brain', job });
+  } catch (e) { return agentHttpError(res, e); }
+});
+
+app.get('/api/agents', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  res.json({
+    ok: true,
+    jobs: agentOrchestrator.list({
+      parent_id: req.query.parent_id || null,
+      status: req.query.status || null,
+      limit: req.query.limit,
+    }),
+  });
+});
+
+app.get('/api/agents/:id', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const job = agentOrchestrator.publicJob(req.params.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'job_not_found' });
+  res.json({ ok: true, job });
+});
+
+app.get('/api/agents/:id/result', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const job = agentOrchestrator.result(req.params.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'job_not_found' });
+  res.json({ ok: true, job });
+});
+
+app.post('/api/agents/:id/steer', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const out = agentOrchestrator.steer(req.params.id, req.body?.message || req.body?.text, { goal_override: req.body?.goal_override });
+    if (!out) return res.status(404).json({ ok: false, error: 'job_not_found' });
+    res.json(out);
+  } catch (e) { return agentHttpError(res, e); }
+});
+
+app.post('/api/agents/:id/stop', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const job = agentOrchestrator.stop(req.params.id);
+  if (!job) return res.status(404).json({ ok: false, error: 'job_not_found' });
+  res.json({ ok: true, job });
+});
+
+app.post('/api/agents/:id/cleanup', (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  try {
+    const job = agentOrchestrator.cleanup(req.params.id);
+    if (!job) return res.status(404).json({ ok: false, error: 'job_not_found' });
+    res.json({ ok: true, job });
+  } catch (e) { return agentHttpError(res, e); }
+});
+
+function cursorHttpStatus(result, launched = false) {
+  if (result.ok) return launched ? 202 : 200;
+  if (String(result.error || '').includes('unconfigured')) return 400;
+  if (result.error === 'prompt_required' || result.error === 'id_required' || result.error === 'run_id_required') return 400;
+  if (String(result.error || '').includes('http_404')) return 404;
+  return 400;
+}
+
+app.post('/api/cursor/launch', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await cursorLaunch({
+    prompt: req.body?.prompt || req.body?.goal || goalFromBody(req.body || {}),
+    repository: req.body?.repository || req.body?.repo,
+    repos: req.body?.repos,
+    branch: req.body?.branch,
+    startingRef: req.body?.startingRef,
+    name: req.body?.name,
+    model: req.body?.model,
+    autoCreatePR: req.body?.autoCreatePR,
+    workOnCurrentBranch: req.body?.workOnCurrentBranch,
+    mode: req.body?.mode,
+  });
+  res.status(cursorHttpStatus(result, true)).json({ ok: result.ok, source: 'aion-brain', ...result });
+});
+
+app.get('/api/cursor', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await cursorList({ limit: req.query.limit, cursor: req.query.cursor });
+  res.status(cursorHttpStatus(result)).json({ ok: result.ok, ...result });
+});
+
+app.get('/api/cursor/:id', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await cursorStatus({ id: req.params.id, runId: req.query.runId });
+  res.status(cursorHttpStatus(result)).json({ ok: result.ok, ...result });
+});
+
+app.get('/api/cursor/:id/result', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await cursorStatus({ id: req.params.id, runId: req.query.runId });
+  res.status(cursorHttpStatus(result)).json({ ok: result.ok, ...result });
+});
+
+app.post('/api/cursor/:id/reply', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await cursorReply({
+    id: req.params.id,
+    prompt: req.body?.prompt || req.body?.message || req.body?.text,
+    mode: req.body?.mode,
+  });
+  res.status(cursorHttpStatus(result)).json({ ok: result.ok, ...result });
+});
+
+app.post('/api/cursor/:id/cancel', async (req, res) => {
+  try { aionRequire(req); } catch (e) { return res.status(e.statusCode || 401).json(e.public || { detail: e.message }); }
+  const result = await cursorCancel({ id: req.params.id, runId: req.body?.runId || req.query.runId });
+  res.status(cursorHttpStatus(result)).json({ ok: result.ok, ...result });
+});
+
+// ---- Audit routes ----
+
+const auditor = new Auditor({ root: ROOT, mode: 'full' });
+
+app.get('/audit', (req, res) => {
+  const last = store.lastAudit();
+  if (!last) return res.json({ status: 'NO_AUDIT_YET', message: 'POST /audit/run to run one' });
+  res.json(last.report);
+});
+
+app.get('/audit/quick', async (req, res) => {
+  const quickAuditor = new Auditor({ root: ROOT, mode: 'quick', selfFetch: () => `${req.protocol}://${req.get('host')}` });
+  const report = await quickAuditor.run();
+  res.json(report);
+});
+
+app.post('/audit/run', async (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const fullAuditor = new Auditor({ root: ROOT, mode: 'full', selfFetch: () => baseUrl });
+  const report = await fullAuditor.run();
+  // Persist
+  store.recordAudit(report);
+  const file = join(REPORTS_DIR, `audit-${report.ts}.json`);
+  try { await writeFile(file, JSON.stringify(report, null, 2)); } catch (e) { console.error('write report failed', e.message); }
+  res.json(report);
+});
+
+// ---- BOS-OMEGA Brain routes ----
+// Autonomous audit → research → propose (apply only for already-verified local patches)
+
+const brain = new Brain({ root: ROOT, store });
+
+app.post('/brain/audit-and-fix', async (req, res) => {
+  const apply = req.body?.apply === true;
+  const severities = Array.isArray(req.body?.severities) ? req.body.severities : ['P0', 'P1'];
+  try {
+    const result = await brain.runCycle({ apply, severities });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: { code: 'brain_cycle_failed', message: e.message, request_id: req.id } });
+  }
+});
+
+app.get('/brain/status', (req, res) => {
+  res.json({
+    name: 'BOS-OMEGA Brain',
+    version: '0.1.24',
+    endpoints: [
+      'POST /brain/audit-and-fix  { apply?: boolean, severities?: string[] }',
+      'GET  /brain/status',
+    ],
+    policy: 'propose_only by default; apply=true only re-applies already-verified local patches. No hallucinated code is written.',
+  });
+});
+
+// ---- Observability ----
+
+app.get('/calls/recent', (req, res) => {
+  const n = Math.min(parseInt(req.query.n || '50', 10), 500);
+  res.json({ calls: store.recentCalls(n) });
+});
+
+app.get('/stats', (req, res) => {
+  res.json({ stats: store.callStats() });
+});
+
+// ---- Error handler ----
+
+app.use((err, req, res, _next) => {
+  // body-parser / express built-in errors carry .status (e.g. 413 PayloadTooLargeError)
+  const status = err.status || err.statusCode || 500;
+  const code = err.type || (status === 413 ? 'payload_too_large' : 'internal');
+  if (status >= 500) {
+    console.error(JSON.stringify({ t: new Date().toISOString(), req_id: req.id, err: err.message, stack: err.stack?.split('\n').slice(0, 3).join(' | ') }));
+  }
+  res.status(status).json({ error: { code, message: err.message, request_id: req.id } });
+});
+
+// ---- Graceful shutdown ----
+
+function shutdown(sig) {
+  console.log(JSON.stringify({ t: new Date().toISOString(), msg: `shutting down on ${sig}` }));
+  server.close(() => {
+    try { agentOrchestrator.close(); } catch {}
+    try { store.close(); } catch {}
+    try { memory.close(); } catch {}
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(JSON.stringify({ t: new Date().toISOString(), msg: 'llm-gateway listening', port: PORT, providers: router.providers.map(p => p.name) }));
+});

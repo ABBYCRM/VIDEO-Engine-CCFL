@@ -3,45 +3,85 @@
 @tailwind utilities;
 
 /* ============================================================
- * VIDEO-Engine CCFL — "Soro"-style design system
- * ------------------------------------------------------------
- * White / off-white base · purple brand accent (#6E56CF) ·
- * hairline slate borders · tight typographic hierarchy ·
+ * VIDEO-Engine — Grok Bot / 21st.dev zinc theme
+ * Neutral shadcn tokens. Dark-first. No neon glass console.
  * ============================================================ */
 
 :root {
   --background:          0 0% 100%;
-  --foreground:          224 71% 4%;
-  --muted:               220 20% 96%;
-  --muted-foreground:    220 14% 46%;
-  --border:              220 20% 90%;
-  --border-strong:       220 20% 78%;
-  --primary:             252 75% 60%;
-  --primary-foreground:  0 0% 100%;
-  --primary-soft:        252 100% 96%;
-  --primary-soft-2:      252 80% 90%;
-  --success:             152 60% 40%;
-  --warning:             32  95% 50%;
-  --danger:              0   72% 55%;
-  --info:                199 89% 48%;
+  --foreground:          0 0% 9%;
+  --muted:               0 0% 96%;
+  --muted-foreground:    0 0% 45%;
+  --border:              0 0% 90%;
+  --border-strong:       0 0% 80%;
+  --primary:             0 0% 9%;
+  --primary-foreground:  0 0% 98%;
+  --primary-soft:        0 0% 96%;
+  --primary-soft-2:      0 0% 92%;
+  --success:             152 60% 36%;
+  --warning:             32  95% 44%;
+  --danger:              0   72% 51%;
+  --info:                0 0% 32%;
   --popover:             0 0% 100%;
-  --popover-foreground:  224 71% 4%;
-  --ring:                252 75% 60%;
-  --accent:              220 20% 96%;
-  --sidebar:             0 0% 100%;
-  --sidebar-border:      220 20% 90%;
-  --sidebar-item:        224 71% 4%;
-  --sidebar-item-active-bg: 252 100% 97%;
-  --sidebar-item-active-fg: 252 75% 50%;
-  --sidebar-group:       220 14% 46%;
+  --popover-foreground:  0 0% 9%;
+  --ring:                0 0% 9%;
+  --accent:              0 0% 96%;
+  --sidebar:             0 0% 98%;
+  --sidebar-border:      0 0% 90%;
+  --sidebar-item:        0 0% 9%;
+  --sidebar-item-active-bg: 0 0% 94%;
+  --sidebar-item-active-fg: 0 0% 9%;
+  --sidebar-group:       0 0% 45%;
+  --claw-sidebar:        0 0% 98%;
+  --claw-elevated:       0 0% 100%;
+  --claw-bubble:         0 0% 96%;
+  --claw-accent:         0 0% 9%;
+  --claw-accent-hover:   0 0% 20%;
+  --claw-accent-fg:      0 0% 98%;
+}
+
+html.dark,
+html[data-claw-theme="dark"] {
+  color-scheme: dark;
+  --background:          0 0% 4%;
+  --foreground:          0 0% 96%;
+  --muted:               0 0% 10%;
+  --muted-foreground:    0 0% 64%;
+  --border:              0 0% 14%;
+  --border-strong:       0 0% 22%;
+  --primary:             0 0% 98%;
+  --primary-foreground:  0 0% 9%;
+  --primary-soft:        0 0% 12%;
+  --primary-soft-2:      0 0% 16%;
+  --success:             152 55% 45%;
+  --warning:             38 90% 50%;
+  --danger:              0 72% 58%;
+  --info:                0 0% 70%;
+  --popover:             0 0% 8%;
+  --popover-foreground:  0 0% 96%;
+  --ring:                0 0% 98%;
+  --accent:              0 0% 12%;
+  --sidebar:             0 0% 4%;
+  --sidebar-border:      0 0% 14%;
+  --sidebar-item:        0 0% 96%;
+  --sidebar-item-active-bg: 0 0% 12%;
+  --sidebar-item-active-fg: 0 0% 98%;
+  --sidebar-group:       0 0% 55%;
+  --claw-sidebar:        0 0% 4%;
+  --claw-elevated:       0 0% 8%;
+  --claw-bubble:         0 0% 12%;
+  --claw-accent:         0 0% 98%;
+  --claw-accent-hover:   0 0% 86%;
+  --claw-accent-fg:      0 0% 9%;
+}
+
+html[data-claw-theme="light"] {
+  color-scheme: light;
 }
 
 body {
   background-color: hsl(var(--background));
-  background-image:
-    radial-gradient(ellipse 60% 50% at 0% 0%, hsla(252, 75%, 90%, 0.12), transparent 60%),
-    radial-gradient(ellipse 40% 30% at 100% 0%, hsla(40, 80%, 80%, 0.10), transparent 60%);
-  background-attachment: fixed;
+  background-image: none;
   color: hsl(var(--foreground));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -49,575 +89,59 @@ body {
 }
 
 * { border-color: hsl(var(--border)); }
-input, textarea, select { color-scheme: light; }
+html.dark input, html.dark textarea, html.dark select,
+html[data-claw-theme="dark"] input,
+html[data-claw-theme="dark"] textarea,
+html[data-claw-theme="dark"] select { color-scheme: dark; }
 
-/* ============================================================
- * Soro utility primitives (preserved for non-Claw pages)
- * ============================================================ */
+html { scroll-behavior: smooth; }
+html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }
+select, input, textarea, button { min-width: 0; }
+select { max-width: 100%; text-overflow: ellipsis; }
+code, pre { overflow-wrap: anywhere; word-break: break-word; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border-strong)); border-radius: 999px; }
+
 @layer components {
   .soro-card {
-    background-color: #fff;
+    background-color: hsl(var(--claw-elevated));
     border: 1px solid hsl(var(--border));
     border-radius: 16px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 0 rgba(255, 255, 255, 1) inset;
   }
   .soro-card-pad { @apply soro-card p-5; }
   .soro-stat {
-    background-color: #fff; border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--claw-elevated));
+    border: 1px solid hsl(var(--border));
     border-radius: 16px; padding: 20px;
   }
   .soro-icon-badge {
     width: 44px; height: 44px; border-radius: 14px;
-    background-color: hsl(var(--primary-soft)); color: hsl(var(--primary));
+    background-color: hsl(var(--muted)); color: hsl(var(--foreground));
     display: grid; place-items: center;
   }
   .soro-count-pill {
-    background-color: hsl(var(--primary-soft)); color: hsl(var(--primary));
+    background-color: hsl(var(--muted)); color: hsl(var(--foreground));
     font-size: 12px; font-weight: 600; padding: 1px 9px;
     border-radius: 999px; line-height: 1.5;
-  }
-  .soro-new-pill {
-    background-color: hsl(20 95% 92%); color: hsl(20 90% 38%);
-    font-size: 11px; font-weight: 600; padding: 1px 9px;
-    border-radius: 999px; line-height: 1.5; text-transform: capitalize;
   }
   .soro-group {
     font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
     text-transform: uppercase; color: hsl(var(--sidebar-group)); padding: 18px 16px 8px;
   }
-  .soro-hero-number {
-    font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
-    color: hsl(var(--foreground)); line-height: 1;
-  }
-  .soro-hero-label { color: hsl(var(--muted-foreground)); font-size: 14px; font-weight: 500; }
-  .soro-ring:focus-visible {
-    outline: none; box-shadow: 0 0 0 3px hsl(var(--primary-soft)); border-color: hsl(var(--primary));
-  }
-  .soro-dot-green  { background-color: hsl(var(--success)); }
-  .soro-dot-amber  { background-color: hsl(var(--warning)); }
-  .soro-dot-red    { background-color: hsl(var(--danger)); }
-  .soro-dot-purple { background-color: hsl(var(--primary)); }
-  .soro-dot-grey   { background-color: hsl(var(--muted-foreground)); }
-  .soro-tile-check {
-    background-color: hsl(var(--success)); color: white;
-    width: 22px; height: 22px; border-radius: 999px;
-    display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.15);
-  }
-  .soro-add-pill {
-    background-color: #fff; border: 1px solid hsl(var(--border-strong));
-    color: hsl(var(--foreground)); padding: 4px 12px; border-radius: 999px;
-    font-size: 13px; font-weight: 500; display: inline-flex;
-    align-items: center; gap: 6px; transition: border-color 150ms, background-color 150ms;
-  }
-  .soro-add-pill:hover { border-color: hsl(var(--primary)); background-color: hsl(var(--primary-soft)); }
-  .soro-new-tile {
-    background-color: transparent; border: 1px dashed hsl(var(--border-strong));
-    border-radius: 12px; color: hsl(var(--muted-foreground));
-    display: grid; place-items: center; height: 100%; min-height: 80px; font-size: 13px;
-  }
-}
-
-/* ============================================================
- * Claw console — CYBER-FUTURE GLASSMORPHISM
- * ------------------------------------------------------------
- * Deep midnight background with floating ambient orbs.
- * Glass cards with backdrop-blur and neon accents.
- * Replace the old warm-paper / clay palette entirely.
- * ============================================================ */
-
-/* ── Ambient background orbs ── */
-html[data-claw-theme="dark"] body {
-  background-color: #05050d;
-  background-image: none;
-}
-
-html[data-claw-theme="dark"] {
-  --background:           240 40% 5%;    /* deep space black */
-  --foreground:           220 20% 95%;    /* cool white */
-  --muted:                235 25% 12%;   /* glass surface dark */
-  --muted-foreground:     220 15% 60%;   /* muted text */
-  --border:               235 30% 20%;    /* subtle glass edge */
-  --border-strong:        235 35% 28%;   /* visible divider */
-  --popover:              235 25% 12%;
-  --popover-foreground:   220 20% 95%;
-  --ring:                 199 100% 67%;  /* neon cyan */
-  --accent:               235 25% 14%;
-
-  /* Brand — electric cyan + violet */
-  --primary:              262 100% 72%;   /* electric violet */
-  --primary-foreground:   0 0% 100%;
-  --primary-soft:         262 60% 15%;
-  --primary-soft-2:       199 100% 20%;
-
-  /* Status */
-  --success:              160 84% 50%;    /* neon emerald */
-  --warning:             38 100% 55%;
-  --danger:              355 90% 60%;
-  --info:                199 100% 67%;   /* neon cyan */
-
-  /* Claw custom tokens */
-  --claw-sidebar:        240 40% 6%;     /* near-black sidebar */
-  --claw-elevated:       235 25% 10%;    /* glass card surface */
-  --claw-bubble:         235 25% 14%;
-  --claw-accent:         199 100% 67%;   /* neon cyan accent */
-  --claw-accent-hover:   199 100% 72%;
-  --claw-accent-fg:      220 50% 5%;     /* dark text on cyan */
-  --claw-glow:           199 100% 67%;
-  --claw-violet:         262 100% 72%;
-
-  /* Glassmorphism tokens */
-  --glass-bg:            rgba(10, 10, 25, 0.55);
-  --glass-border:        rgba(180, 180, 255, 0.12);
-  --glass-border-hover:  rgba(180, 180, 255, 0.25);
-  --orb-purple:          rgba(130, 40, 255, 0.18);
-  --orb-cyan:            rgba(0, 210, 255, 0.12);
-  --orb-violet:          rgba(100, 60, 255, 0.14);
-}
-
-html[data-claw-theme="light"] {
-  color-scheme: light;
-  --background:           40 20% 97%;
-  --foreground:           240 22% 8%;
-  --muted:               40 12% 93%;
-  --muted-foreground:    228 14% 28%;
-  --border:              228 12% 82%;
-  --border-strong:       228 12% 68%;
-  --popover:             0 0% 100%;
-  --popover-foreground:  240 22% 8%;
-  --primary:             262 72% 42%;
-  --primary-foreground:  0 0% 100%;
-  --primary-soft:       262 45% 94%;
-  --primary-soft-2:     199 70% 90%;
-  --ring:               262 72% 42%;
-  --accent:             40 12% 93%;
-  --success:             152 55% 28%;
-  --warning:            32 90% 36%;
-  --danger:             0 72% 40%;
-  --info:               199 90% 32%;
-  --claw-sidebar:       40 18% 96%;
-  --claw-elevated:      0 0% 100%;
-  --claw-bubble:        40 16% 94%;
-  --claw-accent:        262 72% 42%;
-  --claw-accent-hover:  262 72% 36%;
-  --claw-accent-fg:     0 0% 100%;
-  --claw-glow:          262 72% 42%;
-  --claw-violet:        262 60% 38%;
-  --glass-bg:           rgba(255, 255, 255, 0.92);
-  --glass-border:       rgba(20, 24, 36, 0.14);
-  --glass-border-hover: rgba(20, 24, 36, 0.28);
-  --orb-purple:         rgba(90, 40, 180, 0.08);
-  --orb-cyan:           rgba(0, 120, 160, 0.06);
-  --orb-violet:         rgba(80, 40, 160, 0.06);
-}
-
-html[data-claw-theme="dark"] input,
-html[data-claw-theme="dark"] textarea,
-html[data-claw-theme="dark"] select {
-  color-scheme: dark;
-}
-
-/* ── Global scrollbar styling for Claw ── */
-html[data-claw-theme] ::-webkit-scrollbar { width: 6px; height: 6px; }
-html[data-claw-theme] ::-webkit-scrollbar-track { background: transparent; }
-html[data-claw-theme] ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border-strong));
-  border-radius: 999px;
-}
-html[data-claw-theme] ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
-}
-
-/* ── Text selection ── */
-html[data-claw-theme="dark"] ::selection {
-  background: rgba(199, 100, 67%, 0.35);
-  color: hsl(var(--foreground));
-}
-
-/* ── Smooth scrolling ── */
-html { scroll-behavior: smooth; }
-html, body { overflow-x: hidden; max-width: 100%; overscroll-behavior-x: contain; }
-
-/* ── Form reset ── */
-select, input, textarea, button { min-width: 0; }
-select { max-width: 100%; text-overflow: ellipsis; }
-code, pre { overflow-wrap: anywhere; word-break: break-word; }
-
-/* ============================================================
- * GLASSMORPHISM UTILITY CLASSES
- * ============================================================ */
-@layer components {
-  /* Core glass card — the building block of the new UI */
-  .glass-card {
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid var(--glass-border);
-    border-radius: 20px;
-    transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
-  }
-  .glass-card:hover {
-    border-color: var(--glass-border-hover);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.06);
-  }
-
-  /* Glass sidebar variant */
-  .glass-sidebar {
-    background: rgba(5, 5, 15, 0.75);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border-right: 1px solid var(--glass-border);
-  }
-  html[data-claw-theme="light"] .glass-sidebar {
-    background: rgba(255, 255, 255, 0.94);
-    border-right-color: rgba(20, 24, 36, 0.12);
-    color: hsl(var(--foreground));
-  }
-
-  html[data-claw-theme="light"] .glass-btn {
-    background: #fff;
-    border-color: rgba(20, 24, 36, 0.16);
-    color: #16181d;
-  }
-  html[data-claw-theme="light"] .glass-btn:hover {
-    background: #f3f3f0;
-    border-color: rgba(20, 24, 36, 0.28);
-  }
-
-  html[data-claw-theme="light"] .glass-input {
-    background: #fff;
-    border-color: rgba(20, 24, 36, 0.18);
-    color: #16181d;
-  }
-
-  html[data-claw-theme="light"] .chip-suggestion {
-    background: #fff;
-    border-color: rgba(20, 24, 36, 0.16);
-    color: #2a2e38;
-  }
-  html[data-claw-theme="light"] .chip-suggestion:hover {
-    color: hsl(var(--claw-accent));
-  }
-
-  html[data-claw-theme="light"] .glass-bubble-assistant {
-    background: #fff;
-    color: #16181d;
-    border-color: rgba(20, 24, 36, 0.12);
-  }
-  html[data-claw-theme="light"] .glass-bubble-user {
-    background: hsl(var(--primary-soft));
-    color: #16181d;
-    border-color: hsl(var(--primary) / 0.28);
-  }
-
-  html[data-claw-theme="light"] .glass-card:hover {
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  }
-
-  html[data-claw-theme="light"] .btn-send {
-    color: #fff;
-    box-shadow: 0 2px 10px rgba(80, 40, 160, 0.28);
-  }
-  html[data-claw-theme="light"] .claw-send {
-    background: hsl(262 72% 42%);
-    color: #fff;
-    box-shadow: 0 2px 10px rgba(80, 40, 160, 0.35);
-  }
-  html[data-claw-theme="light"] .claw-send svg {
-    color: #fff;
-    stroke: #fff;
-  }
-  html[data-claw-theme="light"] .claw-send:disabled {
-    background: #2a2438;
-    color: #fff;
-    border: 1px solid rgba(20, 24, 36, 0.25);
-  }
-  html[data-claw-theme="light"] .claw-send:disabled svg {
-    color: #fff;
-    stroke: #fff;
-  }
-
-  /* Glass button */
-  .glass-btn {
-    background: rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    border-radius: 14px;
-    color: hsl(var(--foreground));
-    transition: all 200ms ease;
-  }
-  .glass-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: var(--glass-border-hover);
-    transform: translateY(-1px);
-  }
-  .glass-btn:active { transform: translateY(0); }
-
-  /* Glass input */
-  .glass-input {
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
-    border-radius: 14px;
-    color: hsl(var(--foreground));
-    transition: border-color 200ms ease, box-shadow 200ms ease;
-  }
-  .glass-input::placeholder { color: hsl(var(--muted-foreground)); opacity: 0.7; }
-  .glass-input:focus {
-    outline: none;
-    border-color: var(--claw-accent);
-    box-shadow: 0 0 0 3px rgba(199, 100, 67%, 0.20), 0 0 20px rgba(199, 100, 67%, 0.10);
-  }
-
-  /* Glass message bubble — user */
-  .glass-bubble-user {
-    background: linear-gradient(135deg, rgba(199, 100, 67%, 0.25) 0%, rgba(199, 100, 67%, 0.12) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(199, 100, 67%, 0.30);
-    border-radius: 20px 20px 6px 20px;
-  }
-
-  /* Glass message bubble — assistant */
-  .glass-bubble-assistant {
-    background: var(--glass-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
-    border-radius: 20px 20px 20px 6px;
-  }
-
-  /* Glowing neon border on focus */
-  .glow-border:focus-within {
-    border-color: var(--claw-accent) !important;
-    box-shadow: 0 0 0 1px var(--claw-accent), 0 0 24px rgba(199, 100, 67%, 0.20);
-  }
-
-  /* Neon text gradient */
-  .text-neon {
-    background: linear-gradient(90deg, var(--claw-accent), var(--claw-violet));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  /* Neon glow on send button — MUST use hsl() because --claw-accent is HSL channels */
-  .btn-send {
-    background: linear-gradient(135deg, hsl(var(--claw-accent)) 0%, hsl(var(--claw-violet)) 100%);
-    color: #fff;
-    box-shadow: 0 0 16px hsl(var(--claw-accent) / 0.45), 0 4px 12px rgba(0,0,0,0.3);
-    transition: all 200ms ease;
-  }
-  .btn-send:hover {
-    box-shadow: 0 0 28px hsl(var(--claw-accent) / 0.65), 0 6px 16px rgba(0,0,0,0.35);
-    transform: translateY(-1px) scale(1.02);
-  }
-  .btn-send:active { transform: scale(0.96); }
-  .btn-send:disabled {
-    opacity: 1;
-    filter: none;
-  }
-
-  /* 21st.dev Send Button — always-visible round ArrowUp / Stop */
-  .claw-send {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: hsl(var(--claw-accent));
-    color: #fff;
-    border: 0;
-    box-shadow: 0 2px 12px hsl(var(--claw-accent) / 0.45);
-    transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
-  }
-  .claw-send svg {
-    color: #fff;
-    stroke: #fff;
-  }
-  .claw-send:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px hsl(var(--claw-accent) / 0.6);
-  }
-  .claw-send:active:not(:disabled) { transform: scale(0.96); }
-  .claw-send:disabled {
-    opacity: 1;
-    cursor: not-allowed;
-    background: #3a3a4a;
-    color: #f4f4f8;
-    box-shadow: none;
-    border: 1px solid rgba(255, 255, 255, 0.28);
-  }
-  .claw-send:disabled svg {
-    color: #f4f4f8;
-    stroke: #f4f4f8;
-  }
-  .claw-send-stop {
-    background: #e11d48 !important;
-    color: #fff !important;
-    border: 0 !important;
-    box-shadow: 0 2px 10px rgba(225, 29, 72, 0.45);
-  }
-
-  /* Pill suggestion chips */
-  .chip-suggestion {
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    border-radius: 999px;
-    color: hsl(var(--muted-foreground));
-    font-size: 12px;
-    padding: 6px 14px;
-    transition: all 200ms ease;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .chip-suggestion:hover {
-    background: rgba(199, 100, 67%, 0.12);
-    border-color: rgba(199, 100, 67%, 0.35);
-    color: var(--claw-accent);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 12px rgba(199, 100, 67%, 0.12);
-  }
-  .chip-suggestion.creative {
-    background: rgba(262, 100%, 72%, 0.10);
-    border-color: rgba(262, 100%, 72%, 0.30);
-    color: var(--claw-violet);
-  }
-  .chip-suggestion.creative:hover {
-    background: rgba(262, 100%, 72%, 0.20);
-    border-color: rgba(262, 100%, 72%, 0.50);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 12px rgba(262, 100%, 72%, 0.20);
-  }
-
-  /* Ambient orb */
-  .orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    pointer-events: none;
-    will-change: transform;
-  }
-
-  /* Active sidebar item */
   .sidebar-item-active {
-    background: rgba(199, 100, 67%, 0.12);
-    border: 1px solid rgba(199, 100, 67%, 0.25);
-    color: var(--claw-accent);
+    background: hsl(var(--sidebar-item-active-bg));
+    color: hsl(var(--sidebar-item-active-fg));
   }
 }
 
-/* ============================================================
- * KEYFRAME ANIMATIONS
- * ============================================================ */
-@keyframes orb-float-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%       { transform: translate(40px, -60px) scale(1.1); }
-  66%       { transform: translate(-20px, 40px) scale(0.9); }
-}
-@keyframes orb-float-2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  40%       { transform: translate(-50px, 30px) scale(1.15); }
-  70%       { transform: translate(30px, -40px) scale(0.85); }
-}
-@keyframes orb-float-3 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%       { transform: translate(20px, 50px) scale(1.2); }
-}
-@keyframes pixel-dot-wave {
-  0%, 100% { opacity: 0.15; transform: scale(0.9); }
-  50%       { opacity: 0.95; transform: scale(1.1); }
-}
-@keyframes cursor-blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
-}
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes slide-in-left {
-  from { opacity: 0; transform: translateX(-12px); }
-  to   { opacity: 1; transform: translateX(0); }
+@keyframes claw-pixel-on {
+  0%, 100% { opacity: 0.15; transform: scale(0.9); }
+  50% { opacity: 0.95; transform: scale(1.1); }
 }
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 16px rgba(199, 100, 67%, 0.30); }
-  50%       { box-shadow: 0 0 32px rgba(199, 100, 67%, 0.55); }
-}
-@keyframes gradient-shift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* Animation utility classes */
-.animate-orb-1 { animation: orb-float-1 18s ease-in-out infinite; }
-.animate-orb-2 { animation: orb-float-2 24s ease-in-out infinite; }
-.animate-orb-3 { animation: orb-float-3 20s ease-in-out infinite; }
 .animate-fade-up { animation: fade-up 300ms ease-out both; }
-.animate-slide-in { animation: slide-in-left 250ms ease-out both; }
-.animate-glow-pulse { animation: glow-pulse 2.5s ease-in-out infinite; }
-.animate-spin-slow { animation: spin-slow 8s linear infinite; }
-
-/* ============================================================
- * Light mode — remap hardcoded dark-console ink so text is readable
- * ============================================================ */
-html[data-claw-theme="light"] body {
-  background-color: #f6f5f1;
-  background-image: none;
-  color: #16181d;
-}
-html[data-claw-theme="light"] input,
-html[data-claw-theme="light"] textarea,
-html[data-claw-theme="light"] select {
-  color-scheme: light;
-  color: #16181d;
-}
-
-html[data-claw-theme="light"] [class*="text-[rgba(220,220,255"] {
-  color: #16181d !important;
-}
-html[data-claw-theme="light"] [class*="placeholder:text-[rgba(220,220,255"]::placeholder {
-  color: #4b5160 !important;
-  opacity: 1;
-}
-html[data-claw-theme="light"] [class*="border-[rgba(180,180,255"] {
-  border-color: rgba(20, 24, 36, 0.16) !important;
-}
-html[data-claw-theme="light"] [class*="hover:border-[rgba(180,180,255"]:hover {
-  border-color: rgba(20, 24, 36, 0.32) !important;
-}
-html[data-claw-theme="light"] [class*="bg-[rgba(255,255,255,0.0"] {
-  background-color: rgba(20, 24, 36, 0.05) !important;
-}
-html[data-claw-theme="light"] [class*="hover:bg-[rgba(255,255,255"]:hover {
-  background-color: rgba(20, 24, 36, 0.07) !important;
-}
-html[data-claw-theme="light"] [class*="bg-[rgba(8,8,20"],
-html[data-claw-theme="light"] [class*="bg-[rgba(5,5,15"] {
-  background-color: #ffffff !important;
-  color: #16181d;
-}
-html[data-claw-theme="light"] [class*="text-[#d6b56d"] {
-  color: #8a5b00 !important;
-}
-html[data-claw-theme="light"] [class*="text-[#8fbfa3"] {
-  color: #1f6b4a !important;
-}
-html[data-claw-theme="light"] .text-muted-foreground {
-  color: #3d4452;
-}
-html[data-claw-theme="light"] .text-neon {
-  -webkit-text-fill-color: #3b2a8a;
-  color: #3b2a8a;
-  background: none;
-}
-

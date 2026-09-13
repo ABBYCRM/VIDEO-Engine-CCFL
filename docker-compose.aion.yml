@@ -1,4 +1,6 @@
-# Standalone local stack. Use scripts/setup-aion-local.sh for setup and updates.
+# Local two-process stack from THIS repo. Brain is services/aion-brain,
+# not a git clone and not the retired DigitalOcean aion-brain app.
+# Use scripts/setup-aion-local.sh for first-run keys.
 services:
   video-engine:
     build: .
@@ -15,15 +17,19 @@ services:
     restart: unless-stopped
   aion-brain:
     build:
-      context: .
-      dockerfile: docker/aion.Dockerfile
+      context: ./services/aion-brain
+      dockerfile: Dockerfile
     environment:
       ENVIRONMENT: production
       AION_API_KEYS: ${AION_API_KEY:?Missing Aion key}
       AION_ADMIN_KEYS: ${AION_ADMIN_KEY:?Missing Aion admin key}
       NVIDIA_API_KEY: ${AION_NVIDIA_API_KEY:?Missing NVIDIA key}
-      PRIMARY_MODEL: ${AION_PRIMARY_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
-      FALLBACK_MODELS: meta/llama-3.3-70b-instruct
+      BITDEER_API_KEY: ${AION_NVIDIA_API_KEY:?Missing NVIDIA key}
+      BITDEER_BASE_URL: https://api-inference.bitdeer.ai/v1
+      NVIDIA_BASE_URL: https://api-inference.bitdeer.ai/v1
+      PRIMARY_MODEL: ${AION_PRIMARY_MODEL:-mistralai/Mistral-Large-3-675B-Instruct-2512}
+      AGENT_MODEL: ${AION_PRIMARY_MODEL:-mistralai/Mistral-Large-3-675B-Instruct-2512}
+      FALLBACK_MODELS: mistralai/Mistral-Large-3-675B-Instruct-2512
       N8N_MCP_URL: ${N8N_MCP_URL:-https://paisabrazil.app.n8n.cloud/mcp-server/http}
       N8N_MCP_TOKEN: ${N8N_MCP_TOKEN:-}
       N8N_API_KEY: ${N8N_API_KEY:-}
