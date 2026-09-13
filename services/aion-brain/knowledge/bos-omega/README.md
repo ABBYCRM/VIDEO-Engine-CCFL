@@ -18,6 +18,11 @@ These files are the source of truth that the runtime ingests into:
 | `patch-pcos.md` | Patch | PCOS ANS states, Recovery↔Performance, stress+recovery=growth |
 | `continuity.md` | Continuity | Brain↔AI map of this repo, Weldon Angelos public-record facts, Ontonomic Recursion, Grok-Bot runtime |
 
+Sibling corpus (same markdown-in-`knowledge/` pattern, separate retrieve):
+`knowledge/reverse-engineering/` — GDY module-12 RE notes + playbook.
+Claw: `re_knowledge` / `re_catalog`. Brain: `lib/re_knowledge.js`.
+Do not mix RE chunks into Trinity BOS retrieve.
+
 ## Not implanted
 
 Operational attack playbooks (ghost nodes, metadata starvation, or any offensive tradecraft) are **not** in this corpus and must not be added.

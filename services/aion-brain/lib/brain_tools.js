@@ -25,6 +25,7 @@ import {
 } from './external_tools.js';
 import { teacherRagTeach } from './teacher_rag.js';
 import { bosOmegaRetrieve } from './bos_omega_rag.js';
+import { retrieveReKnowledge } from './re_knowledge.js';
 import { workspaceExec } from './workspace_exec.js';
 import { runActions, SteelError as SteelActionError } from './steel_browser.js';
 import { runRoutine } from './routines.js';
@@ -119,6 +120,7 @@ const TOOL_CATALOG = Object.freeze([
   { name: 'gdy_categories', description: 'List GDY tool-directory categories with counts. Requires GDY_API_KEY.', args_schema: { type: 'object', properties: {} }, cost_estimate: '1 GDY /v1/categories', side_effects: false },
   { name: 'gdy_tools', description: 'Page the GDY tool catalog, optionally filtered by q and category. Requires GDY_API_KEY.', args_schema: { type: 'object', properties: { q: { type: 'string', maxLength: 400 }, category: { type: 'string', maxLength: 120 }, page: { type: 'integer', minimum: 1 }, perPage: { type: 'integer', minimum: 1, maximum: 200 } } }, cost_estimate: '1 GDY /v1/tools', side_effects: false },
   { name: 'arxiv_search', description: 'Search public arXiv preprints via the official Atom API (no API key). Returns title, id, summary, authors, link.', args_schema: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 400 }, max_results: { type: 'integer', minimum: 1, maximum: 25, default: 5 } } }, cost_estimate: '1 arXiv Atom query', side_effects: false },
+  { name: 're_knowledge', description: 'Retrieve Reverse Engineering / Binary Analysis operator notes (Ghidra, r2, IDA, BN, playbook). Knowledge only — does not run samples. IDA/BN are not embedded.', args_schema: { type: 'object', properties: { query: { type: 'string', maxLength: 400 }, q: { type: 'string' }, topK: { type: 'integer', minimum: 1, maximum: 14 } } }, cost_estimate: 'local markdown retrieve', side_effects: false },
   { name: 'bos_omega_retrieve', description: 'Retrieve BOS-OMEGA Canon/Patch/Continuity chunks from the local vector store before answering Trinity, PCOS, Weldon Angelos, or Ontonomic Recursion questions.', args_schema: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 4000 }, topK: { type: 'integer', minimum: 1, maximum: 20 } } }, cost_estimate: 'local vector retrieve', side_effects: false },
   { name: 'teacher_rag_teach', description: 'Ask the bundled TeacherRAG for grounded engineering guidance and retrieved code/library context.', args_schema: { type: 'object', required: ['query'], properties: { query: { type: 'string', maxLength: 4000 }, level: { type: 'string', enum: ['beginner', 'intermediate', 'advanced'] } } }, cost_estimate: 'local vector retrieve', side_effects: false },
   { name: 'cursor_launch', description: 'Dynamically spawn a Cursor cloud agent for non-trivial repository work. Goal + optional repo/branch. Not a prefabricated named agent. Requires CURSOR_API_KEY. Fail-soft if unset.', args_schema: { type: 'object', required: ['prompt'], properties: { prompt: { type: 'string', maxLength: 16000 }, goal: { type: 'string', maxLength: 16000 }, repository: { type: 'string' }, repos: { type: 'array', items: { type: 'object' } }, branch: { type: 'string' }, startingRef: { type: 'string' }, name: { type: 'string' }, model: { type: 'string' }, autoCreatePR: { type: 'boolean' }, mode: { type: 'string', enum: ['agent', 'plan'] } } }, cost_estimate: '1 Cursor Cloud Agents create', side_effects: true },
@@ -300,6 +302,10 @@ class ToolRegistry {
     if (name === 'gdy_categories') return gdyCategories(args);
     if (name === 'gdy_tools') return gdyTools(args);
     if (name === 'arxiv_search') return arxivSearch(args);
+    if (name === 're_knowledge') {
+      const evidence = retrieveReKnowledge({ query: args.query || args.q || args.topic, topK: args.topK || args.limit });
+      return { ok: true, evidence, tool: name };
+    }
     if (name === 'bos_omega_retrieve') return bosOmegaRetrieve(args);
     if (name === 'cursor_launch') return cursorLaunch(args);
     if (name === 'cursor_status') return cursorStatus(args);

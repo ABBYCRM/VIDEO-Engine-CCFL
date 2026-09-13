@@ -96,7 +96,7 @@ describe("business connectors e2e (mock HTTP)", () => {
 
   it("connector_status inventory lists every business key with a when string", () => {
     const inv = connectorInventory();
-    for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "exa", "e2b", "resend", "github", "bitdeer", "nvidia"]) {
+    for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "exa", "e2b", "resend", "github", "bitdeer", "nvidia", "gdy", "reverseEngineering"]) {
       assert.ok(id in inv, id);
       assert.equal(typeof (inv as Record<string, { when?: string }>)[id].when, "string");
       assert.ok(((inv as Record<string, { when?: string }>)[id].when || "").length > 10, id);

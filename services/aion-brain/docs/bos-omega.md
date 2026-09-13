@@ -6,6 +6,10 @@ Values for every key below belong in DigitalOcean / the host secret store. This 
 
 ```bash
 node --test test/bos_omega_rag.test.mjs
+node --test test/re_knowledge.test.mjs
+
+Sibling corpus (not mixed into Trinity retrieve): `knowledge/reverse-engineering/`
+via `lib/re_knowledge.js` / Claw `re_knowledge`.
 node bin/bos-omega.mjs retrieve "Trinity"
 node bin/bos-omega.mjs retrieve "Weldon Angelos"
 ```

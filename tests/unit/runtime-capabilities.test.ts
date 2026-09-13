@@ -21,6 +21,8 @@ describe("real runtimes survive collapse + open console", () => {
       "aion_execute", "aion_agents", "bos_memory", "routines", "mcp_status",
       "trinity_decide", "claw_dispatch", "steel_scrape",
       "forge_session", "swarm_spawn", "swarm_wait",
+      "gdy_search", "gdy_rag_context", "gdy_categories", "gdy_tools",
+      "re_triage", "re_radare2", "re_catalog", "re_knowledge",
     ]) {
       assert.equal(names.has(name), true, name);
     }
@@ -141,5 +143,20 @@ describe("real runtimes survive collapse + open console", () => {
     }
     assert.doesNotMatch(spec, /ADMIN_PASSWORD/);
     assert.match(spec, /\$\{aion-brain\.PRIVATE_URL\}/);
+    assert.match(spec, /gdy-tool-directory-a6hzh\.ondigitalocean\.app/);
+    assert.match(spec, /key: GDY_BASE_URL/);
+    assert.match(spec, /key: GDY_API_BASE/);
+    assert.match(spec, /key: GDY_API_KEY/);
+    assert.match(spec, /key: GDY_API_KEY_ALT/);
+  });
+
+  it("RE knowledge pack and health GDY check are present", () => {
+    assert.equal(existsSync(join(root, "services/aion-brain/knowledge/reverse-engineering/playbook.md")), true);
+    assert.equal(existsSync(join(root, "docs/REVERSE_ENGINEERING.md")), true);
+    const health = src("app/api/health/route.ts");
+    assert.match(health, /isGdyConfigured/);
+    assert.match(health, /gdy/);
+    const inv = src("lib/claw/connectors.ts");
+    assert.match(inv, /reverseEngineering/);
   });
 });

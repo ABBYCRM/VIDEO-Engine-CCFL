@@ -56,7 +56,9 @@ still talks only to its in-app component.
 | `FIRECRAWL_API_KEY` | web + aion-brain | Scrape fallback. |
 | `TAVILY_API_KEY` / `EXA_API_KEY` | web + aion-brain | Search tools. |
 | `GITHUB_PERSONAL_ACCESS_TOKEN` | web | Direct GitHub REST; prefer Composio GitHub when connected. |
-| `GDY_API_KEY` / `GDY_API_KEY_ALT` | web (+ brain) | OSINT tools. |
+| `GDY_API_KEY` / `GDY_API_KEY_ALT` | web + aion-brain | OSINT + RE catalog (`gdy_*`, `re_catalog`). SECRET. |
+| `GDY_BASE_URL` | web + aion-brain | Non-secret pin: `https://gdy-tool-directory-a6hzh.ondigitalocean.app` |
+| `GDY_API_BASE` | web + aion-brain | Non-secret pin: `https://gdy-tool-directory-a6hzh.ondigitalocean.app/v1` |
 | `N8N_MCP_TOKEN` / `N8N_API_KEY` | aion-brain | Brain n8n MCP. |
 
 Do **not** set `AION_BASE_URL` to `https://aion-brain-6iptg.ondigitalocean.app`.

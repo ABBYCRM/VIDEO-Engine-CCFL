@@ -1,6 +1,10 @@
 // GDY OSINT RAG — fail-soft, server-only keys, never logged.
 // Env on DigitalOcean video-engine-ccfl: GDY_BASE_URL, GDY_API_BASE,
 // GDY_API_KEY, GDY_API_KEY_ALT. Bearer auth. Paths are under /v1.
+// Non-secret origin is pinned so GDY stays live when only keys are set.
+
+export const GDY_LIVE_BASE_URL = "https://gdy-tool-directory-a6hzh.ondigitalocean.app";
+export const GDY_LIVE_API_BASE = `${GDY_LIVE_BASE_URL}/v1`;
 
 const TIMEOUT_MS = 20_000;
 
@@ -8,11 +12,15 @@ function env(name: string): string {
   return process.env[name]?.trim() || "";
 }
 
+export function gdyBaseUrl(): string {
+  return env("GDY_BASE_URL").replace(/\/$/, "") || GDY_LIVE_BASE_URL;
+}
+
 export function gdyApiBase(): string {
   const api = env("GDY_API_BASE").replace(/\/$/, "");
   if (api) return api;
-  const host = env("GDY_BASE_URL").replace(/\/$/, "");
-  return host ? `${host}/v1` : "";
+  const host = gdyBaseUrl();
+  return /\/v1$/i.test(host) ? host : `${host}/v1`;
 }
 
 export function gdyKeys(): string[] {
