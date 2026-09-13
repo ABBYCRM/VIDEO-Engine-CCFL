@@ -116,7 +116,10 @@ describe("real runtimes survive collapse + open console", () => {
     const consoleSrc = src("components/claw-console.tsx");
     assert.match(consoleSrc, /from "@\/components\/ui\/input-bar"/);
     assert.match(consoleSrc, /from "@\/components\/ui\/agent-chat"/);
-    assert.match(consoleSrc, /from "@\/components\/ui\/message-bubble"/);
+    assert.match(consoleSrc, /from "@\/components\/ui\/sidebar"/);
+    assert.match(src("components/ui/agent-chat.tsx"), /max-w-\[640px\]/);
+    assert.match(src("components/ui/input-bar.tsx"), /max-w-\[640px\]/);
+    assert.equal(existsSync(join(root, "components/ui/ai-message.tsx")), true);
     assert.match(consoleSrc, /ComputerDock/);
     assert.match(consoleSrc, /ForgeConsole/);
     assert.match(consoleSrc, /SwarmConsole/);

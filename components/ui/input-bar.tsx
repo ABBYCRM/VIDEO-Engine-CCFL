@@ -314,7 +314,7 @@ export const InputBar = memo(function InputBar({
 
   return (
     <div className={cn("w-full shrink-0 px-3 pb-3", className)}>
-      <div className="mx-auto w-full max-w-[720px]">
+      <div className="mx-auto w-full max-w-[640px]">
         <div
           className="relative cursor-text rounded-[22px] bg-white shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-800"
           onClick={handleContainerClick}

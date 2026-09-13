@@ -1,8 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import Link from "next/link";
 import {
-  ChevronRight, FilePlus2, Film, FolderOpen,
+  CalendarClock, ChevronRight, FilePlus2, Film, FolderOpen,
   Hash, Loader2, Menu, Monitor, Moon, PanelLeftClose,
   Pencil, Plug, Plus, Search, Settings, Sparkles,
   Sun, Trash2, Wand2, X, Zap
@@ -14,9 +13,9 @@ import { SwarmConsole } from "@/components/swarm-console";
 import AILoader from "@/components/ui/ai-loader";
 import { ClawThinkingPanel, type ToolNode, type SelfStateView } from "@/components/ui/claw-thinking-panel";
 import { InputBar } from "@/components/ui/input-bar";
-import { AiMessageBubble } from "@/components/ui/message-bubble";
 import { Suggestions } from "@/components/ui/suggestions";
-import { MessageList, type AgentMessage } from "@/components/ui/agent-chat";
+import { AgentChat, type AgentMessage } from "@/components/ui/agent-chat";
+import { Sidebar, SidebarLink } from "@/components/ui/sidebar";
 import { humanToolProgress, isTranscriptAssistantContent, looksLikeInternalState, sanitizeUserVisibleMessage } from "@/lib/claw/user-visible";
 
 /* ─────────────────────────────────────────────────────────
@@ -565,6 +564,7 @@ export function ClawConsole() {
         {sidebarOpen && (
           <button type="button" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
         )}
+        <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} animate={false}>
         <aside
           className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-neutral-200 bg-neutral-50 transition-transform duration-300 dark:border-neutral-800 dark:bg-neutral-950 md:static md:z-auto md:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -597,19 +597,25 @@ export function ClawConsole() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-2">
-            <div className="mb-1 px-2 py-2 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Recent</div>
+            <div className="mb-1 px-2 py-2 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Agents</div>
             {convs.map(c => (
-              <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
+              <div key={c.id} className={`group mb-0.5 flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors ${
                 active === c.id
                   ? "bg-neutral-200/80 text-neutral-900 dark:bg-neutral-800 dark:text-white"
                   : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
               }`}>
                 <button
                   type="button"
-                  className="min-w-0 flex-1 truncate text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                   onClick={() => { setActive(c.id); setSidebarOpen(false); }}
                 >
-                  {c.title}
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
+                    <ClawLogo size={16} alt="" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">Claw</span>
+                    <span className="block truncate text-[11px] text-neutral-400">{c.title}</span>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -642,21 +648,22 @@ export function ClawConsole() {
               <FolderOpen size={14} />
               Files
             </button>
-            <Link href="/computer" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
-              <Monitor size={14} />
-              Computer
-            </Link>
-            <Link href="/routines" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
-              Routines
-            </Link>
-            <Link href="/integrations" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
-              <Plug size={14} />
-              Integrations
-            </Link>
-            <Link href="/settings" className="mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100">
-              <Settings size={14} />
-              Settings
-            </Link>
+            <SidebarLink
+              className="mb-0.5 rounded-lg px-3 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900"
+              link={{ label: "Computer", href: "/computer", icon: <Monitor size={14} /> }}
+            />
+            <SidebarLink
+              className="mb-0.5 rounded-lg px-3 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900"
+              link={{ label: "Routines", href: "/routines", icon: <CalendarClock size={14} /> }}
+            />
+            <SidebarLink
+              className="mb-0.5 rounded-lg px-3 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900"
+              link={{ label: "Integrations", href: "/integrations", icon: <Plug size={14} /> }}
+            />
+            <SidebarLink
+              className="mb-0.5 rounded-lg px-3 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900"
+              link={{ label: "Settings", href: "/settings", icon: <Settings size={14} /> }}
+            />
             <button
               type="button"
               onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
@@ -668,6 +675,7 @@ export function ClawConsole() {
             </button>
           </div>
         </aside>
+        </Sidebar>
 
         <main className="relative flex min-w-0 flex-1 flex-col bg-white dark:bg-neutral-950">
           <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 bg-white/90 px-3 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-950/90">
@@ -716,86 +724,73 @@ export function ClawConsole() {
 
           <div className="flex min-h-0 flex-1">
             <section className="flex min-w-0 flex-1 flex-col">
-              {empty ? (
-                <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-10">
-                  <div className="w-full max-w-[720px]">
-                    <div className="mb-10 flex flex-col items-center gap-3 text-center">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
-                        <ClawLogo size={28} />
-                      </div>
-                      <div>
-                        <h1 className="mb-1 text-2xl font-semibold tracking-tight">
-                          <span suppressHydrationWarning>{greeting()}</span>, operator
-                        </h1>
-                        <p className="text-[14px] text-neutral-500">
-                          Talk to me. I choose the agent, build it, and task it.
-                        </p>
+              <AgentChat
+                messages={threadMessages}
+                emptyStatePosition="center"
+                scrollRef={scroller}
+                emptyHeader={
+                  <div className="mb-10 flex flex-col items-center gap-3 text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
+                      <ClawLogo size={28} />
+                    </div>
+                    <div>
+                      <h1 className="mb-1 text-2xl font-semibold tracking-tight">
+                        <span suppressHydrationWarning>{greeting()}</span>, operator
+                      </h1>
+                      <p className="text-[14px] text-neutral-500">
+                        Talk to me. I choose the agent, build it, and task it.
+                      </p>
+                    </div>
+                  </div>
+                }
+                composer={
+                  empty ? (
+                    <div className="mb-8">
+                      {composer}
+                      <div className="mt-6">
+                        <Suggestions
+                          className="justify-center"
+                          items={suggestions.slice(0, 6).map((s, i) => ({
+                            id: `${s.source}-${s.skillIds?.[0] || s.label}-${i}`,
+                            label: s.label,
+                            value: s.prompt,
+                            icon: s.source === "rag"
+                              ? <Sparkles size={10} />
+                              : s.source === "creative"
+                                ? <Film size={10} />
+                                : undefined,
+                          }))}
+                          onSelect={(item) => {
+                            const s = suggestions.find(x => x.label === item.label);
+                            if (s?.source === "creative") {
+                              setCreativeModalOpen(true);
+                              setCreativeUrl("");
+                              return;
+                            }
+                            const prompt = item.value || s?.prompt || item.label;
+                            setText(prompt);
+                            void send(prompt);
+                          }}
+                        />
                       </div>
                     </div>
-
-                    <div className="mb-8">{composer}</div>
-
-                    <Suggestions
-                      className="justify-center"
-                      items={suggestions.slice(0, 6).map((s, i) => ({
-                        id: `${s.source}-${s.skillIds?.[0] || s.label}-${i}`,
-                        label: s.label,
-                        value: s.prompt,
-                        icon: s.source === "rag"
-                          ? <Sparkles size={10} />
-                          : s.source === "creative"
-                            ? <Film size={10} />
-                            : undefined,
-                      }))}
-                      onSelect={(item) => {
-                        const s = suggestions.find(x => x.label === item.label);
-                        if (s?.source === "creative") {
-                          setCreativeModalOpen(true);
-                          setCreativeUrl("");
-                          return;
-                        }
-                        const prompt = item.value || s?.prompt || item.label;
-                        setText(prompt);
-                        void send(prompt);
-                      }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    <MessageList
-                      messages={threadMessages}
-                      scrollRef={scroller}
-                      className="h-full"
-                      footer={
-                        <>
-                          {(tools.length > 0 || busy || selfState || streaming) && (
-                            <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} selfState={selfState} />
-                          )}
-                          {error && (
-                            <AiMessageBubble role="assistant" content="" className="!max-w-full">
-                              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-rose-600 dark:text-rose-400">
-                                {error}
-                              </div>
-                            </AiMessageBubble>
-                          )}
-                        </>
-                      }
-                    />
-                  </div>
-                  <div className="shrink-0 px-4 pb-4 pt-2">
-                    <div className="mx-auto max-w-[720px]">
-                      {error && empty === false && !streaming && (
+                  ) : (
+                    <>
+                      {error && (
                         <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[12px] text-rose-600 dark:text-rose-400">
                           {error}
                         </div>
                       )}
                       {composer}
-                    </div>
-                  </div>
-                </>
-              )}
+                    </>
+                  )
+                }
+                footer={
+                  (tools.length > 0 || busy || selfState || streaming) ? (
+                    <ClawThinkingPanel tools={tools} streaming={streaming} busy={busy} selfState={selfState} />
+                  ) : null
+                }
+              />
             </section>
 
             {computerOpen && (

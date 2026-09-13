@@ -3,11 +3,12 @@
 /**
  * 21st.dev Agent Chat (serafimcloud / Agent Elements)
  * Registry: https://21st.dev/r/serafimcloud/agent-chat
- * Shell primitives used by Claw: message list + empty-state layout.
+ * Drop-in shell: scrollable thread + bottom composer, empty centered composer.
  */
 import { memo, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/utils";
-import { AiMessageBubble } from "@/components/ui/message-bubble";
+import { AIMessage } from "@/components/ui/ai-message";
+import { sanitizeUserVisibleMessage } from "@/lib/claw/user-visible";
 
 export type ChatStatus = "ready" | "streaming" | "submitted" | "idle";
 
@@ -20,6 +21,8 @@ export type AgentMessage = {
   role: "user" | "assistant";
   parts: MessagePart[];
 };
+
+export const CHAT_COLUMN = "max-w-[640px]";
 
 function ErrorBubble({
   title = "Something went wrong",
@@ -51,14 +54,24 @@ export function MessageList({
 }) {
   return (
     <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-6", className)}>
-      <div className="mx-auto flex max-w-[720px] flex-col gap-5">
+      <div className={cn("mx-auto flex w-full flex-col gap-5", CHAT_COLUMN)}>
         {messages.map((m) => (
           <div key={m.id} className="flex flex-col gap-2">
             {m.parts.map((part, i) => {
               if (part.type === "error") {
                 return <ErrorBubble key={i} title={part.title} message={part.message} />;
               }
-              return <AiMessageBubble key={i} role={m.role} content={part.text} />;
+              const text = m.role === "assistant" ? sanitizeUserVisibleMessage(part.text) : part.text;
+              return (
+                <AIMessage
+                  key={i}
+                  from={m.role}
+                  bubble={m.role === "user"}
+                  copyText={text}
+                >
+                  {text}
+                </AIMessage>
+              );
             })}
           </div>
         ))}
@@ -68,19 +81,47 @@ export function MessageList({
   );
 }
 
+export type AgentChatProps = {
+  messages: AgentMessage[];
+  composer?: ReactNode;
+  emptyHeader?: ReactNode;
+  footer?: ReactNode;
+  emptyStatePosition?: "default" | "center";
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  className?: string;
+};
+
 export const AgentChat = memo(function AgentChat({
   messages,
-  children,
+  composer,
+  emptyHeader,
+  footer,
+  emptyStatePosition = "center",
+  scrollRef,
   className,
-}: {
-  messages: AgentMessage[];
-  children?: ReactNode;
-  className?: string;
-}) {
+}: AgentChatProps) {
+  const isEmpty = messages.length === 0;
+  const isCenteredEmpty = isEmpty && emptyStatePosition === "center";
+
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
-      <MessageList messages={messages} />
-      {children}
+      {isCenteredEmpty ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-10">
+          <div className={cn("w-full", CHAT_COLUMN)}>
+            {emptyHeader}
+            {composer}
+          </div>
+        </div>
+      ) : (
+        <>
+          <MessageList messages={messages} scrollRef={scrollRef} footer={footer} />
+          {composer ? (
+            <div className="shrink-0 px-4 pb-4 pt-2">
+              <div className={cn("mx-auto w-full", CHAT_COLUMN)}>{composer}</div>
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 });
