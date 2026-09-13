@@ -143,7 +143,8 @@ New (env-backed, fail-soft if the key is missing — **no fabricated success**):
 | `pinecone_query` / `pinecone_upsert` | `PINECONE_API_KEY` + `PINECONE_INDEX_HOST` | Wired into BOS retrieve and memory write/search when configured |
 | `resend_send` | `RESEND_API_KEY` | Side-effecting; operator-requested only |
 | `github_repo` | `GITHUB_PERSONAL_ACCESS_TOKEN` (or `GITHUB_TOKEN`) | |
-| `gdy_search` / `gdy_rag_context` / `gdy_categories` / `gdy_tools` | `GDY_API_KEY` (optional `GDY_API_KEY_ALT` on 401) | Luis GDY OSINT tool directory. Base: `GDY_API_BASE` or `GDY_BASE_URL` + `/v1` |
+| `gdy_search` / `gdy_rag_context` / `gdy_categories` / `gdy_tools` | `GDY_API_KEY` (optional `GDY_API_KEY_ALT` on 401) | Luis GDY OSINT tool directory. Base: `GDY_API_BASE` or `GDY_BASE_URL` + `/v1` (live pin `https://gdy-tool-directory-a6hzh.ondigitalocean.app`) |
+| `re_knowledge` | none | Local RE notes under `knowledge/reverse-engineering/`. IDA/BN knowledge-only. |
 | `arxiv_search` | none | Official arXiv Atom API (`export.arxiv.org`). No GDY key |
 | `cursor_launch` / `cursor_status` / `cursor_reply` / `cursor_cancel` | `CURSOR_API_KEY` | Brain-owned Cursor Cloud Agents v1 client. Same env name as the CCFL DigitalOcean secret. HTTP aliases: `/api/cursor/launch`, `/api/cursor/:id`, `/api/cursor/:id/reply`, `/api/cursor/:id/cancel`. Fail-soft if unset. |
 

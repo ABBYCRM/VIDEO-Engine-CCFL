@@ -92,6 +92,7 @@ const READ_ONLY = new Set([
   "mcp_status", "aion_agents", "routines",
   "youtube_search", "youtube_video", "gemini_generate", "xai_chat", "kimi_chat", "openai_chat", "openai_embed", "pinecone_query",
   "gdy_search", "gdy_rag_context", "gdy_categories", "gdy_tools", "arxiv_search",
+  "re_knowledge", "re_catalog",
   "computer_status", "computer_look", "computer_observe", "computer_wait", "computer_screenshot"
 ]);
 export function toolSucceeded(value: unknown): boolean {

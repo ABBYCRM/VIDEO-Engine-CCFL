@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/services/aion-brain/knowledge/reverse-engineering ./services/aion-brain/knowledge/reverse-engineering
 COPY --from=builder /app/node_modules/playwright ./node_modules/playwright
 COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-core
 COPY --from=builder /app/package.json ./package.json

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.1.25 — feat: reverse-engineering knowledge pack
+- `knowledge/reverse-engineering/` operator notes (Ghidra, r2/Rizin/Cutter, IDA, BN, x64dbg, dnSpy, ImHex, angr, Capstone/Keystone/Unicorn + playbook). Not a vendored SRE suite.
+- Tool `re_knowledge` retrieves the markdown. Separate from BOS-OMEGA Trinity ingest.
+- GDY origin stays pinned: `https://gdy-tool-directory-a6hzh.ondigitalocean.app`.
+
 ## 0.1.24 — fix: assistant text is natural language, not INTERNAL STATE
 - `/api/chat` and `/api/claw/execute` never put control-loop internals into assistant-visible `delta` / `answer`. `self_state`, `phase`, `tool_start`, and `tool_end` stay separate SSE event types.
 - Actionable goals on `/api/chat` prefer the Aion execute path (unless `consult: true` / `agentic: false`). Consult-only questions stay single-shot.

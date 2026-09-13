@@ -8,7 +8,7 @@ const CONTROL_TOKEN = /\b(?:SELF[_-]?OBSERVATION|SELF[_-]?MONITORING|SELF[_-]?RE
 const TOOL_XML = /<\/?(?:tool_call|tool_result)\b[^>]*>[\s\S]*?<\/(?:tool_call|tool_result)>/gi;
 const TOOL_XML_OPEN = /<\/?(?:tool_call|tool_result)\b[^>]*>/gi;
 
-const ACTIONABLE = /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint|rag|public records?|email|send|launch|spawn|cursor|open|click|find|download|post|schedule|write|update|run)\b/i;
+const ACTIONABLE = /\b(build|implement|fix|repair|create|code|deploy|test|edit|make|continue|resume|search|scrape|research|look up|browse|fetch|osint|arxiv|gdy|preprint|rag|public records?|email|send|launch|spawn|cursor|open|click|find|download|post|schedule|write|update|run|triage|ghidra|radare|rizin|binary)\b/i;
 
 const CONSULT_ONLY = /^(what do you think|explain|should i|advise|advice|opinion|consult|lattice|what would you|why is|how does)\b/i;
 
@@ -70,6 +70,7 @@ export function humanToolProgress(name: string): string {
   if (tool === "execution_plan" || tool === "execution_verify" || tool === "execution_blocked") return "Working…";
   if (tool === "save_file" || tool === "read_file") return "Saving a file…";
   if (tool === "steel_scrape") return "Reading the page…";
+  if (tool.startsWith("re_")) return "Analyzing the binary…";
   return "Working…";
 }
 

@@ -3,13 +3,13 @@
 // 2026-08-30 "Claw only" repo strip. The previous version of this
 // endpoint pinged every video provider, the Postgres mirror, and
 // the Instagram Graph; all of those subsystems are gone now. What
-// remains: the three external services Claw actually talks to
-// (NVIDIA, Composio, Steel) plus the Claw chat tables count.
+// remains: NVIDIA, Composio, Steel, GDY plus the Claw chat tables count.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isNvidiaEnabled, getClawModel } from "@/lib/nvidia/client";
 import { isComposioConfigured } from "@/lib/composio/client";
 import { isSteelConfigured } from "@/lib/steel";
+import { isGdyConfigured } from "@/lib/claw/gdy";
 
 export const runtime = "nodejs";
 
@@ -37,9 +37,10 @@ export async function GET() {
   // /api/ready is for; this is a liveness readback for the operator).
   const nvidia = { enabled: isNvidiaEnabled(), model: isNvidiaEnabled() ? getClawModel() : null };
 
-  // 3. Composio / Steel
+  // 3. Composio / Steel / GDY
   const composio = { configured: isComposioConfigured() };
   const steel = { configured: isSteelConfigured() };
+  const gdy = { configured: isGdyConfigured() };
 
   return NextResponse.json({
     ok: true,
@@ -49,7 +50,8 @@ export async function GET() {
       database: dbCheck.ok ? { ok: true, ...(dbCheck.value as object) } : { ok: false, error: dbCheck.error },
       nvidia,
       composio,
-      steel
+      steel,
+      gdy
     }
   });
 }

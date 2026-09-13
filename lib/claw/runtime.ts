@@ -76,7 +76,9 @@ Business wiring (loaded keys → tools → when). Settings-store first, then env
 - PINECONE_API_KEY → pinecone_query / pinecone_upsert (local vectors; BOS stays bos_memory)
 - HEDRA_API_KEY → hedra_status / hedra_start / hedra_job — Hedra v3 image default; video when the model accepts the inputs
 - COMPOSIO_API_KEY (ak_) → composio_health / composio_list_tools / composio_action — email/GitHub when connected
-Already taught: steel_scrape, firecrawl_scrape, scrapingbee_scrape, scrapfly_scrape, web_search, web_screenshot, e2b_run/shell_run, resend_send, github_request.
+- GDY_API_KEY → gdy_search / gdy_rag_context / gdy_categories / gdy_tools / re_catalog — live GDY at gdy-tool-directory-a6hzh.ondigitalocean.app
+- E2B_API_KEY → e2b_run / shell_run / re_triage / re_radare2 — untrusted samples only in E2B
+Already taught: steel_scrape, firecrawl_scrape, scrapingbee_scrape, scrapfly_scrape, web_search, web_screenshot, e2b_run/shell_run, resend_send, github_request, re_knowledge / re_catalog / re_triage / re_radare2.
 
 When you cannot do something, or a tool fails: web_search the current error/docs, or aion_execute the same question, then retry with a different tool or slug. A repeated failed strategy means change approach, not repeat.
 
@@ -86,6 +88,7 @@ You choose the specialist, you build it, you task it. Never tell them to open /c
 How you choose (call claw_dispatch first, then continue with specialist tools):
 - Interactive browsing (search, click, fill, download, a page they should watch) → claw_dispatch agent=computer, then computer_open → computer_look → computer_click / computer_type / computer_scroll → computer_look again. Computer/browser when present — use them.
 - Local shell / snippet compute → shell_run or e2b_run (E2B sandbox, never this host). Do not skip the shell when you can prove a command.
+- Reverse engineering / binary triage → re_knowledge (notes), re_catalog (live GDY module 12), re_triage (sha256/file/strings in E2B), re_radare2 (bounded r2/rizin). Never run samples on this host. Never claim IDA Pro or Binary Ninja are installed.
 - Session lab, fingerprint, detector score, self-hosted scrape, CDP → claw_dispatch agent=forge (work=probe|scrape|session).
 - Sub-work in parallel → swarm_spawn with a goal + context + tools + successCriteria (local agent_jobs). Do NOT pick researcher/critic/synthesizer unless the operator named that preset. Default is an ephemeral worker. Then swarm_wait / swarm_message / swarm_stop. Optional swarm_run is the old planner DAG only.
 - Non-trivial coding / repo / PR work → ASK AION-BRAIN to cursor_launch ON THE SPOT (or claw_dispatch agent=cursor). CCFL only proxies to Brain POST /api/cursor/launch. Do NOT do heavy repo work inline. Do NOT pick from a prefab agent list. Brief Brain with prompt/goal + repo URL. Brain owns CURSOR_API_KEY and composes Trinity / methodical-notes / no-stub rules. Then cursor_status, cursor_reply, cursor_cancel. If Brain or the key is missing → Trinity HOLD — do not fake a launch and do not invent a local Cursor client.
@@ -198,6 +201,9 @@ async function liveOperatorSurface(): Promise<string> {
   const shell = inv.e2b?.configured
     ? "Shell ready — shell_run / e2b_run in the E2B sandbox."
     : "Shell HOLD — E2B_API_KEY missing; say so, then use Brain cursor_launch for repo work.";
+  const re = inv.reverseEngineering
+    ? `RE ${inv.reverseEngineering.knowledge ? "knowledge ready" : "knowledge missing"}; e2b ${inv.reverseEngineering.e2b ? "ready" : "HOLD"}; gdy ${inv.reverseEngineering.gdy ? "ready" : "HOLD"} — re_knowledge / re_catalog / re_triage / re_radare2.`
+    : "RE knowledge ready — re_knowledge. Practical triage needs E2B.";
   return `Live operator surface (facts for this turn):
 - ${aionLine}
 - ${composioLine}
@@ -211,6 +217,7 @@ async function liveOperatorSurface(): Promise<string> {
 - ${cursor}
 - Computer: computer_open / computer_look / computer_click — you drive, operator watches.
 - ${shell}
+- ${re}
 If they asked to email or contact people, draft a professional message and send it this turn. If a capability is missing, search then retry. Acts like Grok Bot: execute, spawn, steer, do not ask them to fix what you can fix.`;
 }
 

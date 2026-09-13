@@ -116,6 +116,12 @@ services:
       - key: GDY_API_KEY_ALT
         scope: RUN_TIME
         type: SECRET
+      - key: GDY_BASE_URL
+        scope: RUN_TIME
+        value: https://gdy-tool-directory-a6hzh.ondigitalocean.app
+      - key: GDY_API_BASE
+        scope: RUN_TIME
+        value: https://gdy-tool-directory-a6hzh.ondigitalocean.app/v1
 
       - key: BITDEER_BASE_URL
         scope: RUN_TIME
@@ -207,6 +213,15 @@ services:
       - key: GDY_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: GDY_API_KEY_ALT
+        scope: RUN_TIME
+        type: SECRET
+      - key: GDY_BASE_URL
+        scope: RUN_TIME
+        value: https://gdy-tool-directory-a6hzh.ondigitalocean.app
+      - key: GDY_API_BASE
+        scope: RUN_TIME
+        value: https://gdy-tool-directory-a6hzh.ondigitalocean.app/v1
       - key: N8N_MCP_TOKEN
         scope: RUN_TIME
         type: SECRET

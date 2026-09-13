@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { arxivSearch, parseArxivAtom } from "../../lib/claw/arxiv.ts";
-import { gdyApiBase, gdyKeys, gdySearch, gdyRagContext, gdyCategories, gdyTools, isGdyConfigured } from "../../lib/claw/gdy.ts";
+import { GDY_LIVE_API_BASE, GDY_LIVE_BASE_URL, gdyApiBase, gdyBaseUrl, gdyKeys, gdySearch, gdyRagContext, gdyCategories, gdyTools, isGdyConfigured } from "../../lib/claw/gdy.ts";
 
 const KEY = "gdy_test_primary_not_real";
 const ALT = "gdy_test_alt_not_real";
@@ -24,6 +24,13 @@ function withGdyEnv(run: () => Promise<void> | void) {
     }
   };
 }
+
+test("GDY pin helpers default to the live DigitalOcean origin", withGdyEnv(() => {
+  delete process.env.GDY_BASE_URL;
+  delete process.env.GDY_API_BASE;
+  assert.equal(gdyBaseUrl(), GDY_LIVE_BASE_URL);
+  assert.equal(gdyApiBase(), GDY_LIVE_API_BASE);
+}));
 
 test("GDY is unconfigured and fail-soft without keys", withGdyEnv(async () => {
   delete process.env.GDY_BASE_URL;

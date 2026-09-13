@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "80mb" }
   },
+  outputFileTracingIncludes: {
+    "/*": ["./services/aion-brain/knowledge/reverse-engineering/**/*"]
+  },
   async redirects() {
     return [
       { source: "/", destination: "/claw", permanent: false },

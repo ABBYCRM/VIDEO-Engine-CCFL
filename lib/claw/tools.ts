@@ -44,6 +44,7 @@ import {
   connectorInventory, scrapeFirecrawl, scrapeScrapingBee, scrapeScrapfly,
   e2bRun, githubRequest, resendSend, hedraStatus, heliconeStatus
 } from "@/lib/claw/connectors";
+import { reCatalog, reKnowledge, reRadare2, reTriage, reverseEngineeringStatus } from "@/lib/claw/re";
 import {
   youtubeSearch, youtubeVideo, llmGemini, llmXai, llmKimi,
   openaiChat, openaiEmbed, pineconeQuery, pineconeUpsert, hedraStart, hedraJob
@@ -370,6 +371,7 @@ export const CLAW_TOOLS: ToolDef[] = [
           search: { exa: isExaConfigured(), tavily: isTavilyConfigured() },
           helicone: { enabled: isHeliconeEnabled() },
           gdy: { configured: isGdyConfigured() },
+          reverseEngineering: reverseEngineeringStatus(),
           cursor: { configured: isCursorProxyReady(), note: "Proxy to Aion-Brain /api/cursor/*. Brain owns CURSOR_API_KEY. /api/agent/run stays execute." },
           arxiv: { configured: true }
         }
@@ -1310,6 +1312,47 @@ export const CLAW_TOOLS: ToolDef[] = [
     args: "{}",
     when: "See which GDY tools the remote OSINT service exposes.",
     handler: async () => gdyTools()
+  },
+  {
+    name: "re_knowledge",
+    description: "Retrieve local Reverse Engineering / Binary Analysis operator notes (Ghidra, r2, Rizin/Cutter, IDA Pro, Binary Ninja, x64dbg, dnSpy, ImHex, angr, Capstone/Keystone/Unicorn + playbook). Knowledge only — does not run samples. IDA/BN are not embedded.",
+    args: "{\"query\":\"ghidra headless\"}",
+    when: "Operator asks how to reverse a binary, which RE tool to use, or what Ghidra/IDA/r2 can do.",
+    handler: async (a) => reKnowledge(str(a.query || a.q || a.topic), a.limit == null ? undefined : num(a.limit, 6))
+  },
+  {
+    name: "re_catalog",
+    description: "Live GDY Reverse Engineering / Binary Analysis catalog (gdy_search + gdy_categories) plus local RE notes. Fail-soft if GDY keys are missing. Never invent tool URLs when GDY is down.",
+    args: "{\"q\":\"ghidra\"}",
+    when: "Need live GDY module-12 facts for RE tools, or to pair knowledge notes with the directory.",
+    handler: async (a) => reCatalog(str(a.q || a.query || a.topic))
+  },
+  {
+    name: "re_triage",
+    description: "Static-only binary triage in E2B (never this host): sha256, file, capped strings, entropy. Input: public URL, Claw fileId, or hex/base64 snippet. Size/time caps. Fail-soft if E2B_API_KEY is missing.",
+    args: "{\"url\":\"https://example.com/sample.bin\"}",
+    when: "Operator asks to triage, hash, or identify a sample. Do not execute the binary on this host.",
+    handler: async (a) => reTriage({
+      url: str(a.url) || undefined,
+      fileId: str(a.fileId || a.file_id || a.id) || undefined,
+      hex: str(a.hex) || undefined,
+      base64: str(a.base64 || a.b64) || undefined,
+      timeoutMs: a.timeoutMs == null ? undefined : num(a.timeoutMs, 25_000)
+    })
+  },
+  {
+    name: "re_radare2",
+    description: "Bounded radare2/rizin in E2B (install best-effort). Default: aaa; iI; iE; ii; iz. Rejects shell escapes, writes, and debugger continue. Fail-soft if E2B is missing; if r2 cannot install, say so and keep re_triage.",
+    args: "{\"hex\":\"7f454c46\",\"commands\":\"aaa; iI; ii; iz\"}",
+    when: "After re_triage, or when the operator asked for r2/rizin static info. Not IDA/Ghidra.",
+    handler: async (a) => reRadare2({
+      url: str(a.url) || undefined,
+      fileId: str(a.fileId || a.file_id || a.id) || undefined,
+      hex: str(a.hex) || undefined,
+      base64: str(a.base64 || a.b64) || undefined,
+      commands: str(a.commands || a.cmd || a.script) || undefined,
+      timeoutMs: a.timeoutMs == null ? undefined : num(a.timeoutMs, 40_000)
+    })
   },
   {
     name: "arxiv_search",

@@ -35,6 +35,10 @@ export function firstSecret(pairs: Array<[string, string]>): string {
   return "";
 }
 
+export function isE2bConfigured(): boolean {
+  return Boolean(secret("e2b_api_key", "E2B_API_KEY"));
+}
+
 export function missing(service: string, envName: string, when: string): { ok: false; error: string; code: string; hint: string } {
   return {
     ok: false,
@@ -93,6 +97,12 @@ export function connectorInventory() {
     aion: { configured: isAionConfigured(), when: "Connected brain — prefer aion_execute for toolful work; aion_status / aion_consult stay advice-only." },
     cursor: { configured: isAionConfigured(), owner: "aion-brain", when: "Ask Brain cursor_launch via AION handshake. CURSOR_API_KEY lives on the in-app brain service." },
     gdy: { configured: isGdyConfigured(), when: "OSINT RAG (gdy_search, gdy_rag_context, gdy_categories, gdy_tools). Fail-soft if GDY_API_KEY is missing." },
+    reverseEngineering: {
+      knowledge: true,
+      e2b: isE2bConfigured(),
+      gdy: isGdyConfigured(),
+      when: "RE notes (re_knowledge) + live GDY module 12 (re_catalog) + E2B static triage (re_triage / re_radare2). Never runs samples in this process. IDA/BN are knowledge-only."
+    },
     arxiv: { configured: true, when: "Public preprint search (arxiv_search). No key." }
   };
 }
@@ -134,6 +144,31 @@ export async function scrapeScrapfly(url: string) {
   const markdown = String(body?.result?.content || body?.result?.markdown || "");
   const clipped = clipText(markdown);
   return { ok: true, via: "scrapfly", url: target, markdown: clipped.text, truncated: clipped.truncated };
+}
+
+export async function e2bCommand(input: { cmd?: string; timeoutMs?: number }) {
+  const key = secret("e2b_api_key", "E2B_API_KEY");
+  if (!key) return missing("E2B", "E2B_API_KEY", "execute untrusted code in a hosted sandbox — never in this process");
+  const cmd = String(input.cmd || "").trim();
+  if (!cmd || cmd.length > 3_500_000) return { ok: false, error: "cmd must be 1–3,500,000 characters", code: "BAD_ARGS" };
+  try {
+    const { Sandbox } = await import("e2b");
+    const sandbox = await Sandbox.create({ apiKey: key, timeoutMs: Math.min(90_000, Math.max(8_000, Number(input.timeoutMs) || 30_000)) });
+    try {
+      const result = await sandbox.commands.run(cmd, { timeoutMs: Math.min(60_000, Number(input.timeoutMs) || 25_000) });
+      return {
+        ok: result.exitCode === 0,
+        via: "e2b",
+        exitCode: result.exitCode,
+        stdout: String(result.stdout || "").slice(0, 8000),
+        stderr: String(result.stderr || "").slice(0, 2000)
+      };
+    } finally {
+      await sandbox.kill().catch(() => {});
+    }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error), hint: "Check E2B_API_KEY and that the e2b package can reach api.e2b.dev." };
+  }
 }
 
 export async function e2bRun(input: { code?: string; language?: string; timeoutMs?: number }) {

@@ -75,7 +75,7 @@ Aion-Brain **owns** Cursor (`lib/cursor_cloud.js`). CCFL only proxies:
 - `cursor_status` / `cursor_reply` / `cursor_cancel` map to Brain `/api/cursor/:id`, `.../reply`, `.../cancel`.
 - `POST /api/agent/run` stays `aion_execute`. See `docs/CURSOR_CLOUD_AGENTS.md`.
 
-Claw also proxies Brain BOS (`/api/memory/bos`), Trinity (`/api/decision`), routines (including `/run`), MCP (`/api/mcp/status`), and ephemeral agents (`/api/agents/spawn`). Contract: `docs/aion-brain.md`. DigitalOcean env **names**: `docs/DIGITALOCEAN_ENV.md`.
+Claw also proxies Brain BOS (`/api/memory/bos`), Trinity (`/api/decision`), routines (including `/run`), MCP (`/api/mcp/status`), and ephemeral agents (`/api/agents/spawn`). Contract: `docs/aion-brain.md`. DigitalOcean env **names**: `docs/DIGITALOCEAN_ENV.md`. Reverse-engineering notes + E2B triage: `docs/REVERSE_ENGINEERING.md`.
 
 ## Local setup
 
