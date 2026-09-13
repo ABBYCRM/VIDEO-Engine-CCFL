@@ -6,7 +6,7 @@ import { GDY_LIVE_API_BASE, GDY_LIVE_BASE_URL, gdyApiBase, gdyBaseUrl, isGdyConf
 import { DEFAULT_R2_SCRIPT, reCatalog, reKnowledge, reRadare2, reTriage, sanitizeRadare2Script } from "../../lib/claw/re.ts";
 import { listReKnowledgeFiles, RE_KNOWLEDGE_NOTES, retrieveReKnowledge } from "../../lib/claw/re-knowledge.ts";
 import { CLAW_TOOLS, CLAW_TOOL_NAMES } from "../../lib/claw/tools.ts";
-import { connectorInventory } from "../../lib/claw/connectors.ts";
+import { connectorInventory, e2bOut } from "../../lib/claw/connectors.ts";
 
 const root = join(import.meta.dirname, "../..");
 const pack = join(root, "services/aion-brain/knowledge/reverse-engineering");
@@ -46,6 +46,19 @@ test("RE knowledge pack files exist and retrieve ghidra / playbook", () => {
   assert.ok(hits.some((h) => h.id === "ghidra"));
   assert.match(readFileSync(join(pack, "ida-pro.md"), "utf8"), /not embedded/i);
   assert.match(readFileSync(join(pack, "playbook.md"), "utf8"), /sha-256|hash/i);
+});
+
+test("e2bOut type-guard reads stdout only when present", () => {
+  const missing = e2bOut({ ok: false, error: "E2B is not configured.", code: "MISSING_KEY", hint: "Set E2B_API_KEY" });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.stdout, "");
+  assert.equal(missing.stderr, "");
+  assert.equal(missing.code, "MISSING_KEY");
+  const ran = e2bOut({ ok: true, via: "e2b", exitCode: 0, stdout: "hello", stderr: "warn" });
+  assert.equal(ran.ok, true);
+  assert.equal(ran.stdout, "hello");
+  assert.equal(ran.stderr, "warn");
+  assert.equal(ran.exitCode, 0);
 });
 
 test("r2 allowlist accepts default analysis and rejects destructive commands", () => {
