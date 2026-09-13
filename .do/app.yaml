@@ -1,18 +1,18 @@
-# DigitalOcean App Platform spec for VIDEO-Engine (Claw console + in-app Brain).
-# Secrets are configured as DigitalOcean SECRET environment variables and
-# are never committed to this repository.
+# DigitalOcean App Platform spec for VIDEO-Engine.
+# App: video-engine-ccfl
+# id: b5f68e19-fbfa-469d-acea-1d4278e8b475
+# public: https://video-engine-ccfl-jpd37.ondigitalocean.app
 #
-# One app. Two components from THIS repo:
-#   web         — Next.js Claw console (public)
-#   aion-brain  — absorbed Aion-Brain runtime (internal only)
+# Secrets are DigitalOcean SECRET env vars — never committed.
+# Names below match keys already on this app (and the retired aion-brain
+# app). Coordinator copies values; this spec only binds the names.
 #
-# AION_BASE_URL on web is the in-app PRIVATE_URL. Do not point it at the
-# retired standalone app https://aion-brain-6iptg.ondigitalocean.app.
+# One app. Two components from THIS repo after merge to main:
+#   web         — Next.js Claw console (public :3000)
+#   aion-brain  — absorbed Brain runtime (internal :10000)
 #
-# The dev-skills RAG vector store lives in the bound Managed Postgres `db`.
-# After the first deploy, or after embedding-model/corpus changes, rebuild:
-#   POST /api/claw/skills/index with {"force":true}
-# GET on the same route reports configuration and stored-vector count.
+# AION_BASE_URL on web is ${aion-brain.PRIVATE_URL}.
+# Do not point it at https://aion-brain-6iptg.ondigitalocean.app.
 
 name: video-engine-ccfl
 region: nyc
@@ -28,8 +28,6 @@ services:
     instance_count: 1
     instance_size_slug: basic-s
     health_check:
-      # Readiness must be constant-time and must not depend on upstream AI
-      # providers. /api/health is the operator-triggered deep diagnostic.
       http_path: /api/ready
       initial_delay_seconds: 20
       period_seconds: 15
@@ -42,8 +40,17 @@ services:
       - key: PORT
         scope: RUN_TIME
         value: "3000"
+      - key: CLAW_ENABLED
+        scope: RUN_TIME
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        scope: RUN_TIME
+        value: https://video-engine-ccfl-jpd37.ondigitalocean.app
       - key: DATABASE_URL
         scope: RUN_AND_BUILD_TIME
+        value: ${db.DATABASE_URL}
+      - key: VECTOR_DATABASE_URL
+        scope: RUN_TIME
         value: ${db.DATABASE_URL}
 
       - key: BITDEER_API_KEY
@@ -62,6 +69,39 @@ services:
         scope: RUN_TIME
         value: ${aion-brain.PRIVATE_URL}
       - key: AION_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: COMPOSIO_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: STEEL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: STEEL_BASE_URL
+        scope: RUN_TIME
+        value: https://api.steel.dev
+      - key: DIGITALOCEAN_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: E2B_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: FIRECRAWL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: TAVILY_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: EXA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_PERSONAL_ACCESS_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: GDY_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: GDY_API_KEY_ALT
         scope: RUN_TIME
         type: SECRET
 
@@ -86,6 +126,9 @@ services:
       - key: CLAW_RERANK_MODEL
         scope: RUN_TIME
         value: BAAI/bge-reranker-v2-m3
+      - key: DIGITALOCEAN_REGION
+        scope: RUN_TIME
+        value: nyc3
 
   - name: aion-brain
     dockerfile_path: Dockerfile
@@ -137,6 +180,27 @@ services:
       - key: STEEL_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: STEEL_BASE_URL
+        scope: RUN_TIME
+        value: https://api.steel.dev
+      - key: TAVILY_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: FIRECRAWL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: EXA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: GDY_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: N8N_MCP_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: N8N_API_KEY
+        scope: RUN_TIME
+        type: SECRET
       - key: BITDEER_BASE_URL
         scope: RUN_TIME
         value: https://api-inference.bitdeer.ai/v1
@@ -152,6 +216,12 @@ services:
       - key: FALLBACK_MODELS
         scope: RUN_TIME
         value: mistralai/Mistral-Large-3-675B-Instruct-2512
+      - key: N8N_MCP_URL
+        scope: RUN_TIME
+        value: https://paisabrazil.app.n8n.cloud/mcp-server/http
+      - key: N8N_BASE_URL
+        scope: RUN_TIME
+        value: https://paisabrazil.app.n8n.cloud
 
 databases:
   - name: db

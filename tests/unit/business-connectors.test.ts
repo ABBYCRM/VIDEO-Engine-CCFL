@@ -316,9 +316,9 @@ describe("business connectors e2e (mock HTTP)", () => {
     noLeak(started); noLeak(job);
   });
 
-  it("GET /api/connectors is admin-gated; inventory still lists business rows without secrets", async () => {
+  it("GET /api/connectors is open; inventory still lists business rows without secrets", async () => {
     const res = await connectorsGet();
-    assert.equal(res.status, 401);
+    assert.notEqual(res.status, 401);
     const inventory = connectorInventory();
     const rows = inventory as Record<string, { when?: string; role?: string }>;
     for (const id of ["youtube", "gemini", "xai", "kimi", "openai", "pinecone", "hedra", "composio", "steel", "bitdeer", "nvidia"]) {

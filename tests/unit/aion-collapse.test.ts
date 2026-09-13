@@ -32,7 +32,7 @@ describe("Aion-Brain absorbed into VIDEO", () => {
     assert.match(spec, /name: aion-brain/);
     assert.match(spec, /source_dir: services\/aion-brain/);
     assert.match(spec, /\$\{aion-brain\.PRIVATE_URL\}/);
-    assert.doesNotMatch(spec, /aion-brain-6iptg\.ondigitalocean\.app/);
+    assert.doesNotMatch(spec, /value: https:\/\/aion-brain-6iptg\.ondigitalocean\.app/);
     assert.doesNotMatch(spec, /ADMIN_PASSWORD/);
   });
 

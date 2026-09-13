@@ -122,31 +122,31 @@ describe("CCFL → Brain cursor proxy (authoritative)", () => {
     assert.ok(!JSON.stringify(calls[0].headers).includes("CURSOR_API_KEY"));
   });
 
-  it("HTTP cursor proxy routes are admin-gated; helpers still hit Brain", async () => {
+  it("HTTP cursor proxy routes are open and still hit Brain", async () => {
     const spawn = await launchPost(new Request("http://local/api/cursor/launch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "Scripted spawn", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" }),
     }));
-    assert.equal(spawn.status, 401);
+    assert.notEqual(spawn.status, 401);
 
     const status = await itemGet(new Request(`http://local/api/cursor/${AGENT_ID}`), { params: Promise.resolve({ id: AGENT_ID }) });
-    assert.equal(status.status, 401);
+    assert.notEqual(status.status, 401);
 
     const reply = await replyPost(new Request(`http://local/api/cursor/${AGENT_ID}/reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "steer" }),
     }), { params: Promise.resolve({ id: AGENT_ID }) });
-    assert.equal(reply.status, 401);
+    assert.notEqual(reply.status, 401);
 
     const cancel = await cancelPost(new Request(`http://local/api/cursor/${AGENT_ID}/cancel`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     }), { params: Promise.resolve({ id: AGENT_ID }) });
-    assert.equal(cancel.status, 401);
-    assert.equal(calls.length, 0);
+    assert.notEqual(cancel.status, 401);
+    assert.ok(calls.length > 0);
 
     assert.equal((await aionCursorLaunch({ prompt: "Scripted spawn", repo: "https://github.com/ABBYCRM/VIDEO-Engine-CCFL" })).ok, true);
     assert.equal((await aionCursorStatus({ id: AGENT_ID })).ok, true);

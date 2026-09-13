@@ -130,16 +130,16 @@ describe("first-class Brain BOS / routines / Trinity", () => {
     assert.equal("text" in body, false);
   });
 
-  it("GET/POST /api/memory/bos are admin-gated (no invented store)", async () => {
+  it("GET/POST /api/memory/bos proxy Brain (no invented store, no login gate)", async () => {
     const get = await bosGet(new Request("http://local/api/memory/bos?q=Trinity"));
-    assert.equal(get.status, 401);
+    assert.notEqual(get.status, 401);
     const post = await bosPost(new Request("http://local/api/memory/bos", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: "remember Trinity gate", title: "operator-note" }),
     }));
-    assert.equal(post.status, 401);
-    assert.equal(calls.length, 0);
+    assert.notEqual(post.status, 401);
+    assert.ok(calls.some((c) => String(c.url).includes("/api/memory/bos")));
   });
 
   it("helper GET /api/memory/bos?q=Trinity uses X-AION-Key", async () => {
@@ -183,7 +183,7 @@ describe("first-class Brain BOS / routines / Trinity", () => {
     ]);
   });
 
-  it("trinity_decide proxies Brain; HTTP /api/decision is admin-gated", async () => {
+  it("trinity_decide proxies Brain; HTTP /api/decision is open and forwards", async () => {
     const tool = await executeClawTool("trinity_decide", { user_input: "Explain Trinity" });
     assert.equal((tool as { trinity?: string }).trinity, "HOLD");
     const decideCalls = calls.filter((c) => c.url.endsWith("/api/decision"));
@@ -194,7 +194,8 @@ describe("first-class Brain BOS / routines / Trinity", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ user_input: "Explain Trinity" }),
     }));
-    assert.equal(res.status, 401);
+    assert.notEqual(res.status, 401);
+    assert.ok(calls.filter((c) => String(c.url).endsWith("/api/decision")).length >= 2);
   });
 
   it("mcp_status and aion_agents hit Brain contract paths", async () => {
@@ -245,9 +246,9 @@ describe("Files tray + connectors registry + runtime", () => {
     }
   });
 
-  it("GET /api/connectors is admin-gated; inventory has no secrets", async () => {
+  it("GET /api/connectors is open; inventory has no secrets", async () => {
     const res = await connectorsGet();
-    assert.equal(res.status, 401);
+    assert.notEqual(res.status, 401);
     const { connectorInventory } = await import("../../lib/claw/connectors.ts");
     const inventory = connectorInventory();
     assert.ok(inventory.composio);
