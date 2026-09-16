@@ -12,6 +12,11 @@ const CAPTCHA_MARKERS = [
   "i'm not a robot",
   "are you a robot",
   "unusual traffic",
+  "anonymized error code",
+  "if this persists",
+  "please email us",
+  "enable javascript and cookies",
+  "checking your browser",
 ];
 
 export function isSafePublicUrl(

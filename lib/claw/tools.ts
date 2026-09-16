@@ -436,7 +436,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   // ─── Steel.dev (web scrape) ──────────────────────────────────────
   {
     name: "steel_scrape",
-    description: "One-shot markdown of a known public URL (Steel, then Firecrawl/ScrapingBee/Scrapfly). Local/private URLs are rejected. Interactive browsing uses computer_*. If Chrome hits a CAPTCHA, call computer_search — it automatically runs Steel (proxy + CAPTCHA solver) for the query. Do NOT solve CAPTCHA tiles yourself.",
+    description: "One-shot markdown of a known public URL (Steel, then Firecrawl/ScrapingBee/Scrapfly). Local/private URLs are rejected. Interactive browsing uses computer_* on a known URL. For queries use computer_search / web_search (Exa/Tavily). Never send Chrome to DuckDuckGo. Do NOT solve CAPTCHA tiles.",
     args: "{\"url\":\"https://example.com\"}",
     when: "Operator asks to read/summarize/research a known public URL.",
     handler: async (a) => {
@@ -726,13 +726,19 @@ export const CLAW_TOOLS: ToolDef[] = [
     name: "computer_open",
     description: "Start the live Chromium session the operator can see. Optionally navigate to a public URL. Type emails/passwords the operator just gave you. Handoff only for CAPTCHA tiles, passkeys, payments, or MFA without a code.",
     args: "{\"url\":\"https://example.com\"}",
-    when: "Operator wants you to browse, search, click, or use a website as a person would. Prefer this over steel_scrape for interactive work.",
+    when: "Operator wants you to use a known public URL as a person would. For search queries use computer_search, not this tool.",
     handler: async (a) => {
       try {
         await ensureSession();
         await setControlOwner("AGENT");
         const url = str(a.url).trim();
         if (url) {
+          try {
+            const host = new URL(url).hostname.toLowerCase();
+            if (host.includes("duckduckgo.com") || host === "duck.com" || host.includes("google.com")) {
+              return { ok: false, error: "Search-engine homepages are blocked. Use computer_search / web_search (Exa/Tavily), then computer_open a specific result URL." };
+            }
+          } catch {}
           const result = await runAction({ type: "navigate", url }, "agent");
           return computerObserve(getActiveSession(), result);
         }
@@ -834,37 +840,23 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_search",
-    description: "Search the web. Opens the query in live Chrome (operator can watch). If DuckDuckGo shows a CAPTCHA, does NOT click the puzzle — Steel runs the same query on a proxied cloud browser with CAPTCHA solving and those results are returned. Continue from results. Do not call execution_blocked for a search CAPTCHA.",
+    description: "Search the live web via Exa then Tavily. Never open DuckDuckGo, Google, or Steel browser for a query — those pages show puzzles datacenter Chrome cannot solve. Use computer_open only for a specific result URL after search.",
     args: "{\"text\":\"US motor vehicle accident lead providers India\"}",
-    when: "Operator wants a web search. Prefer this over guessing URLs. Steel covers datacenter CAPTCHA.",
+    when: "Operator wants a web search. Prefer this over guessing URLs. Do not use Steel or DuckDuckGo.",
     handler: async (a) => {
       try {
         const text = str(a.text).trim();
         if (!text) return { ok: false, error: "text is required" };
-        await ensureSession();
-        const result = await runAction({ type: "search", text }, "agent");
-        const session = getActiveSession();
-        const captcha = result.handoffReason === "captcha" || session?.handoffReason === "captcha" || result.decision === "HUMAN_REQUIRED";
-        if (captcha) {
-          const steel = await searchViaSteel(text);
-          return {
-            ...computerObserve(session, result),
-            ok: steel.ok,
-            captcha: true,
-            chrome: "paused on CAPTCHA — same tab, operator can tap it. Claw does not click puzzle tiles.",
-            results_via: steel.via,
-            solvedCaptcha: steel.solvedCaptcha,
-            results: steel.results,
-            markdown: (steel.markdown || "").slice(0, 4000),
-            steel_error: steel.error,
-            note: steel.ok
-              ? `Chrome hit a bot check. Steel (${steel.via}) ran the query${steel.solvedCaptcha ? " with CAPTCHA solving" : " via proxy"}. Continue from results. Do not click CAPTCHA tiles. Do not call execution_blocked.`
-              : `Chrome hit a bot check and Steel search failed: ${steel.error || "no results"}. Operator can tap the puzzle, or retry computer_search.`,
-          };
-        }
-        return computerObserve(session, result);
+        const web = await webSearch({ query: text, numResults: 10 });
+        return {
+          ok: web.results.length > 0,
+          via: web.via,
+          query: text,
+          results: web.results,
+          note: "API search (Exa/Tavily). Do not open DuckDuckGo or click puzzle tiles. computer_open a specific result URL if the operator needs the live page.",
+        };
       } catch (e: any) {
-        return { ok: false, error: e?.message || "search failed" };
+        return { ok: false, error: e?.message || "search failed", hint: "Set EXA_API_KEY or TAVILY_API_KEY. Do not retry via Steel/DuckDuckGo." };
       }
     }
   },

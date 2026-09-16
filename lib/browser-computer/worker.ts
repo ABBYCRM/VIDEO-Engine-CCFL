@@ -181,7 +181,7 @@ const START_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <main>
   <h1>Claw Computer</h1>
   <p>Same Chrome session. Search, click, type. CAPTCHA and passwords pause for you.</p>
-  <form action="https://duckduckgo.com/" method="get">
+  <form action="#" method="get" onsubmit="return false">
     <input name="q" placeholder="Search the web" aria-label="Search the web"/>
     <button type="submit">Search</button>
   </form>
@@ -500,8 +500,12 @@ export async function runAction(
       }
       case "search": {
         session.lastSearchQuery = (action.text ?? "").trim();
-        const q = encodeURIComponent(session.lastSearchQuery);
-        await page.goto(`https://html.duckduckgo.com/html/?q=${q}`, { waitUntil: "domcontentloaded", timeout: 25_000 });
+        const q = session.lastSearchQuery.replace(/[<>&]/g, "");
+        await page.setContent(`<!doctype html><html><body style="font-family:sans-serif;padding:24px">
+          <h1>Search is API-only</h1>
+          <p>Query: <b>${q}</b></p>
+          <p>DuckDuckGo and Google puzzle pages are blocked. Results come from Exa/Tavily via <code>computer_search</code>.</p>
+        </body></html>`);
         await page.waitForTimeout(600);
         break;
       }

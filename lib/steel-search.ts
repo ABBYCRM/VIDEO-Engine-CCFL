@@ -112,73 +112,41 @@ async function searchViaSteelSession(query: string, url: string): Promise<SteelS
   }
 }
 
-/** Steel proxy scrape, then Steel session with CAPTCHA solver, then Exa/Tavily. */
+/** API search only. DuckDuckGo + Steel browser lose to bot puzzles. */
 export async function searchViaSteel(query: string): Promise<SteelSearchResult> {
   const q = query.trim();
   if (!q) return { ok: false, via: "none", solvedCaptcha: false, query: q, results: [], error: "query is required" };
-  const url = validateSteelUrl(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`);
-  const errors: string[] = [];
-
-  if (isSteelConfigured()) {
-    try {
-      const scraped = await scrapeWithSteel({ url, useProxy: true, delayMs: 1800 });
-      const markdown = scraped.markdown || "";
-      const results = toHits([
-        ...(scraped.links || []).map((l) => ({ text: l.text, url: l.url })),
-        ...hitsFromMarkdown(markdown).map((h) => ({ text: h.title, url: h.url })),
-      ]);
-      if (!looksLikeCaptcha(markdown) && (results.length > 0 || markdown.length > 240)) {
-        return {
-          ok: true,
-          via: "steel.scrape+proxy",
-          solvedCaptcha: false,
-          query: q,
-          markdown: markdown.slice(0, 8000),
-          results,
-        };
-      }
-      errors.push("steel.scrape: captcha or empty");
-    } catch (e) {
-      errors.push(`steel.scrape: ${e instanceof Error ? e.message : String(e)}`);
-    }
-
-    try {
-      const sessioned = await searchViaSteelSession(q, url);
-      if (sessioned.ok) return sessioned;
-      errors.push(`steel.session: empty (${sessioned.error || "no results"})`);
-    } catch (e) {
-      errors.push(`steel.session: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  } else {
-    errors.push("steel: not configured");
+  if (!isExaConfigured() && !isTavilyConfigured()) {
+    return {
+      ok: false,
+      via: "none",
+      solvedCaptcha: false,
+      query: q,
+      results: [],
+      error: "Set EXA_API_KEY or TAVILY_API_KEY. Steel/DuckDuckGo search is disabled.",
+    };
   }
-
-  if (isExaConfigured() || isTavilyConfigured()) {
-    try {
-      const web = await webSearch({ query: q, numResults: 10 });
-      return {
-        ok: web.results.length > 0,
-        via: web.via,
-        solvedCaptcha: false,
-        query: q,
-        results: web.results.map((r) => ({
-          title: r.title || r.url,
-          url: r.url,
-          snippet: r.snippet || "",
-        })),
-        error: errors.length ? errors.join(" | ") : undefined,
-      };
-    } catch (e) {
-      errors.push(`web_search: ${e instanceof Error ? e.message : String(e)}`);
-    }
+  try {
+    const web = await webSearch({ query: q, numResults: 10 });
+    return {
+      ok: web.results.length > 0,
+      via: web.via,
+      solvedCaptcha: false,
+      query: q,
+      results: web.results.map((r) => ({
+        title: r.title || r.url,
+        url: r.url,
+        snippet: r.snippet || "",
+      })),
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      via: "none",
+      solvedCaptcha: false,
+      query: q,
+      results: [],
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
-
-  return {
-    ok: false,
-    via: "none",
-    solvedCaptcha: false,
-    query: q,
-    results: [],
-    error: errors.join(" | ") || "search failed",
-  };
 }
