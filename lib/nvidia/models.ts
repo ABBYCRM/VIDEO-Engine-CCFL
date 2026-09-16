@@ -28,18 +28,18 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
 }> = {
   "mistralai/Mistral-Large-3-675B-Instruct-2512": {
     id: "mistralai/Mistral-Large-3-675B-Instruct-2512",
-    label: "Mistral Large 3 675B \u2605 agent default",
+    label: "Mistral Large 3 675B (optional)",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 262144,
     costTier: "high",
-    notes: "AGENT default on Bitdeer. Native tool calling. Clean content (not a reasoning-first model).",
+    notes: "Optional on Bitdeer. Not the Claw default.",
     emitsReasoning: false,
     toolCalling: true,
     preserveAssistantPayload: true
   },
   "zai-org/GLM-5": {
     id: "zai-org/GLM-5",
-    label: "GLM-5 \u2605 primary / fallback",
+    label: "GLM-5 ★ agent default",
     capabilities: ["chat", "json-mode", "tools"],
     contextWindow: 1048576,
     costTier: "mid",
@@ -61,7 +61,7 @@ export const NVIDIA_MODELS: Record<NvidiaModelId, {
   }
 };
 
-export const AGENT_CLAW_NVIDIA_MODEL: NvidiaModelId = "mistralai/Mistral-Large-3-675B-Instruct-2512";
+export const AGENT_CLAW_NVIDIA_MODEL: NvidiaModelId = "zai-org/GLM-5";
 export const PRIMARY_CLAW_NVIDIA_MODEL: NvidiaModelId = "zai-org/GLM-5";
 export const DEFAULT_CLAW_NVIDIA_MODEL: NvidiaModelId = AGENT_CLAW_NVIDIA_MODEL;
 export const FALLBACK_CLAW_NVIDIA_MODEL: NvidiaModelId = PRIMARY_CLAW_NVIDIA_MODEL;
