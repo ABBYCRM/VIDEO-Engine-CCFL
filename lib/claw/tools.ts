@@ -433,6 +433,39 @@ export const CLAW_TOOLS: ToolDef[] = [
     handler: async (a) => listComposioTools({ toolkit: str(a.toolkit).trim() || undefined, search: str(a.search || a.query).trim() || undefined, limit: num(a.limit, 20) })
   },
 
+
+  {
+    name: "gmail_inbox",
+    description: "Read Gmail via Composio API. Never open Gmail in Chrome. Returns recent messages.",
+    args: "{\"query\":\"is:unread\",\"max\":10}",
+    when: "Operator asked to check email, inbox, unread, or a Gmail thread.",
+    handler: async (a) => {
+      const query = str(a.query || a.q || "in:inbox").trim() || "in:inbox";
+      return composioAction({
+        slug: "GMAIL_FETCH_EMAILS",
+        args: { query, max_results: num(a.max || a.limit, 10), include_payload: true },
+        toolkit: "gmail",
+      });
+    }
+  },
+  {
+    name: "gmail_send",
+    description: "Send email via Composio Gmail API. Never compose in Chrome.",
+    args: "{\"to\":\"a@b.com\",\"subject\":\"...\",\"body\":\"...\"}",
+    when: "Operator asked to send or reply to email.",
+    handler: async (a) => {
+      const to = str(a.to).trim();
+      const subject = str(a.subject).trim();
+      const body = str(a.body || a.text).trim();
+      if (!to || !subject || !body) return { error: "to, subject, and body are required" };
+      return composioAction({
+        slug: "GMAIL_SEND_MESSAGE",
+        args: { to: [to], subject, body },
+        toolkit: "gmail",
+      });
+    }
+  },
+
   // ─── Steel.dev (web scrape) ──────────────────────────────────────
   {
     name: "steel_scrape",
@@ -735,8 +768,16 @@ export const CLAW_TOOLS: ToolDef[] = [
         if (url) {
           try {
             const host = new URL(url).hostname.toLowerCase();
-            if (host.includes("duckduckgo.com") || host === "duck.com" || host.includes("google.com")) {
-              return { ok: false, error: "Search-engine homepages are blocked. Use computer_search / web_search (Exa/Tavily), then computer_open a specific result URL." };
+            if (
+              host.includes("duckduckgo.com") ||
+              host === "duck.com" ||
+              host.includes("google.com") ||
+              host.includes("gmail.com")
+            ) {
+              return {
+                ok: false,
+                error: "Blocked. Search = computer_search (Exa/Tavily). Email = gmail_inbox / gmail_send / composio Gmail. Do not open Gmail or Workspace in Chrome.",
+              };
             }
           } catch {}
           const result = await runAction({ type: "navigate", url }, "agent");
@@ -769,7 +810,7 @@ export const CLAW_TOOLS: ToolDef[] = [
   },
   {
     name: "computer_click",
-    description: "Click the live Chrome session. Prefer a visible control label (text). For Gmail logins click Continue with Google. For TikTok-style forms click Log in with email / username, never dump an email into Phone.",
+    description: "Click the live Chrome session on a page that is already the task. Never use Chrome for Gmail, Outlook, or Workspace login/marketing pages — those stop after one click. Email = composio Gmail tools.",
     args: "{\"text\":\"Search\",\"x\":120,\"y\":40}",
     handler: async (a) => {
       try {
@@ -779,7 +820,17 @@ export const CLAW_TOOLS: ToolDef[] = [
           x: a.x == null ? undefined : num(a.x, 0),
           y: a.y == null ? undefined : num(a.y, 0)
         }, "agent");
-        return computerObserve(getActiveSession(), result);
+        const observed = computerObserve(getActiveSession(), result);
+        const href = String((observed as any)?.url || (observed as any)?.href || "");
+        if (/gmail|workspace\.google|accounts\.google|mail\.google/i.test(href + " " + str(a.text))) {
+          return {
+            ok: false,
+            stalled: true,
+            url: href,
+            error: "Chrome Gmail/Workspace pages are a dead end. Use gmail_inbox / gmail_send / composio_action with toolkit gmail. Do not click Sign in or Create an account.",
+          };
+        }
+        return observed;
       } catch (e: any) {
         return { ok: false, error: e?.message || "click failed" };
       }

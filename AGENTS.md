@@ -62,3 +62,10 @@ Do not create guarantees, fabricated settlements, fake testimonials, fake client
 ## UI
 
 Maintain a shadcn-compatible structure with TypeScript and Tailwind. The primary generator must keep one visible button/card per supported campaign category and clearly state the one-shot 8-second contract.
+
+
+## Email
+
+Never open Gmail, Google Workspace, or accounts.google.com in Computer/Steel. Those pages are marketing/login walls and the agent will click once and stall.
+
+Use `gmail_inbox` / `gmail_send` / `composio_list_tools` + `composio_action` with toolkit `gmail`. If Composio Gmail is disconnected, say so — do not try Chrome.
